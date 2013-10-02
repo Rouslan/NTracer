@@ -158,7 +158,7 @@ class CustomBuildExt(build_ext):
         build_ext.build_extensions(self)
 
 
-long_description = open('README.txt').read()
+long_description = open('README.rst').read()
 long_description = long_description[0:long_description.find('\n\n')]
 
 setup(name='ntracer',

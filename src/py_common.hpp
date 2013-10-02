@@ -3,6 +3,7 @@
 #define py_common_hpp
 
 #include <Python.h>
+#include <structmember.h>
 #include <new>
 #include <limits>
 
@@ -230,6 +231,23 @@ template<typename T> inline T py_to_xint(PyObject *o) {
     static_assert(std::numeric_limits<long>::max() >= std::numeric_limits<T>::max(),"py_to_xint will truncate T");
     return static_cast<T>(narrow(from_pyobject<long>(o),std::numeric_limits<T>::max(),std::numeric_limits<T>::min()));
 }
+
+
+template<typename T> struct member_macro {};
+#define MEMBER_MACRO(T,M) template<> struct member_macro<T> { static const int value=M; }
+MEMBER_MACRO(short,T_SHORT);
+MEMBER_MACRO(unsigned short,T_USHORT);
+MEMBER_MACRO(int,T_INT);
+MEMBER_MACRO(unsigned int,T_UINT);
+MEMBER_MACRO(long,T_LONG);
+MEMBER_MACRO(unsigned long,T_ULONG);
+MEMBER_MACRO(float,T_FLOAT);
+MEMBER_MACRO(double,T_DOUBLE);
+#ifdef HAVE_LONG_LONG
+MEMBER_MACRO(long long,T_LONGLONG);
+MEMBER_MACRO(unsigned long long,T_ULONGLONG);
+#endif
+#undef MEMBER_MACRO
 
 
 

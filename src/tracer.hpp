@@ -30,12 +30,14 @@ public:
     typedef typename Repr::vector_t vector_t;
     
     bool locked;
+    REAL fov;
+    
     typename Repr::camera_t camera;
 
-    BoxScene(int d) : locked(false), camera(d) {}
+    BoxScene(int d) : locked(false), fov(0.8), camera(d) {}
     
     color calculate_color(int x,int y,int w,int h) const {
-        REAL fovIncrement = (2 * std::tan(REAL(1.6)/2)) / w;
+        REAL fovIncrement = (2 * std::tan(fov/2)) / w;
         
         // be careful not to create any new instances of var::py_vector<T>
         vector_t right(camera.right());

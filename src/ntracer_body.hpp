@@ -1,6 +1,5 @@
 
 #include <Python.h>
-#include <structmember.h>
 #include <assert.h>
 
 #include "ntracer.hpp"
@@ -260,6 +259,11 @@ PyObject *obj_BoxScene_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
     return reinterpret_cast<PyObject*>(ptr);
 }
 
+PyMemberDef obj_BoxScene_members[] = {
+    {const_cast<char*>("fov"),member_macro<REAL>::value,offsetof(obj_BoxScene,base.fov),0,NULL},
+    {NULL}
+};
+
 PyTypeObject obj_BoxScene::pytype = {
     PyVarObject_HEAD_INIT(NULL,0)
     MODULE_STR ".BoxScene", /* tp_name */
@@ -289,7 +293,7 @@ PyTypeObject obj_BoxScene::pytype = {
     NULL, /* tp_iter */
     NULL, /* tp_iternext */
     obj_BoxScene_methods, /* tp_methods */
-    NULL, /* tp_members */
+    obj_BoxScene_members, /* tp_members */
     NULL, /* tp_getset */
     NULL, /* tp_base */
     NULL,                         /* tp_dict */

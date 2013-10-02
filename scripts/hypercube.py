@@ -263,7 +263,7 @@ class UI:
 
 
 def d_symbol(d):
-    return 'XYZ'[d] if d < 3 else 'D' + str(d)
+    return 'XYZ'[d] if d < 3 else 'D' + str(d+1)
 
 
 
