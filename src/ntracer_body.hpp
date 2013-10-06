@@ -28,6 +28,10 @@ typedef repr::py_matrix_t n_matrix;
 typedef repr::camera_t n_camera;
 
 
+template<typename T> PyObject *to_pyobject(const impl::vector_expr<T> &e) {
+    return to_pyobject(n_vector(e));
+}
+
 Py_ssize_t check_dimension(int d) {
     if(d < 3) {
         PyErr_Format(
@@ -480,7 +484,7 @@ PyObject *obj_Vector_dot(PyObject*,PyObject *args,PyObject *kwds) {
             PyErr_SetString(PyExc_TypeError,"cannot perform dot product on vectors of different dimension");
             return NULL;
         }
-        return to_pyobject(n_vector::dot(a,b));
+        return to_pyobject(dot(a,b));
 
     } PY_EXCEPT_HANDLERS(NULL)
 }

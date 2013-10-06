@@ -2,107 +2,281 @@
 #define geometry_hpp
 
 #include <cmath>
+#include <utility>
+
+using std::declval;
 
 
 typedef float REAL;
 
 
-template<typename Store> struct vector_methods {
-    typedef typename Store::item_t item_t;
+template<typename F> inline void rep(int d,F f) {
+    for(int i=0; i<d; ++i) f(i);
+}
+
+namespace impl {
+    template<typename T> struct vector_expr;
     
-protected:
-    vector_methods() {}
+    template<typename T> struct _vector_item_t;
+    template<typename T> using vector_item_t = typename _vector_item_t<T>::type;
     
-    vector_methods(const Store &store) : store(store) {}
-    vector_methods(const vector_methods<Store> &b) = default;
-    ~vector_methods() = default;
-    vector_methods<Store> &operator=(const vector_methods &b) = default;
+    template<typename A,typename B> struct vector_sum;
+    template<typename A,typename B> struct _vector_item_t<vector_sum<A,B> > {
+        typedef decltype(declval<vector_item_t<A> >() + declval<vector_item_t<B> >()) type;
+    };
+    template<typename A,typename B> struct vector_sum : vector_expr<vector_sum<A,B> > {
+        template<typename U> friend struct vector_expr;
+        
+        const A &a;
+        const B &b;
+        
+        vector_sum(const vector_sum&) = delete;
+        vector_sum &operator=(const vector_sum&) = delete;
+
+        int dimension() const { return a.dimension(); }
+        vector_item_t<vector_sum<A,B> > operator[](int n) const { return a[n] + b[n]; }
+        
+    private:
+        vector_sum(const A &a,const B &b) : a(a), b(b) {}
+    };
     
+    template<typename A,typename B> struct vector_diff;
+    template<typename A,typename B> struct _vector_item_t<vector_diff<A,B> > {
+        typedef decltype(declval<vector_item_t<A> >() - declval<vector_item_t<B> >()) type;
+    };
+    template<typename A,typename B> struct vector_diff : vector_expr<vector_diff<A,B> > {
+        template<typename U> friend struct vector_expr;
+        
+        const A &a;
+        const B &b;
+        
+        vector_diff(const vector_diff&) = delete;
+        vector_diff &operator=(const vector_diff&) = delete;
+
+        int dimension() const { return a.dimension(); }
+        vector_item_t<vector_diff<A,B> > operator[](int n) const { return a[n] - b[n]; }
+        
+    private:
+        vector_diff(const A &a,const B &b) : a(a), b(b) {}
+    };
     
-    void negate() {
-        rep([=](int i){ (*this)[i] = -(*this)[i]; });
-    }
+    template<typename T> struct vector_neg;
+    template<typename T> struct _vector_item_t<vector_neg<T> > {
+        typedef vector_item_t<T> type;
+    };
+    template<typename T> struct vector_neg : vector_expr<vector_neg<T> > {
+        template<typename U> friend struct vector_expr;
+        
+        const T &a;
 
-    void add(const vector_methods<Store> &b) {
-        assert(dimension() == b.dimension());
-        rep([this,&b](int i){ (*this)[i] += b[i]; });
-    }
+        vector_neg(const vector_neg&) = delete;
+        vector_neg &operator=(const vector_neg&) = delete;
 
-    void subtract(const vector_methods<Store> &b) {
-        assert(dimension() == b.dimension());
-        rep([this,&b](int i){ (*this)[i] -= b[i]; });
-    }
-
-    void multiply(item_t b) {
-        rep([=](int i){ (*this)[i] *= b; });
-    }
-
-    void divide(item_t b) {
-        rep([=](int i){ (*this)[i] /= b; });
-    }
+        int dimension() const { return a.dimension(); }
+        vector_item_t<T> operator[](int n) const { return -a[n]; }
+        
+    private:
+        vector_neg(const T &a) : a(a) {}
+    };
     
-    void div_into(item_t b) {
-        rep([=](int i){ (*this)[i] = b / (*this)[i]; });
-    }
-
-    void make_axis(int n,item_t length) {
-        rep([=](int i){ (*this)[i] = item_t(0); });
-        (*this)[n] = length;
-    }
+    template<typename T> struct vector_product;
+    template<typename T> struct _vector_item_t<vector_product<T> > {
+        typedef vector_item_t<T> type;
+    };
+    template<typename T> struct vector_product : vector_expr<vector_product<T> > {
+        template<typename U> friend struct vector_expr;
+        template<typename U> friend vector_product<U> operator*(vector_item_t<U> a,const vector_expr<U> &b);
+        
+        const T &a;
+        vector_item_t<T> b;
+        
+        vector_product(const vector_product&) = delete;
+        vector_product &operator=(const vector_product&) = delete;
+        
+        int dimension() const { return a.dimension(); }
+        vector_item_t<T> operator[](int n) const { return a[n] * b; }
+        
+    private:
+        vector_product(const T &a,vector_item_t<T> b) : a(a), b(b) {}
+    };
     
-    void copy_from(const vector_methods<Store> &b) {
-        rep([this,&b](int i){ (*this)[i] = b[i]; });
-    }
-
-public:
-    int dimension() const { return store.dimension(); }
+    template<typename T> struct vector_quotient;
+    template<typename T> struct _vector_item_t<vector_quotient<T> > {
+        typedef vector_item_t<T> type;
+    };
+    template<typename T> struct vector_quotient : vector_expr<vector_quotient<T> > {
+        template<typename U> friend struct vector_expr;
+        
+        const T &a;
+        vector_item_t<T> b;
+        
+        vector_quotient(const vector_quotient&) = delete;
+        vector_quotient &operator=(const vector_quotient&) = delete;
+        
+        int dimension() const { return a.dimension(); }
+        vector_item_t<T> operator[](int n) const { return a[n] / b; }
+        
+    private:
+        vector_quotient(const T &a,vector_item_t<T> b) : a(a), b(b) {}
+    };
     
-    template<typename F> void rep(F f) const {
-        return Store::rep(dimension(),f);
-    }
+    template<typename T> struct vector_rquotient;
+    template<typename T> struct _vector_item_t<vector_rquotient<T> > {
+        typedef vector_item_t<T> type;
+    };
+    template<typename T> struct vector_rquotient : vector_expr<vector_rquotient<T> > {
+        template<typename U> friend struct vector_expr;
+        template<typename U> friend vector_product<T> operator/(vector_item_t<T> a,const vector_expr<T> &b);
+        
+        vector_item_t<T> a;
+        const T &b;
+
+        vector_rquotient(const vector_rquotient&) = delete;
+        vector_rquotient &operator=(const vector_rquotient&) = delete;
+        
+        int dimension() const { return b.dimension(); }
+        vector_item_t<T> operator[](int n) const { return a / b[n]; }
+        
+    private:
+        vector_rquotient(vector_item_t<T> a,const T &b) : a(a), b(b) {}
+    };
+
+    template<typename Store> struct vector_methods;
+    template<typename Store> struct _vector_item_t<vector_methods<Store> > {
+        typedef typename Store::item_t type;
+    };
+    template<typename Store> struct vector_methods : vector_expr<vector_methods<Store> > {
+        typedef typename Store::item_t item_t;
+        
+    protected:
+        vector_methods() {}
+        
+        vector_methods(const Store &store) : store(store) {}
+        vector_methods(const vector_methods<Store> &b) = default;
+        ~vector_methods() = default;
+        vector_methods<Store> &operator=(const vector_methods<Store> &b) = default;
+
+
+        template<typename B> void add(const vector_expr<B> &b) {
+            assert(dimension() == b.dimension());
+            rep([this,&b](int i){ (*this)[i] += b[i]; });
+        }
+        
+        template<typename B> void subtract(const vector_expr<B> &b) {
+            assert(dimension() == b.dimension());
+            rep([this,&b](int i){ (*this)[i] -= b[i]; });
+        }
+        
+        void multiply(item_t b) {
+            rep([=](int i){ (*this)[i] *= b; });
+        }
+        
+        void divide(item_t b) {
+            rep([=](int i){ (*this)[i] /= b; });
+        }
+        
+        void make_axis(int n,item_t length) {
+            rep([=](int i){ (*this)[i] = item_t(0); });
+            (*this)[n] = length;
+        }
+        
+    public:
+        int dimension() const { return store.dimension(); }
+        
+        template<typename F> void rep(F f) const {
+            ::rep(dimension(),f);
+        }
+        
+        void fill_with(item_t v) {
+            rep([=](int i){ (*this)[i] = v; });
+        }
+        template<typename B> void fill_with(const vector_expr<B> &b) {
+            rep([this,&b](int i){ (*this)[i] = b[i]; });
+        }
+        template<typename F> void fill_with(F f) {
+            rep([=](int i){ (*this)[i] = f(i); });
+        }
+        
+        item_t &operator[](int n) { return store[n]; }
+        item_t operator[](int n) const { return store[n]; }
+        
+        void normalize() { divide(this->absolute()); }
+        
+        Store store;
+    };
     
-    void fill_with(item_t v) {
-        rep([=](int i){ (*this)[i] = v; });
-    }
-    template<typename F> void fill_with(F f) {
-        rep([=](int i){ (*this)[i] = f(i); });
-    }
-
-    item_t &operator[](int n) { return store[n]; }
-    item_t operator[](int n) const { return store[n]; }
-
-    bool operator==(const vector_methods<Store> &b) const {
-        assert(dimension() == b.dimension());
-        bool r = true;
-        rep([&](int i){ r = r && store[i] == b[i]; });
-        return r;
-    }
-
-    bool operator!=(const vector_methods<Store> &b) { return !(operator==(b)); }
-
-    static float dot (const vector_methods<Store> &a,const vector_methods<Store> &b) {
+    template<typename A,typename B> static auto dot(const vector_expr<A> &a,const vector_expr<B> &b) -> decltype(a[0] * b[0]) {
         assert(a.dimension() == b.dimension());
-        item_t r = item_t(0);
-        a.rep([&](int i){ r += a[i] * b[i]; });
+        decltype(a[0] * b[0]) r = 0;
+        rep(a.dimension(),[&](int i){ r += a[i] * b[i]; });
         return r;
     }
     
-    typename Store::item_t square() const { return dot(*this,*this); }
-    typename Store::item_t absolute() const { return std::sqrt(square()); }
+    template<typename T> struct vector_expr {
+        int dimension() const { return static_cast<const T*>(this)->dimension(); }
+        vector_item_t<T> operator[](int n) const {
+            return static_cast<const T*>(this)->operator[](n);
+        }
+        
+        operator T &() { return *static_cast<T*>(this); }
+        operator const T &() const { return *static_cast<const T*>(this); }
+        
+        template<typename B> vector_sum<T,B> operator+(const vector_expr<B> &b) const {
+            assert(dimension() == b.dimension());
+            return {*this,b};
+        }
+        
+        template<typename B> vector_diff<T,B> operator-(const vector_expr<B> &b) const {
+            assert(dimension() == b.dimension());
+            return {*this,b};
+        }
+        
+        vector_neg<T> operator-() const {
+            return {*this};
+        }
+        
+        vector_product<T> operator*(vector_item_t<T> b) const {
+            return {*this,b};
+        }
+        
+        vector_quotient<T> operator/(vector_item_t<T> b) const {
+            return {*this,b};
+        }
+        
+        template<typename B> bool operator==(const vector_expr<B> &b) const {
+            assert(dimension() == b.dimension());
+            for(int i=0; i<dimension(); ++i) {
+                if((*this)[i] != b[i]) return false;
+            }
+            return true;
+        }
+        
+        template<typename B> bool operator!=(const vector_expr<B> &b) const {
+            return !operator==(b);
+        }
+        
+        vector_item_t<T> square() const { return dot(*this,*this); }
+        vector_item_t<T> absolute() const { return std::sqrt(square()); }
+        vector_quotient<T> unit() const {
+            return {*this,absolute()};
+        }
+    };
     
-    void normalize() { divide(absolute()); }
+    template<typename T> vector_product<T> operator*(vector_item_t<T> a,const vector_expr<T> &b) {
+        return {b,a};
+    }
     
-    Store store;
-};
+    template<typename T> vector_rquotient<T> operator/(vector_item_t<T> a,const vector_expr<T> &b) {
+        return {a,b};
+    }
+}
 
-template<typename Store,typename Alloc> struct vector_impl;
-template<typename Store,typename Alloc> vector_impl<Store,Alloc> operator/(typename vector_impl<Store,Alloc>::item_t,const vector_impl<Store,Alloc>&);
+using impl::dot;
 
-template<typename Store,typename Alloc> struct vector_impl : vector_methods<Store> {
-    typedef vector_methods<Store> base;
+
+template<typename Store,typename Alloc> struct vector_impl : impl::vector_methods<Store> {
+    typedef impl::vector_methods<Store> base;
     typedef typename base::item_t item_t;
-    
-    friend vector_impl<Store,Alloc> operator/<Store,Alloc>(item_t,const vector_impl<Store,Alloc>&);
 
     explicit vector_impl(int d) : base(Alloc::template new_store<Store>(d)) {}
     
@@ -114,8 +288,8 @@ template<typename Store,typename Alloc> struct vector_impl : vector_methods<Stor
     
     vector_impl(const vector_impl<Store,Alloc> &b) : vector_impl(b.store) {}
     
-    template<typename AllocB> vector_impl(const vector_impl<Store,AllocB> &b) : vector_impl(b.dimension()) {
-        this->copy_from(b);
+    template<typename B> vector_impl(const impl::vector_expr<B> &b) : vector_impl(b.dimension()) {
+        base::fill_with(b);
     }
     
     ~vector_impl() {
@@ -126,32 +300,18 @@ template<typename Store,typename Alloc> struct vector_impl : vector_methods<Stor
         Alloc::template replace_store(base::store,b.store);        
         return *this;
     }
-    
-protected:
-    template<typename... Args> vector_impl<Store,Alloc> apply_to_clone(void (base::*func)(Args...),Args... args) const {
-        vector_impl<Store,Alloc> r = clone();
-        (r.*func)(args...);
-        return r;
-    }
-    
-public:
+
     vector_impl<Store,Alloc> clone() const {
         vector_impl<Store,Alloc> r(base::dimension());
-        r.copy_from(*this);
+        r.fill_with(*this);
         return r;
     }
-    
-    vector_impl<Store,Alloc> operator+(const base &b) const { return apply_to_clone<const base&>(&vector_impl<Store,Alloc>::add,b); }
-    vector_impl<Store,Alloc> operator-(const base &b) const { return apply_to_clone<const base&>(&vector_impl<Store,Alloc>::subtract,b); }
-    vector_impl<Store,Alloc> operator-() const { return apply_to_clone(&vector_impl<Store,Alloc>::negate); }
-    vector_impl<Store,Alloc> operator*(item_t b) const { return apply_to_clone(&vector_impl<Store,Alloc>::multiply,b); }
-    vector_impl<Store,Alloc> operator/(item_t b) const { return apply_to_clone(&vector_impl<Store,Alloc>::divide,b); }
 
-    vector_impl<Store,Alloc> &operator+=(const base &b) {
+    template<typename B> vector_impl<Store,Alloc> &operator+=(const impl::vector_expr<B> &b) {
         base::add(b);
         return *this;
     }
-    vector_impl<Store,Alloc> &operator-=(const base &b) {
+    template<typename B> vector_impl<Store,Alloc> &operator-=(const impl::vector_expr<B> &b) {
         base::subtract(b);
         return *this;
     }
@@ -169,21 +329,11 @@ public:
         r.make_axis(n,length);
         return r;
     }
-    
-    vector_impl<Store,Alloc> unit() const { return operator/(base::absolute()); }
 };
-
-template<typename Store,typename Alloc> vector_impl<Store,Alloc> operator*(typename vector_impl<Store,Alloc>::item_t a,const vector_impl<Store,Alloc> &b) {
-    return b * a;
-}
-
-template<typename Store,typename Alloc> vector_impl<Store,Alloc> operator/(typename vector_impl<Store,Alloc>::item_t a,const vector_impl<Store,Alloc> &b) {
-    return b.apply_to_clone(&vector_impl<Store,Alloc>::div_into,a);
-}
 
 
 template<class Store> struct matrix_methods {
-    typedef vector_methods<typename Store::v_store> vector_t;
+    typedef impl::vector_methods<typename Store::v_store> vector_t;
     
 protected:
     matrix_methods(const Store &store) : store(store) {}
@@ -242,7 +392,7 @@ public:
 
 template<typename Store,typename Alloc> struct matrix_impl : matrix_methods<Store> {
     typedef matrix_methods<Store> base;
-    typedef vector_methods<typename Store::v_store> vector_t;
+    typedef impl::vector_methods<typename Store::v_store> vector_t;
     typedef vector_impl<typename Store::v_store,Alloc> vector_concrete;
 
 

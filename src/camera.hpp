@@ -19,8 +19,8 @@ template<class Store> struct _camera {
     void normalize() {
         typename Store::smaller_array new_axes(dimension()-1,[this](int i){
             vector_t x(this->dimension(),REAL(0));
-            for(int j=0; j<i; ++j) x += vector_t::dot(this->axes()[i+1],this->axes()[j]) * this->axes()[j];
-            return this->axes()[i+1] - x;
+            for(int j=0; j<i; ++j) x += dot(this->axes()[i+1],this->axes()[j]) * this->axes()[j];
+            return vector_t(this->axes()[i+1] - x);
         });
 
         axes()[0].normalize();

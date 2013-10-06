@@ -44,9 +44,6 @@ namespace fixed {
             assert(d == N);
         }
         
-        template<typename F> static void rep(int d,F &f) { fixed::rep<N>(f); }
-        template<typename F> static void rep(int d,const F &f) { fixed::rep<N>(f); }
-        
         T &operator[](int n) { return val[n]; }
         T operator[](int n) const { return val[n]; }
         
@@ -71,7 +68,7 @@ namespace fixed {
         
         template<typename F> static void rep1(int d,F f) { fixed::rep<N>(f); }
         
-        typedef vector_methods<vector_store<N,REAL> > vector_t;
+        typedef impl::vector_methods<vector_store<N,REAL> > vector_t;
         
         REAL *operator[](int n) { return val[n]; }
         const REAL *operator[](int n) const { return val[n]; }

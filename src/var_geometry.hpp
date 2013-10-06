@@ -11,10 +11,6 @@
 
 
 namespace var {
-    template<typename F> inline void rep(int d,F f) {
-        for(int i=0; i<d; ++i) f(i);
-    }
-    
     template<typename T> T *new_var(Py_ssize_t size) {
         assert(size > 0);
         return reinterpret_cast<T*>(py::check_obj(reinterpret_cast<PyObject*>(
@@ -114,8 +110,6 @@ namespace var {
         
         vector_store(int d,obj_t *obj) : vector_store(obj) {}
 
-        template<typename F> static void rep(int d,F f) { var::rep(d,f); }
-
         item_t &operator[](int n) const { return data->items[n]; }
 
         int dimension() const {
@@ -167,7 +161,7 @@ namespace var {
             }
         }
         
-        template<class F> static void rep1(int d,F f) { return var::rep(d,f); }
+        template<class F> static void rep1(int d,F f) { ::rep(d,f); }
 
         REAL *operator[](int n) const { return data->items + n*dimension(); }
 

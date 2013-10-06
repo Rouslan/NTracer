@@ -37,24 +37,14 @@ public:
     BoxScene(int d) : locked(false), fov(0.8), camera(d) {}
     
     color calculate_color(int x,int y,int w,int h) const {
-        REAL fovIncrement = (2 * std::tan(fov/2)) / w;
-        
-        // be careful not to create any new instances of var::py_vector<T>
-        vector_t right(camera.right());
-        right *= fovIncrement * (x - w/2);
-        
-        vector_t up(camera.up());
-        up *= fovIncrement * (y - h/2);
-        
-        vector_t direction(camera.forward());
-        direction += right;
-        direction -= up;
-        direction.normalize();
-        
-        ray<Repr> view = ray<Repr>(camera.origin(),direction);
+        REAL fovI = (2 * std::tan(fov/2)) / w;
+
+        ray<Repr> view = ray<Repr>(
+            camera.origin(),
+            (camera.forward() + camera.right() * (fovI * (x - w/2)) - camera.up() * (fovI * (y - h/2))).unit());
         ray<Repr> normal(dimension());
         if(hypercube_intersects<Repr>(view,normal)) {
-            REAL sine = vector_t::dot(view.direction,normal.direction);
+            REAL sine = dot(view.direction,normal.direction);
             return (sine <= REAL(0) ? -sine : REAL(0)) * color(1.0f,0.5f,0.5f);
         }
         return background_color<Repr>(view.direction);
@@ -94,7 +84,7 @@ template<class Repr> bool hypercube_intersects(const ray<Repr> &target,ray<Repr>
 }
 
 template<class Repr> color background_color(const typename Repr::vector_t &dir) {
-    REAL intensity = Repr::vector_t::dot(dir,Repr::vector_t::axis(dir.dimension(),0));
+    REAL intensity = dot(dir,Repr::vector_t::axis(dir.dimension(),0));
     return intensity > REAL(0) ? color(intensity,intensity,intensity) :
         color(0.0f,-intensity,-intensity);
 }
