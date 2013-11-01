@@ -4,13 +4,17 @@ import weakref
 from ntracer.render import Renderer
 
 
+CUBE = 2
+SPHERE = 3
+
+
 def vector_wrapper(mod,dim):
     base = mod.Vector
     class Vector(base):
         __slots__ = ()
         
-        def __new__(cls,values):
-            return base.__new__(cls,dim,values)
+        def __new__(cls,*values):
+            return base.__new__(cls,dim,*values)
         
         @staticmethod
         def axis(axis,length):
@@ -95,6 +99,15 @@ class NTracer(object):
             obj.Matrix = matrix_wrapper(mod,dimension)
             obj.Camera = camera_wrapper(mod,dimension)
             obj.BoxScene = boxscene_wrapper(mod,dimension)
+            
+            obj.CompositeScene = mod.CompositeScene
+            obj.KDNode = mod.KDNode
+            obj.KDLeaf = mod.KDLeaf
+            obj.KDBranch = mod.KDBranch
+            obj.Primitive = mod.Primitive
+            obj.Solid = mod.Solid
+            #obj.Triangle = mod.Triangle
+            obj.perpendicular_to = mod.perpendicular_to
             
             NTracer._cache[dimension] = obj
             

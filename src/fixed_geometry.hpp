@@ -186,6 +186,13 @@ namespace fixed {
     };
 }
 
+template<int N> struct smaller_store<fixed::matrix_store<N> > {
+    static_assert(N > 1,"it can't get any smaller");
+    
+    typedef fixed::matrix_store<N-1> type;
+};
+
+
 template<int N> inline PyObject *to_pyobject(const fixed::vector<N,REAL> &v) {
     return reinterpret_cast<PyObject*>(new typename fixed::repr<N>::vector_obj(v));
 }

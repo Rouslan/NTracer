@@ -128,12 +128,9 @@ struct obj_Scene {
     
     PyObject_HEAD
 
-    /* a dummy type whose offset in the struct should be the same as any derived
-       type's */
-    union {
-        double a;
-        void *b;
-    } base;
+    /* a dummy member whose offset in the struct should be the same as any
+       derived type's */
+    union { void *a; long double b; } base;
     
     Scene &cast_base() {
         return reinterpret_cast<Scene&>(base);

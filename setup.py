@@ -1,4 +1,6 @@
+import sys
 import os.path
+import subprocess
 
 from distutils import sysconfig
 from distutils.core import setup,Command
@@ -161,8 +163,20 @@ class CustomBuildExt(build_ext):
 long_description = open('README.rst').read()
 long_description = long_description[0:long_description.find('\n\n')]
 
+version = 'unversioned'
+try:
+    version = subprocess.check_output(['git','describe','--long','--dirty'])
+except:
+    pass
+else:
+    # calling str here is needed for Python 3 and harmless in Python 2
+    version = str(version).strip().split('-')
+    del version[2] # get rid of the revision hash
+    version = '-'.join(version)
+
+
 setup(name='ntracer',
-    version='0.1',
+    version=version,
     packages=['ntracer'],
     scripts=['scripts/hypercube.py'],
     ext_package='ntracer',
@@ -199,5 +213,5 @@ setup(name='ntracer',
         'Topic :: Multimedia :: Graphics :: 3D Rendering',
         'Topic :: Scientific/Engineering :: Mathematics'],
     cmdclass={
-        'build_py':build_py,
+        'build_py' : build_py,
         'build_ext' : CustomBuildExt})

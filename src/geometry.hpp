@@ -4,6 +4,14 @@
 #include <cmath>
 #include <utility>
 
+
+#ifdef __GNUC__
+    #define RESTRICT __restrict__
+#else
+    #define RESTRICT
+#endif
+
+
 using std::declval;
 
 
@@ -341,7 +349,7 @@ protected:
     ~matrix_methods() = default;
     matrix_methods<Store> &operator=(const matrix_methods<Store> &b) = default;
     
-    void multiply(matrix_methods<Store> &r,const matrix_methods<Store> &b) const {
+    void multiply(matrix_methods<Store> & RESTRICT r,const matrix_methods<Store> &b) const {
         assert(dimension() == r.dimension() && dimension() == b.dimension());
 
         Store::rep(dimension(),[=,&b,&r](int row,int col){
@@ -350,7 +358,7 @@ protected:
         });
     }
     
-    void multiply(vector_t &r,const vector_t &b) const {
+    void multiply(vector_t & RESTRICT r,const vector_t &b) const {
         assert(dimension() == b.dimension());
         r.fill_with(REAL(0));
         Store::rep(dimension(),[&,this](int row,int col){ r[row] += (*this)[row][col] * b[col]; });
@@ -379,6 +387,79 @@ protected:
 
     static void scale(matrix_methods<Store> &r,REAL a) {
         Store::rep(r.dimension(),[&r,a](int row,int col){ r[row][col] = row == col ? a : REAL(0); });
+    }
+    
+    /* Crout matrix decomposition.
+        
+       Although this generates two matrices--an upper (U) and lower (L)
+       triangular matrix--the result is stored in a single matrix object like
+       so:
+        
+       L[0][0]   U[0][1]   U[0][2]   ... U[0][n-1]
+       L[1][0]   L[1][1]   U[1][2]   ... U[1][n-1]
+       L[2][0]   L[2][1]   L[2][2]   ... U[2][n-1]
+       .         .         .         .   .
+       .         .         .          .  .
+       .         .         .           . .
+       L[n-1][0] L[n-1][1] L[n-1][2] ... L[n-1][n-1]
+        
+       Every item of the upper matrix's diagonal is always 1 and is not present
+       in the result.
+    */
+    void decompose(matrix_methods<Store> & RESTRICT lu) const {
+        assert(dimension() == lu.dimension());
+        
+        for(int j=0; j<dimension(); ++j) {
+            for(int i=j; i<dimension(); ++i) {
+                REAL sum = REAL(0);
+                for(int k=0; k<j; ++k) sum += lu[i][k] * lu[k][j];
+                lu[i][j] = (*this)[i][j] - sum;
+            }
+            
+            for(int i=j+1; i<dimension(); ++i) {
+                REAL sum = REAL(0);
+                for(int k=0; k<j; ++k) sum += lu[j][k] * lu[k][i];
+                lu[j][i] = ((*this)[j][i] - sum) / lu[j][j];
+            }
+        }
+    }
+    
+    REAL determinant(matrix_methods<Store> & RESTRICT tmp) const {
+        assert(dimension() == tmp.dimension());
+        
+        decompose(tmp);
+        REAL r = REAL(1);
+        for(int i=0; i<dimension(); ++i) r *= tmp[i][i];
+        return r;
+    }
+    
+    void inverse(matrix_methods<Store> & RESTRICT inv,matrix_methods<Store> & RESTRICT tmp) const {
+        assert(dimension() == r.dimension() && dimension() == tmp.dimension());
+
+        decompose(tmp);
+
+        // forward substitution
+        // store the result in the lower triangle of tmp
+        for(int c=0; c<dimension(); ++c) {
+            tmp[c][c] = REAL(1) / tmp[c][c];
+            
+            for(int r=c+1; r<dimension(); ++r) {
+                tmp[r][c] = REAL(0);
+                for(int i=c; i<r; ++i) tmp[r][c] -= tmp[r][i] * tmp[i][c];
+                tmp[r][c] /= tmp[r][r];
+            }
+        }
+
+        // back substitution
+        for(int c=0; c<dimension(); ++c) {
+            inv[dimension()-1][c] = tmp[dimension()-1][c];
+            
+            for(int r=dimension()-2; r>-1; --r) {
+                inv[r][c] = REAL(0);
+                if(r >= c) inv[r][c] = tmp[r][c];
+                for(int i=r+1; i<dimension(); ++i) inv[r][c] -= tmp[r][i] * inv[i][c];
+            }
+        }
     }
 
 public:
@@ -422,7 +503,7 @@ template<typename Store,typename Alloc> struct matrix_impl : matrix_methods<Stor
         return r;
     }
     
-    inline vector_concrete operator*(const vector_t &b) const {
+    vector_concrete operator*(const vector_t &b) const {
         vector_concrete r(base::dimension());
         base::multiply(r,b);
         return r;
@@ -449,119 +530,33 @@ template<typename Store,typename Alloc> struct matrix_impl : matrix_methods<Stor
     static matrix_impl<Store,Alloc> identity(int d) {
         return scale(d,REAL(1));
     }
+    
+    matrix_impl<Store,Alloc> inverse() const {
+        matrix_impl<Store,Alloc> r(base::dimension()), tmp(base::dimension());
+        base::inverse(r,tmp);
+        return r;
+    }
+    
+    REAL determinant() const {
+        matrix_impl<Store,Alloc> tmp(base::dimension());
+        return base::determinant(tmp);
+    }
 };
 
 
-
-
-/*
-template<int N,class T> struct _extended_matrix
-{
-    _extended_matrix() {}
-    _extended_matrix(float p11,float p12,float p13,float p14,float p21,float p22,float p23,float p24,float p31,float p32,float p33,float p34) :
-      _11(p11),_12(p12),_13(p13),_14(p14),_21(p21),_22(p22),_23(p23),_24(p24),_31(p31),_32(p32),_33(p33),_34(p34) {}
-
-
-    struct _Item
-    {
-        int row, col;
-        const T *a, *b; T &out;
-        _Item(int r, int c, T *_a, T *_b, T *o)
-            : row(r), col(c), a(_a), b(_b), out(o[r][c]) { out = 0; }
-        void operator()(int i) { out += a[row][i] * b[i][col]; }
-    };
-
-    struct _Row
-    {
-        int row;
-        const T *a, *b; T *o;
-        _Row(int r, T *_a, T *_b, T *_o)
-            : row(r), a(_a), b(_b), o(_o) {}
-        void operator()(int i) { rep<N+1>(_Item(row,i,a,b,o)); out[i][N] += a[i][N]; }
-    };
-
-    struct _Mat
-    {
-        const T *a, *b; T *o;
-        _Mat(T *_a, T *_b, T *_o)
-            : a(_a), b(_b), o(_o) {}
-        void operator()(int i) { rep<N>(_Row(i,a,b,o)); }
-    };
-
-    _extended_matrix operator*(const _extended_matrix &b) const
-    {
-        _extended_matrix result;
-        rep<N>(_Mat(val,b.val,result.val));
-        return result;
-    }
-
-    //struct _ColRot
-    //{
-    //    T d; int col; T (*o)[N];
-    //    _ColRot(T _d, int _col, T (*_o)[N]) : d(_d), col(_col), o(_o) {}
-    //    void operator()(int i) { o[i][col] = d; }
-    //};
-    //struct _MatRot
-    //{
-    //    T d; const T *a, *b; T (*o)[N];
-    //    _MatRot(const T *_a, const T *_b, T (*_o)[N], T _d) : a(_a), b(_b), o(_o), d(_d) {}
-    //    void operator()(int i) { rep<N>(_ColRot( (a[i]*a[i] + b[i]*b[i]) * d , i, o)); o[i][i] += T(1); o[i][N] = 0.0f; }
-    //};
-    //static _extended_matrix Rotation(const _vector<N,T> &A, const _vector<N,T> &B, float theta)
-    //{
-    //    _extended_matrix result;
-    //    rep<N>(_MatRow(A.val, B.val, result.val, T(1) - cos(theta)));
-    //    return result;
-    //}
-
-
-    struct _Scale { T *x, *v;
-        _Scale(T *_x, T *_v) : x(_x), v(_v) {}
-        void operator()(int n) { x[n] = ((n % (N+1)) == (n / (N+1))) ? v[n / (N+1)] : 0.0f; } };
-
-    static _extended_matrix Scale(const _vector<N,T> &A)
-    {
-        _extended_matrix result;
-        rep<(N+1)*N>(_Scale(result.val));
-        return result;
-    }
-
-    struct _Identity { T *x;
-        _Identity(T *_x) : x(_x) {}
-        void operator()(int n) { x[n] = ((n % (N+1)) == (n / (N+1))) ? 1.0f : 0.0f; } };
-
-    static _extended_matrix Identity()
-    {
-        _extended_matrix result;
-        rep<(N+1)*N>(_Identity(result.val));
-        return result;
-    }
-
-    struct _Translation { T *x, *v;
-        _Translation(T *_x, T *_v) : x(_x), v(_v) {}
-        void operator()(int n) { x[n] = ((n % (N+1)) == (n / (N+1))) ? 1.0f : (n == N ? v[n / (N+1)] : 0.0f); } };
-
-    static _extended_matrix Translation(const _vector<N,T> &V)
-    {
-        _extended_matrix result;
-        rep<N*N>(_Identity(result.val,V.val));
-        return result;
-    }
-
-    T val[N][N+1];
+template<typename T> struct smaller_store {
+    typedef T type;
 };
 
-template<int N,class T> struct _MatVecMul3 { T *r; const T (*a)[N+1]; const T *b;
-    _MatVecMul3(T *_r, const T (*_a)[N+1], const T *_b) : r(_r), a(_a), b(_b) {}
-    void operator()(int n) { r[n] = a[n][N]; rep<N>(_MatVecMul2<N,T>(r[n],a[n],b)); } };
+template<typename T> struct _smaller;
+template<typename Store,typename Alloc> struct _smaller<matrix_impl<Store,Alloc> > {
+    typedef matrix_impl<typename smaller_store<Store>::type,Alloc> type;
+};
+template<typename Store> struct _smaller<matrix_methods<Store> > {
+    typedef matrix_methods<typename smaller_store<Store>::type> type;
+};
 
-template<int N,class T> inline _vector<N,T> operator*(const _extended_matrix<N,T> &a, const _vector<N,T> &b)
-{
-    _vector<N,T> result;
-    rep<N>(_MatVecMul3<N,T>(result.val,a.val,b.val));
-    return result;
-}
-*/
+template<typename T> using smaller = typename _smaller<T>::type;
 
 
 #endif

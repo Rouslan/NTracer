@@ -1,11 +1,9 @@
 #ifndef light_hpp
 #define light_hpp
 
-class color
-{
-public:
-    color() : pad(1.0f) {}
-    color(float _R,float _G,float _B) : R(_R), G(_G), B(_B), pad(1.0f) {}
+struct color {
+    color() {}
+    color(float _R,float _G,float _B) : R(_R), G(_G), B(_B) {}
 
     color operator+(const color &b) const
     {return color(R+b.R,G+b.G,B+b.B);}
@@ -57,7 +55,7 @@ public:
     {R /= b.R; G /= b.G; B /= b.B;}
 
 
-    float R,G,B,pad;
+    float R,G,B;
 };
 
 inline color operator*(float c,const color& v)
@@ -71,5 +69,11 @@ inline color operator+(float c,const color& v)
 
 inline color operator-(float c,const color& v)
 {return color(c-v.R,c-v.G,c-v.B);}
+
+
+struct material {
+    color c;
+    float opacity, reflectivity;
+};
 
 #endif

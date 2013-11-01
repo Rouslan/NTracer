@@ -1,6 +1,7 @@
 #ifndef pyobject_hpp
 #define pyobject_hpp
 
+#include <Python.h>
 #include <algorithm>
 #include <iterator>
 #include <structmember.h>
@@ -92,9 +93,7 @@ namespace py {
         }
 
         void swap(_object_base &b) {
-            PyObject *tmp = _ptr;
-            _ptr = b._ptr;
-            b._ptr = tmp;
+            std::swap(_ptr,b._ptr);
         }
 
     public:
@@ -253,11 +252,22 @@ namespace py {
             Py_XDECREF(tmp);
         }
     public:
-        _nullable() : _ptr(NULL) {}
+        _nullable() : _ptr(nullptr) {}
         _nullable(const _nullable<T> &b) : _ptr(b._ptr) { Py_XINCREF(_ptr); }
         _nullable(const T &b) : _ptr(b.new_ref()) {}
         _nullable(borrowed_ref r) : _ptr(r._ptr) { Py_XINCREF(_ptr); }
         _nullable(new_ref r) : _ptr(r._ptr) {}
+        
+        _nullable<T> &operator=(borrowed_ref r) {
+            Py_XINCREF(r._ptr);
+            reset(r._ptr);
+            return *this;
+        }
+        
+        _nullable<T> &operator=(new_ref r) {
+            reset(r._ptr);
+            return *this;
+        }
 
         _nullable<T> &operator=(const _nullable<T> &b) {
             Py_XINCREF(b._ptr);
@@ -270,7 +280,7 @@ namespace py {
             return *this;
         }
 
-        operator bool() const { return _ptr != NULL; }
+        operator bool() const { return _ptr != nullptr; }
         T operator*() const {
             assert(_ptr);
             return borrowed_ref(_ptr);
@@ -281,9 +291,13 @@ namespace py {
         }
 
         PyObject *ref() const { return _ptr; }
+        
+        void swap(const _nullable<T> &b) {
+            std::swap(_ptr,b._ptr);
+        }
 
         int gc_traverse(visitproc visit,void *arg) const { return _ptr ? (*visit)(_ptr,arg) : 0; }
-        void gc_clear() { reset(NULL); }
+        void gc_clear() { reset(nullptr); }
     };
 
     typedef _nullable<object> nullable_object;
@@ -318,6 +332,55 @@ namespace py {
     };
 #endif
 
+    class tuple_iterator {
+        PyObject **data;
+    public:
+        typedef object value_type;
+        typedef Py_ssize_t difference_type;
+        typedef object *pointer;
+        typedef object &reference;
+        typedef std::random_access_iterator_tag iterator_category;
+
+        explicit tuple_iterator(PyObject **data) : data(data) {}
+        
+        object operator*() const {
+            return borrowed_ref(*data);
+        }
+        
+        tuple_iterator &operator++() {
+            ++data;
+            return *this;
+        }
+        tuple_iterator operator++(int) {
+            tuple_iterator tmp = *this;
+            ++data;
+            return tmp;
+        }
+        bool operator==(tuple_iterator b) const {
+            return data == b.data;
+        }
+        bool operator!=(tuple_iterator b) const {
+            return data != b.data;
+        }
+        
+        tuple_iterator operator+(Py_ssize_t b) const {
+            return tuple_iterator(data + b);
+        }
+        tuple_iterator &operator+=(Py_ssize_t b) {
+            data += b;
+            return *this;
+        }
+        tuple_iterator operator-(Py_ssize_t b) const {
+            return tuple_iterator(data - b);
+        }
+        Py_ssize_t operator-(tuple_iterator b) const {
+            return static_cast<Py_ssize_t>(data - b.data);
+        }
+        tuple_iterator &operator-=(Py_ssize_t b) {
+            data -= b;
+            return *this;
+        }
+    };
 
     class tuple : public _object_base {
     public:
@@ -325,6 +388,9 @@ namespace py {
         tuple(new_ref r) : _object_base(r) { assert(PyTuple_Check(r._ptr)); }
         explicit tuple(Py_ssize_t len) : _object_base(new_ref(check_obj(PyTuple_New(len)))) {}
         tuple(const tuple &b) : _object_base(b) {}
+        explicit tuple(const _object_base &b) : _object_base(object(py::borrowed_ref(reinterpret_cast<PyObject*>(&PyTuple_Type)))(b)) {
+            assert(PyTuple_Check(_ptr));
+        }
 
         tuple &operator=(const tuple &b) {
             reset(b._ptr);
@@ -337,53 +403,19 @@ namespace py {
         void set_unsafe(Py_ssize_t i,PyObject *item) const { PyTuple_SET_ITEM(_ptr,i,item); }
         object operator[](Py_ssize_t i) const { return borrowed_ref(PyTuple_GET_ITEM(_ptr,i)); }
         Py_ssize_t size() const { return PyTuple_GET_SIZE(_ptr); }
+        
+        tuple_iterator begin() const {
+            return tuple_iterator(&PyTuple_GET_ITEM(_ptr,0));
+        }
+        
+        tuple_iterator end() const {
+            return tuple_iterator(&PyTuple_GET_ITEM(_ptr,size()));
+        }
     };    
 
     typedef _nullable<tuple> nullable_tuple;
 
-    class tuple_iterator {
-        tuple data;
-        Py_ssize_t index;
-    public:
-        typedef object value_type;
-        typedef Py_ssize_t difference_type;
-        typedef object *pointer;
-        typedef object &reference;
-        typedef std::random_access_iterator_tag iterator_category;
 
-        tuple_iterator(const tuple &t,Py_ssize_t index=0) : data(t), index(index) {
-            assert(index >= 0);
-        }
-        
-        object operator*() const {
-            assert(index < data.size());
-            return data[index];
-        }
-        
-        tuple_iterator &operator++() {
-            ++index;
-            return *this;
-        }
-        tuple_iterator operator++(int) {
-            tuple_iterator tmp = *this;
-            ++index;
-            return tmp;
-        }
-        bool operator==(const tuple_iterator &b) const {
-            return data.ref() == b.data.ref() && index == b.index;
-        }
-        bool operator!=(const tuple_iterator &b) const {
-            return data.ref() != b.data.ref() || index != b.index;
-        }
-        
-        tuple_iterator operator+(Py_ssize_t b) const {
-            return tuple_iterator(data,index + b);
-        }
-        tuple_iterator operator-(Py_ssize_t b) const {
-            return tuple_iterator(data,index - b);
-        }
-    };
-    
     class list_item_proxy {
         friend class list;
         friend void del(const list_item_proxy &item);
@@ -555,7 +587,7 @@ namespace py {
     typedef _nullable<bytes> nullable_bytes;
 
 
-    template<typename T,int invariable = invariable_storage<T>::value> class pyptr {
+    /*template<typename T,bool invariable=invariable_storage<T>::value> class pyptr {
         template<typename U> friend class pyptr;
 
         object _obj;
@@ -594,7 +626,7 @@ namespace py {
         }
     };
 
-    template<typename T> class pyptr<T,1> {
+    template<typename T> class pyptr<T,true> {
         template<typename U> friend class pyptr;
 
         object _obj;
@@ -605,16 +637,10 @@ namespace py {
         pyptr(borrowed_ref r) : _obj(r) { get_base_or_none<T>(_obj.ref()); }
         pyptr(object o) : _obj(o) { get_base_or_none<T>(_obj.ref()); }
 
-        template<typename U> pyptr(const pyptr<U> &b) : _obj(b._obj) {
-            // a check to make sure an instance of U* is convertable to T*
-            T *x = reinterpret_cast<U*>(0);
-        }
+        template<typename U,typename=typename std::enable_if<std::is_convertable<U*,T*>::value>::type> pyptr(const pyptr<U> &b) : _obj(b._obj) {}
 
-        template<typename U> pyptr<T> &operator=(const pyptr<U> &b) {
+        template<typename U,typename=typename std::enable_if<std::is_convertable<U*,T*>::value>::type> pyptr<T> &operator=(const pyptr<U> &b) {
             _obj = b._obj;
-
-            // a check to make sure an instance of U* is convertable to T*
-            T *x = reinterpret_cast<U*>(0);
         }
 
         T &operator*() const { return *ref(); }
@@ -636,7 +662,47 @@ namespace py {
     // like dynamic_cast except Python's type system is used instead of RTTI
     template<typename T,typename U> inline pyptr<T> python_cast(const pyptr<U> &a) {
         return pyptr<T>(a.obj());
-    }
+    }*/
+    
+    template<typename T> class pyptr {
+
+        nullable_object _obj;
+
+    public:
+        pyptr() = default;
+        explicit pyptr(new_ref r) : _obj(r) {}
+        explicit pyptr(borrowed_ref r) : _obj(r) {}
+        explicit pyptr(object o) : _obj(o) {}
+
+        template<typename U,typename=typename std::enable_if<std::is_convertible<U*,T*>::value>::type> pyptr(const pyptr<U> &b) : _obj(b._obj) {}
+
+        template<typename U,typename=typename std::enable_if<std::is_convertible<U*,T*>::value>::type> pyptr<T> &operator=(const pyptr<U> &b) {
+            _obj = b._obj;
+        }
+
+        T &operator*() const { return *get(); }
+        T *operator->() const { return get(); }
+
+        template<typename U> bool operator==(const pyptr<U> &b) const { return _obj == b._obj; }
+        template<typename U> bool operator!=(const pyptr<U> &b) const { return _obj != b._obj; }
+        operator bool() const { return _obj; }
+
+        T *get() const {
+            assert(_obj);
+            return reinterpret_cast<T*>(_obj.ref());
+        }
+        
+        PyObject *ref() const { return _obj.ref(); }
+
+        object obj() const { return *_obj; }
+
+        void swap(pyptr<T> &b) {
+            _obj.swap(b._obj);
+        }
+        
+        int gc_traverse(visitproc visit,void *arg) const { return _obj.gc_traverse(visit,arg); }
+        void gc_clear() { _obj.gc_clear(); }
+    };
 
 
     inline Py_ssize_t len(const object &o) {

@@ -175,6 +175,157 @@ template<> struct wrapped_type<py::array_adapter<n_vector> > {
 };
 
 
+struct obj_CompositeScene {
+    static PyTypeObject pytype;
+    
+    PyObject_HEAD
+    composite_scene<repr> base;
+    PyObject *idict;
+    PyObject *weaklist;
+    PY_MEM_GC_NEW_DELETE
+
+    ~obj_CompositeScene() {
+        Py_XDECREF(idict);
+        if(weaklist) PyObject_ClearWeakRefs(reinterpret_cast<PyObject*>(this));
+    }
+    
+    composite_scene<repr> &cast_base() { return base; }
+    composite_scene<repr> &get_base() { return base; }
+};
+
+template<> struct wrapped_type<composite_scene<repr> > {
+    typedef obj_CompositeScene type;
+};
+
+template<typename T> void ensure_unlocked(T *s) {
+    if(s->base.locked) {
+        PyErr_SetString(PyExc_RuntimeError,"the scene is locked for reading");
+        throw py_error_set();
+    }
+}
+
+template<typename T> void ensure_unlocked(const py::pyptr<T> &s) {
+    if(s) ensure_unlocked(s.get());
+}
+
+
+/* The following wrappers store their associated data in a special way. In large
+   scenes, there will be very many primitives and KD-tree nodes which need to be
+   traversed as quickly as possible, so instead of incorporating the Python
+   reference count and type data into the native data structures, the wrappers
+   contain a bare pointer and a reference to a wrapped parent structure. When
+   the parent is null, the data does not have any parent nodes and the wrapper
+   is responsible for deleting the data. Otherwise, it is the parent's
+   responsibility to delete the data, which won't be destroyed before the
+   child's wrapper is destroyed, due to the reference. A child cannot be added
+   to more than one parent. */
+
+struct obj_Primitive {
+    static PyTypeObject pytype;
+    
+    PyObject_HEAD
+    PY_MEM_NEW_DELETE
+    py::nullable_object parent;
+    primitive<repr> *_data;
+    
+protected:
+    obj_Primitive(py::nullable_object parent,primitive<repr> *data) : parent(parent), _data(data) {}
+    ~obj_Primitive() = default;
+};
+
+struct obj_Solid : obj_Primitive {
+    static PyTypeObject pytype;
+    
+    solid<repr> *&data() {
+        return reinterpret_cast<solid<repr>*&>(_data);
+    }
+    
+    solid<repr> *data() const {
+        return static_cast<solid<repr>*>(_data);
+    }
+    
+    obj_Solid(py::nullable_object parent,solid<repr> *data) : obj_Primitive(parent,data) {}
+    ~obj_Solid() {
+        if(!parent) delete data();
+    }
+};
+
+struct obj_Triangle : obj_Primitive {
+    //static PyTypeObject pytype;
+    
+    triangle<repr> *&data() {
+        return reinterpret_cast<triangle<repr>*&>(_data);
+    }
+    
+    triangle<repr> *data() const {
+        return static_cast<triangle<repr>*>(_data);
+    }
+    
+    obj_Triangle(py::nullable_object parent,triangle<repr> *data) : obj_Primitive(parent,data) {}
+    ~obj_Triangle() {
+        if(!parent) delete data();
+    }
+};
+
+struct obj_KDNode {
+    static PyTypeObject pytype;
+    
+    PyObject_HEAD
+    PY_MEM_NEW_DELETE
+    py::nullable_object parent;
+    kd_node<repr> *_data;
+    
+    int dimension() const;
+    
+protected:
+    obj_KDNode(py::nullable_object parent,kd_node<repr> *data) : parent(parent), _data(data) {}
+    ~obj_KDNode() = default;
+};
+
+struct obj_KDBranch : obj_KDNode {
+    static PyTypeObject pytype;
+    
+    int dimension;
+    
+    kd_branch<repr> *&data() {
+        return reinterpret_cast<kd_branch<repr>*&>(_data);
+    }
+    
+    kd_branch<repr> *data() const {
+        return static_cast<kd_branch<repr>*>(_data);
+    }
+    
+    obj_KDBranch(py::nullable_object parent,kd_branch<repr> *data,int dimension) : obj_KDNode(parent,data), dimension(dimension) {}
+    ~obj_KDBranch() {
+        if(!parent) delete data();
+    }
+};
+
+struct obj_KDLeaf : obj_KDNode {
+    static PyTypeObject pytype;
+    
+    kd_leaf<repr> *&data() {
+        return reinterpret_cast<kd_leaf<repr>*&>(_data);
+    }
+    
+    kd_leaf<repr> *data() const {
+        return static_cast<kd_leaf<repr>*>(_data);
+    }
+    
+    obj_KDLeaf(py::nullable_object parent,kd_leaf<repr> *data) : obj_KDNode(parent,data) {}
+    ~obj_KDLeaf() {
+        if(!parent) delete data();
+    }
+};
+
+int obj_KDNode::dimension() const {
+    if(Py_TYPE(this) == &obj_KDBranch::pytype) return static_cast<const obj_KDBranch*>(this)->dimension;
+    
+    assert(Py_TYPE(this) == &obj_KDLeaf::pytype);
+    return static_cast<const obj_KDLeaf*>(this)->data()->dimension();
+}
+
+
 
 int obj_BoxScene_traverse(obj_BoxScene *self,visitproc visit,void *arg) {
     /* we can get away with not traversing the BoxScene object's camera because
@@ -236,14 +387,23 @@ PyObject *obj_BoxScene_get_camera(obj_BoxScene *self,PyObject *) {
     } PY_EXCEPT_HANDLERS(NULL)
 }
 
+PyObject *obj_BoxScene_set_fov(obj_BoxScene *self,PyObject *arg) {
+    try {
+        ensure_unlocked(self);
+        self->base.fov = from_pyobject<REAL>(arg);
+        Py_RETURN_NONE;
+    } PY_EXCEPT_HANDLERS(NULL)
+}
+
 PyMethodDef obj_BoxScene_methods[] = {
     {"set_camera",reinterpret_cast<PyCFunction>(&obj_BoxScene_set_camera),METH_O,set_camera_doc},
     {"get_camera",reinterpret_cast<PyCFunction>(&obj_BoxScene_get_camera),METH_NOARGS,get_camera_doc},
+    {"set_fov",reinterpret_cast<PyCFunction>(&obj_BoxScene_set_fov),METH_O,NULL},
     {NULL}
 };
 
 PyObject *obj_BoxScene_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
-    obj_BoxScene *ptr = reinterpret_cast<obj_BoxScene*>(type->tp_alloc(type,0));
+    auto ptr = reinterpret_cast<obj_BoxScene*>(type->tp_alloc(type,0));
     if(ptr) {
         try {
             try {
@@ -254,7 +414,8 @@ PyObject *obj_BoxScene_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
                 
                 new(&ptr->base) BoxScene<repr>(d);
             } catch(...) {
-                Py_DECREF(ptr);
+                type->tp_free(ptr);
+                throw;
             }
         } PY_EXCEPT_HANDLERS(NULL)
 
@@ -264,7 +425,7 @@ PyObject *obj_BoxScene_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
 }
 
 PyMemberDef obj_BoxScene_members[] = {
-    {const_cast<char*>("fov"),member_macro<REAL>::value,offsetof(obj_BoxScene,base.fov),0,NULL},
+    {const_cast<char*>("fov"),member_macro<REAL>::value,offsetof(obj_BoxScene,base.fov),READONLY,NULL},
     {NULL}
 };
 
@@ -307,6 +468,610 @@ PyTypeObject obj_BoxScene::pytype = {
     NULL, /* tp_init */
     NULL,                         /* tp_alloc */
     &obj_BoxScene_new /* tp_new */
+};
+
+
+int obj_CompositeScene_traverse(obj_CompositeScene *self,visitproc visit,void *arg) {
+    /* we can get away with not traversing the camera because it is never
+       directly exposed to Python code */
+    Py_VISIT(self->idict);
+    return 0;
+}
+
+
+int obj_CompositeScene_clear(obj_CompositeScene *self) {
+    /* we can get away with not clearing the camera because it is never directly
+       exposed to Python code */
+    Py_CLEAR(self->idict);
+    return 0;
+}
+
+PyObject *obj_CompositeScene_set_camera(obj_CompositeScene *self,PyObject *arg) {
+    try {
+        ensure_unlocked(self);
+        
+        repr::camera_obj::ref_type c = get_base<n_camera>(arg);
+        if(!compatible(self->base,c)) {
+            PyErr_SetString(PyExc_TypeError,"the scene and camera must have the same dimension");
+            return NULL;
+        }
+        
+        copy_camera(c,self->base.camera);
+        Py_RETURN_NONE;
+    } PY_EXCEPT_HANDLERS(NULL)
+}
+
+PyObject *obj_CompositeScene_get_camera(obj_CompositeScene *self,PyObject *) {
+    try {
+        const n_camera &c = self->base.camera;
+        return to_pyobject(n_camera(c.dimension(),c.origin(),c.axes()));
+    } PY_EXCEPT_HANDLERS(NULL)
+}
+
+PyObject *obj_CompositeScene_set_fov(obj_CompositeScene *self,PyObject *arg) {
+    try {
+        ensure_unlocked(self);
+        self->base.fov = from_pyobject<REAL>(arg);
+        Py_RETURN_NONE;
+    } PY_EXCEPT_HANDLERS(NULL)
+}
+
+PyMethodDef obj_CompositeScene_methods[] = {
+    {"set_camera",reinterpret_cast<PyCFunction>(&obj_CompositeScene_set_camera),METH_O,set_camera_doc},
+    {"get_camera",reinterpret_cast<PyCFunction>(&obj_CompositeScene_get_camera),METH_NOARGS,get_camera_doc},
+    {"set_fov",reinterpret_cast<PyCFunction>(&obj_CompositeScene_set_fov),METH_O,NULL},
+    {NULL}
+};
+
+PyObject *obj_CompositeScene_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
+    auto ptr = reinterpret_cast<obj_CompositeScene*>(type->tp_alloc(type,0));
+    if(ptr) {
+        try {
+            try {
+                const char *names[] = {"data"};
+                get_arg ga(args,kwds,names,"__new__");
+                PyObject *data = ga(true);
+                ga.finished();
+                
+                if(Py_TYPE(data) != &obj_KDBranch::pytype && Py_TYPE(data) != &obj_KDLeaf::pytype) {
+                    PyErr_SetString(PyExc_TypeError,"\"data\" must be an instance of " MODULE_STR ".KDNode");
+                    throw py_error_set();
+                }
+                
+                auto d_node = reinterpret_cast<obj_KDNode*>(data);
+                
+                new(&ptr->base) composite_scene<repr>(d_node->dimension(),d_node->_data);
+                d_node->parent = py::borrowed_ref(reinterpret_cast<PyObject*>(ptr));
+            } catch(...) {
+                type->tp_free(ptr);
+                throw;
+            }
+        } PY_EXCEPT_HANDLERS(NULL)
+    }
+    return reinterpret_cast<PyObject*>(ptr);
+}
+
+PyMemberDef obj_CompositeScene_members[] = {
+    {const_cast<char*>("fov"),member_macro<REAL>::value,offsetof(obj_CompositeScene,base.fov),READONLY,NULL},
+    {NULL}
+};
+
+PyTypeObject obj_CompositeScene::pytype = {
+    PyVarObject_HEAD_INIT(NULL,0)
+    MODULE_STR ".CompositeScene", /* tp_name */
+    sizeof(obj_CompositeScene), /* tp_basicsize */
+    0,                         /* tp_itemsize */
+    &destructor_dealloc<obj_CompositeScene>, /* tp_dealloc */
+    NULL,                         /* tp_print */
+    NULL,                         /* tp_getattr */
+    NULL,                         /* tp_setattr */
+    NULL, /* tp_compare */
+    NULL, /* tp_repr */
+    NULL, /* tp_as_number */
+    NULL, /* tp_as_sequence */
+    NULL, /* tp_as_mapping */
+    NULL, /* tp_hash */
+    NULL, /* tp_call */
+    NULL, /* tp_str */
+    NULL, /* tp_getattro */
+    NULL, /* tp_setattro */
+    NULL,                         /* tp_as_buffer */
+    Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE|Py_TPFLAGS_CHECKTYPES|Py_TPFLAGS_HAVE_GC, /* tp_flags */
+    NULL, /* tp_doc */
+    reinterpret_cast<traverseproc>(&obj_CompositeScene_traverse), /* tp_traverse */
+    reinterpret_cast<inquiry>(&obj_CompositeScene_clear), /* tp_clear */
+    NULL, /* tp_richcompare */
+    offsetof(obj_CompositeScene,weaklist), /* tp_weaklistoffset */
+    NULL, /* tp_iter */
+    NULL, /* tp_iternext */
+    obj_CompositeScene_methods, /* tp_methods */
+    obj_CompositeScene_members, /* tp_members */
+    NULL, /* tp_getset */
+    NULL, /* tp_base */
+    NULL,                         /* tp_dict */
+    NULL,                         /* tp_descr_get */
+    NULL,                         /* tp_descr_set */
+    offsetof(obj_CompositeScene,idict), /* tp_dictoffset */
+    NULL, /* tp_init */
+    NULL,                         /* tp_alloc */
+    &obj_CompositeScene_new /* tp_new */
+};
+
+
+PyObject *obj_Primitive_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
+    PyErr_SetString(PyExc_TypeError,"the Primitive type cannot be instantiated directly");
+    return NULL;
+}
+
+PyTypeObject obj_Primitive::pytype = {
+    PyVarObject_HEAD_INIT(NULL,0)
+    MODULE_STR ".Primitive",      /* tp_name */
+    sizeof(obj_Primitive),        /* tp_basicsize */
+    0,                            /* tp_itemsize */
+    NULL,                         /* tp_dealloc */
+    NULL,                         /* tp_print */
+    NULL,                         /* tp_getattr */
+    NULL,                         /* tp_setattr */
+    NULL,                         /* tp_compare */
+    NULL,                         /* tp_repr */
+    NULL,                         /* tp_as_number */
+    NULL,                         /* tp_as_sequence */
+    NULL,                         /* tp_as_mapping */
+    NULL,                         /* tp_hash */
+    NULL,                         /* tp_call */
+    NULL,                         /* tp_str */
+    NULL,                         /* tp_getattro */
+    NULL,                         /* tp_setattro */
+    NULL,                         /* tp_as_buffer */
+    Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE|Py_TPFLAGS_CHECKTYPES, /* tp_flags */
+    NULL,                         /* tp_doc */
+    NULL,                         /* tp_traverse */
+    NULL,                         /* tp_clear */
+    NULL,                         /* tp_richcompare */
+    0,                            /* tp_weaklistoffset */
+    NULL,                         /* tp_iter */
+    NULL,                         /* tp_iternext */
+    NULL,                         /* tp_methods */
+    NULL,                         /* tp_members */
+    NULL,                         /* tp_getset */
+    NULL,                         /* tp_base */
+    NULL,                         /* tp_dict */
+    NULL,                         /* tp_descr_get */
+    NULL,                         /* tp_descr_set */
+    0,                            /* tp_dictoffset */
+    NULL,                         /* tp_init */
+    NULL,                         /* tp_alloc */
+    &obj_Primitive_new            /* tp_new */
+};
+
+
+template<typename T> int kd_tree_item_traverse(PyObject *self,visitproc visit,void *arg) {
+    return reinterpret_cast<T*>(self)->parent.gc_traverse(visit,arg);
+}
+
+template<typename T> int kd_tree_item_clear(PyObject *self) {
+    T *obj = reinterpret_cast<T*>(self);
+    if(obj->parent) {
+        obj->data() = nullptr;
+        obj->parent.gc_clear();
+    }
+    return 0;
+}
+
+template<> primitive_type from_pyobject<primitive_type>(PyObject *o) {
+    int t = from_pyobject<int>(o);
+    if(t != CUBE && t != SPHERE) {
+        PyErr_SetString(PyExc_ValueError,"invalid shape type");
+        throw py_error_set();
+    }
+    return static_cast<primitive_type>(t);
+}
+
+/*PyObject *obj_Solid_set_type(obj_Solid *self,PyObject *arg) {
+    try {
+        ensure_unlocked(self->scene);
+
+        self->data()->type = from_pyobject<primitive_type>(arg);
+        
+        Py_RETURN_NONE;
+    } PY_EXCEPT_HANDLERS(NULL)
+}
+
+PyObject *obj_Solid_set_orientation(obj_Solid *self,PyObject *arg) {
+    try {
+        ensure_unlocked(self->scene);
+        
+        self->data()->orientation = from_pyobject<n_matrix>(arg);
+        self->data()->inv_orientation = self->data->orientation.inverse();
+        
+        Py_RETURN_NONE;
+    } PY_EXCEPT_HANDLERS(NULL)
+}
+
+PyObject *obj_Solid_set_position(obj_Solid *self,PyObject *arg) {
+    try {
+        ensure_unlocked(self->scene);
+        
+        self->data()->position = from_pyobject<n_vector>(arg);
+        
+        Py_RETURN_NONE;
+    } PY_EXCEPT_HANDLERS(NULL)
+}
+
+PyMethodDef obj_Solid_methods[] = {
+    {"set_type",reinterpret_cast<PyCFunction>(&obj_Solid_set_type),METH_O,NULL},
+    {"set_orientation",reinterpret_cast<PyCFunction>(&obj_Solid_set_orientation),METH_O,NULL},
+    {"set_position",reinterpret_cast<PyCFunction>(&obj_Solid_set_position),METH_O,NULL},
+    {NULL}
+};*/
+
+PyObject *obj_Solid_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
+    auto ptr = reinterpret_cast<obj_Solid*>(type->tp_alloc(type,0));
+    if(ptr) {
+        try {
+            try {
+                const char *names[] = {"type","orientation","position"};
+                get_arg ga(args,kwds,names,"__new__");
+                auto type = from_pyobject<primitive_type>(ga(true));
+                repr::matrix_obj::ref_type orientation = get_base<n_matrix>(ga(true));
+                repr::vector_obj::ref_type position = get_base<n_vector>(ga(true));
+                ga.finished();
+                
+                if(!compatible(orientation,position)) {
+                    PyErr_SetString(PyExc_TypeError,"the orientation and position must have the same dimension");
+                    throw py_error_set();
+                }
+                
+                ptr->data() = new solid<repr>(type,orientation,position);
+            } catch(...) {
+                type->tp_free(ptr);
+                throw;
+            }
+        } PY_EXCEPT_HANDLERS(NULL)
+    }
+    return reinterpret_cast<PyObject*>(ptr);
+}
+
+PyGetSetDef obj_Solid_getset[] = {
+    {const_cast<char*>("type"),OBJ_GETTER(obj_Solid,int(self->data()->type)),NULL,NULL,NULL},
+    {const_cast<char*>("orientation"),OBJ_GETTER(obj_Solid,self->data()->orientation),NULL,NULL,NULL},
+    {const_cast<char*>("inv_orientation"),OBJ_GETTER(obj_Solid,self->data()->inv_orientation),NULL,NULL,NULL},
+    {const_cast<char*>("position"),OBJ_GETTER(obj_Solid,self->data()->position),NULL,NULL,NULL},
+    {const_cast<char*>("dimension"),OBJ_GETTER(obj_Solid,self->data()->dimension()),NULL,NULL,NULL},
+    {NULL}
+};
+
+PyTypeObject obj_Solid::pytype = {
+    PyVarObject_HEAD_INIT(NULL,0)
+    MODULE_STR ".Solid",          /* tp_name */
+    sizeof(obj_Solid),            /* tp_basicsize */
+    0,                            /* tp_itemsize */
+    &destructor_dealloc<obj_Solid>, /* tp_dealloc */
+    NULL,                         /* tp_print */
+    NULL,                         /* tp_getattr */
+    NULL,                         /* tp_setattr */
+    NULL,                         /* tp_compare */
+    NULL,                         /* tp_repr */
+    NULL,                         /* tp_as_number */
+    NULL,                         /* tp_as_sequence */
+    NULL,                         /* tp_as_mapping */
+    NULL,                         /* tp_hash */
+    NULL,                         /* tp_call */
+    NULL,                         /* tp_str */
+    NULL,                         /* tp_getattro */
+    NULL,                         /* tp_setattro */
+    NULL,                         /* tp_as_buffer */
+    Py_TPFLAGS_DEFAULT|Py_TPFLAGS_CHECKTYPES|Py_TPFLAGS_HAVE_GC, /* tp_flags */
+    NULL,                         /* tp_doc */
+    &kd_tree_item_traverse<obj_Solid>, /* tp_traverse */
+    &kd_tree_item_clear<obj_Solid>, /* tp_clear */
+    NULL,                         /* tp_richcompare */
+    0,                            /* tp_weaklistoffset */
+    NULL,                         /* tp_iter */
+    NULL,                         /* tp_iternext */
+    NULL,//obj_Solid_methods,            /* tp_methods */
+    NULL,                         /* tp_members */
+    obj_Solid_getset,             /* tp_getset */
+    NULL,                         /* tp_base */
+    NULL,                         /* tp_dict */
+    NULL,                         /* tp_descr_get */
+    NULL,                         /* tp_descr_set */
+    0,                            /* tp_dictoffset */
+    NULL,                         /* tp_init */
+    NULL,                         /* tp_alloc */
+    &obj_Solid_new                /* tp_new */
+};
+
+
+PyObject *obj_KDNode_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
+    PyErr_SetString(PyExc_TypeError,"the KDNode type cannot be instantiated directly");
+    return NULL;
+}
+
+PyTypeObject obj_KDNode::pytype = {
+    PyVarObject_HEAD_INIT(NULL,0)
+    MODULE_STR ".KDNode",         /* tp_name */
+    sizeof(obj_KDNode),           /* tp_basicsize */
+    0,                            /* tp_itemsize */
+    NULL,                         /* tp_dealloc */
+    NULL,                         /* tp_print */
+    NULL,                         /* tp_getattr */
+    NULL,                         /* tp_setattr */
+    NULL,                         /* tp_compare */
+    NULL,                         /* tp_repr */
+    NULL,                         /* tp_as_number */
+    NULL,                         /* tp_as_sequence */
+    NULL,                         /* tp_as_mapping */
+    NULL,                         /* tp_hash */
+    NULL,                         /* tp_call */
+    NULL,                         /* tp_str */
+    NULL,                         /* tp_getattro */
+    NULL,                         /* tp_setattro */
+    NULL,                         /* tp_as_buffer */
+    Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE|Py_TPFLAGS_CHECKTYPES, /* tp_flags */
+    NULL,                         /* tp_doc */
+    NULL,                         /* tp_traverse */
+    NULL,                         /* tp_clear */
+    NULL,                         /* tp_richcompare */
+    0,                            /* tp_weaklistoffset */
+    NULL,                         /* tp_iter */
+    NULL,                         /* tp_iternext */
+    NULL,                         /* tp_methods */
+    NULL,                         /* tp_members */
+    NULL,                         /* tp_getset */
+    NULL,                         /* tp_base */
+    NULL,                         /* tp_dict */
+    NULL,                         /* tp_descr_get */
+    NULL,                         /* tp_descr_set */
+    0,                            /* tp_dictoffset */
+    NULL,                         /* tp_init */
+    NULL,                         /* tp_alloc */
+    &obj_KDNode_new               /* tp_new */
+};
+
+
+Py_ssize_t obj_KDLeaf___sequence_len__(obj_KDLeaf *self) {
+    return self->data()->size;
+}
+
+PyObject *obj_KDLeaf___sequence_getitem__(obj_KDLeaf *self,Py_ssize_t index) {
+    if(index < 0 || index >= static_cast<Py_ssize_t>(self->data()->size)) {
+        PyErr_SetString(PyExc_IndexError,"index out of range");
+        return NULL;
+    }
+    try {
+        primitive<repr> *p = self->data()->items()[index];
+        py::borrowed_ref s_ref(reinterpret_cast<PyObject*>(self));
+        
+        if(p->type == TRIANGLE) return reinterpret_cast<PyObject*>(
+            new obj_Triangle(s_ref,static_cast<triangle<repr>*>(p)));
+        
+        assert(p->type == CUBE || p->type == SPHERE);
+        return reinterpret_cast<PyObject*>(
+            new obj_Solid(s_ref,static_cast<solid<repr>*>(p)));
+    } PY_EXCEPT_HANDLERS(NULL);
+}
+
+PySequenceMethods obj_KDLeaf_sequence_methods = {
+    reinterpret_cast<lenfunc>(&obj_KDLeaf___sequence_len__),
+    NULL,
+    NULL,
+    reinterpret_cast<ssizeargfunc>(&obj_KDLeaf___sequence_getitem__),
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL
+};
+
+PyObject *obj_KDLeaf_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
+    auto ptr = reinterpret_cast<obj_KDLeaf*>(type->tp_alloc(type,0));
+    if(ptr) {
+        try {
+            int size;
+            
+            try {
+                const char *names[] = {"primitives"};
+                get_arg ga(args,kwds,names,"__new__");
+                py::tuple primitives(py::object(py::borrowed_ref(ga(true))));
+                ga.finished();
+                
+                size = primitives.size();
+                
+                if(!size) {
+                    PyErr_SetString(PyExc_ValueError,"KDLeaf requires at least one item");
+                    throw py_error_set();
+                }
+                
+                ptr->data() = kd_leaf<repr>::create(size,[=](int i) -> primitive<repr>* {
+                    PyObject *p = primitives[i].ref();
+                    
+                    if(Py_TYPE(p) != &obj_Solid::pytype && Py_TYPE(p) != &obj_Triangle::pytype) {
+                        PyErr_SetString(PyExc_TypeError,"object is not an instance of " MODULE_STR ".Primitive");
+                        throw py_error_set();
+                    }
+    
+                    auto *op = reinterpret_cast<obj_Primitive*>(p);
+                    if(op->parent) {
+                        PyErr_SetString(PyExc_ValueError,"a primitive cannot have more than one parent");
+                        throw py_error_set();
+                    }
+                    op->parent = py::borrowed_ref(reinterpret_cast<PyObject*>(ptr));
+                    return op->_data;
+                });
+            } catch(...) {
+                type->tp_free(ptr);
+                throw;
+            }
+            
+            int d = ptr->data()->items()[0]->dimension();
+            for(int i=1; i<size; ++i) {
+                if(ptr->data()->items()[i]->dimension() != d) {
+                    Py_DECREF(ptr);
+                    PyErr_SetString(PyExc_TypeError,"every member of KDLeaf must have the same dimension");
+                    return NULL;
+                }
+            }
+        } PY_EXCEPT_HANDLERS(NULL)
+    }
+    return reinterpret_cast<PyObject*>(ptr);
+}
+
+PyGetSetDef obj_KDLeaf_getset[] = {
+    {const_cast<char*>("dimension"),OBJ_GETTER(obj_KDLeaf,self->data()->dimension()),NULL,NULL,NULL},
+    {NULL}
+};
+
+PyTypeObject obj_KDLeaf::pytype = {
+    PyVarObject_HEAD_INIT(NULL,0)
+    MODULE_STR ".KDLeaf",         /* tp_name */
+    sizeof(obj_KDLeaf),           /* tp_basicsize */
+    0,                            /* tp_itemsize */
+    &destructor_dealloc<obj_KDLeaf>, /* tp_dealloc */
+    NULL,                         /* tp_print */
+    NULL,                         /* tp_getattr */
+    NULL,                         /* tp_setattr */
+    NULL,                         /* tp_compare */
+    NULL,                         /* tp_repr */
+    NULL,                         /* tp_as_number */
+    &obj_KDLeaf_sequence_methods, /* tp_as_sequence */
+    NULL,                         /* tp_as_mapping */
+    NULL,                         /* tp_hash */
+    NULL,                         /* tp_call */
+    NULL,                         /* tp_str */
+    NULL,                         /* tp_getattro */
+    NULL,                         /* tp_setattro */
+    NULL,                         /* tp_as_buffer */
+    Py_TPFLAGS_DEFAULT|Py_TPFLAGS_CHECKTYPES|Py_TPFLAGS_HAVE_GC, /* tp_flags */
+    NULL,                         /* tp_doc */
+    &kd_tree_item_traverse<obj_KDLeaf>, /* tp_traverse */
+    &kd_tree_item_clear<obj_KDLeaf>, /* tp_clear */
+    NULL,                         /* tp_richcompare */
+    0,                            /* tp_weaklistoffset */
+    NULL,                         /* tp_iter */
+    NULL,                         /* tp_iternext */
+    NULL,                         /* tp_methods */
+    NULL,                         /* tp_members */
+    obj_KDLeaf_getset,            /* tp_getset */
+    NULL,                         /* tp_base */
+    NULL,                         /* tp_dict */
+    NULL,                         /* tp_descr_get */
+    NULL,                         /* tp_descr_set */
+    0,                            /* tp_dictoffset */
+    NULL,                         /* tp_init */
+    NULL,                         /* tp_alloc */
+    &obj_KDLeaf_new               /* tp_new */
+};
+
+
+PyObject *obj_KDBranch_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
+    auto ptr = reinterpret_cast<obj_KDBranch*>(type->tp_alloc(type,0));
+    if(ptr) {
+        try {
+            try {
+                const char *names[] = {"split","left","right"};
+                get_arg ga(args,kwds,names,"__new__");
+                auto split = from_pyobject<REAL>(ga(true));
+                auto left = ga(true);
+                auto right = ga(true);
+                ga.finished();
+                
+                if((Py_TYPE(left) != &obj_KDBranch::pytype && Py_TYPE(left) != &obj_KDLeaf::pytype) ||
+                    (Py_TYPE(right) != &obj_KDBranch::pytype && Py_TYPE(right) != &obj_KDLeaf::pytype)) {
+                    PyErr_SetString(PyExc_TypeError,"\"left\" and \"right\" must be instances of " MODULE_STR ".KDNode");
+                    throw py_error_set();
+                }
+                
+                auto lnode = reinterpret_cast<obj_KDNode*>(left);
+                auto rnode = reinterpret_cast<obj_KDNode*>(right);
+                
+                if(!compatible(*lnode,*rnode)) {
+                    PyErr_SetString(PyExc_TypeError,"\"left\" and \"right\" must have the same dimension");
+                    throw py_error_set();
+                }
+                
+                if(lnode->parent || rnode->parent) {
+                    PyErr_SetString(PyExc_ValueError,"\"left\" and \"right\" must not already be attached to another node/scene");
+                    throw py_error_set();
+                }
+
+                ptr->data() = new kd_branch<repr>(split,lnode->_data,rnode->_data);
+                ptr->dimension = lnode->dimension();
+                auto new_parent = py::borrowed_ref(reinterpret_cast<PyObject*>(ptr));
+                lnode->parent = new_parent;
+                rnode->parent = new_parent;
+            } catch(...) {
+                type->tp_free(ptr);
+                throw;
+            }
+        } PY_EXCEPT_HANDLERS(NULL)
+    }
+    return reinterpret_cast<PyObject*>(ptr);
+}
+
+PyObject *new_obj_node(PyObject *parent,kd_node<repr> *node,int dimension) {
+    if(node->type == LEAF) return reinterpret_cast<PyObject*>(new obj_KDLeaf(py::borrowed_ref(parent),static_cast<kd_leaf<repr>*>(node)));
+    
+    assert(node->type == BRANCH);
+    return reinterpret_cast<PyObject*>(new obj_KDBranch(py::borrowed_ref(parent),static_cast<kd_branch<repr>*>(node),dimension));
+}
+
+PyObject *obj_KDBranch_get_child(obj_KDBranch *self,void *index) {
+    assert(&self->data()->right == (&self->data()->left + 1));
+    
+    try {  
+        return new_obj_node(reinterpret_cast<PyObject*>(self),(&self->data()->left)[reinterpret_cast<size_t>(index)].get(),self->dimension);
+    } PY_EXCEPT_HANDLERS(NULL)
+}
+
+PyGetSetDef obj_KDBranch_getset[] = {
+    {const_cast<char*>("split"),OBJ_GETTER(obj_KDBranch,self->data()->split),NULL,NULL,NULL},
+    {const_cast<char*>("left"),reinterpret_cast<getter>(&obj_KDBranch_get_child),NULL,NULL,reinterpret_cast<void*>(0)},
+    {const_cast<char*>("right"),reinterpret_cast<getter>(&obj_KDBranch_get_child),NULL,NULL,reinterpret_cast<void*>(1)},
+    {const_cast<char*>("dimension"),OBJ_GETTER(obj_KDBranch,self->dimension),NULL,NULL,NULL},
+    {NULL}
+};
+
+PyTypeObject obj_KDBranch::pytype = {
+    PyVarObject_HEAD_INIT(NULL,0)
+    MODULE_STR ".KDBranch",         /* tp_name */
+    sizeof(obj_KDLeaf),           /* tp_basicsize */
+    0,                            /* tp_itemsize */
+    &destructor_dealloc<obj_KDBranch>, /* tp_dealloc */
+    NULL,                         /* tp_print */
+    NULL,                         /* tp_getattr */
+    NULL,                         /* tp_setattr */
+    NULL,                         /* tp_compare */
+    NULL,                         /* tp_repr */
+    NULL,                         /* tp_as_number */
+    NULL,                         /* tp_as_sequence */
+    NULL,                         /* tp_as_mapping */
+    NULL,                         /* tp_hash */
+    NULL,                         /* tp_call */
+    NULL,                         /* tp_str */
+    NULL,                         /* tp_getattro */
+    NULL,                         /* tp_setattro */
+    NULL,                         /* tp_as_buffer */
+    Py_TPFLAGS_DEFAULT|Py_TPFLAGS_CHECKTYPES|Py_TPFLAGS_HAVE_GC, /* tp_flags */
+    NULL,                         /* tp_doc */
+    &kd_tree_item_traverse<obj_KDBranch>, /* tp_traverse */
+    &kd_tree_item_clear<obj_KDBranch>, /* tp_clear */
+    NULL,                         /* tp_richcompare */
+    0,                            /* tp_weaklistoffset */
+    NULL,                         /* tp_iter */
+    NULL,                         /* tp_iternext */
+    NULL,                         /* tp_methods */
+    NULL,                         /* tp_members */
+    obj_KDBranch_getset,          /* tp_getset */
+    NULL,                         /* tp_base */
+    NULL,                         /* tp_dict */
+    NULL,                         /* tp_descr_get */
+    NULL,                         /* tp_descr_set */
+    0,                            /* tp_dictoffset */
+    NULL,                         /* tp_init */
+    NULL,                         /* tp_alloc */
+    &obj_KDBranch_new             /* tp_new */
 };
 
 
@@ -535,7 +1300,7 @@ PyObject *obj_Vector_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
         py::nullable_object values(py::borrowed_ref(ga(false)));
         ga.finished();
 
-        repr::vector_obj *ptr = reinterpret_cast<repr::vector_obj*>(py::check_obj(type->tp_alloc(
+        auto ptr = reinterpret_cast<repr::vector_obj*>(py::check_obj(type->tp_alloc(
             type,
             check_dimension(dimension))));
         
@@ -550,6 +1315,11 @@ PyObject *obj_Vector_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
         return reinterpret_cast<PyObject*>(ptr);
     } PY_EXCEPT_HANDLERS(NULL)
 }
+
+PyGetSetDef obj_Vector_getset[] = {
+    {const_cast<char*>("dimension"),OBJ_GETTER(repr::vector_obj,self->get_base().dimension()),NULL,NULL,NULL},
+    {NULL}
+};
 
 PyTypeObject vector_obj_base::pytype = {
     PyVarObject_HEAD_INIT(NULL,0)
@@ -581,7 +1351,7 @@ PyTypeObject vector_obj_base::pytype = {
     NULL,                         /* tp_iternext */
     obj_Vector_methods,           /* tp_methods */
     NULL,                         /* tp_members */
-    NULL,                         /* tp_getset */
+    obj_Vector_getset,            /* tp_getset */
     NULL,                         /* tp_base */
     NULL,                         /* tp_dict */
     NULL,                         /* tp_descr_get */
@@ -682,7 +1452,6 @@ int obj_Camera_clear(repr::camera_obj *self) {
     return 0;
 }
 
-
 PyObject *obj_Camera_getorigin(repr::camera_obj *self,void *) {
     try {
         return to_pyobject(self->get_base().origin());
@@ -690,12 +1459,8 @@ PyObject *obj_Camera_getorigin(repr::camera_obj *self,void *) {
 }
 
 int obj_Camera_setorigin(repr::camera_obj *self,PyObject *arg,void *) {
-    if(!arg) {
-        PyErr_SetString(PyExc_TypeError,no_delete_msg);
-        return -1;
-    }
-
     try {
+        setter_no_delete(arg);
         self->get_base().origin() = get_base<n_vector>(arg);
         return 0;
     } PY_EXCEPT_HANDLERS(-1)
@@ -711,6 +1476,7 @@ PyObject *obj_Camera_getaxes(repr::camera_obj *self,void *) {
 PyGetSetDef obj_Camera_getset[] = {
     {const_cast<char*>("origin"),reinterpret_cast<getter>(&obj_Camera_getorigin),reinterpret_cast<setter>(&obj_Camera_setorigin),NULL,NULL},
     {const_cast<char*>("axes"),reinterpret_cast<getter>(&obj_Camera_getaxes),NULL,NULL,NULL},
+    {const_cast<char*>("dimension"),OBJ_GETTER(repr::camera_obj,self->get_base().dimension()),NULL,NULL,NULL},
     {NULL}
 };
 
@@ -781,7 +1547,7 @@ PyTypeObject camera_obj_base::pytype = {
     PyVarObject_HEAD_INIT(NULL,0)
     MODULE_STR ".Camera",         /* tp_name */
     sizeof(repr::camera_obj) - repr::camera_obj::item_size, /* tp_basicsize */
-    repr::camera_obj::item_size,        /* tp_itemsize */
+    repr::camera_obj::item_size,  /* tp_itemsize */
     reinterpret_cast<destructor>(&obj_Camera_dealloc), /* tp_dealloc */
     NULL,                         /* tp_print */
     NULL,                         /* tp_getattr */
@@ -1030,11 +1796,27 @@ PyObject *obj_Matrix_identity(PyObject*,PyObject *arg) {
     } PY_EXCEPT_HANDLERS(NULL)
 }
 
+PyObject *obj_Matrix_determinant(repr::matrix_obj *self,PyObject *) {
+    try {
+        repr::matrix_obj::ref_type base = self->get_base();
+        return to_pyobject(base.determinant());
+    } PY_EXCEPT_HANDLERS(NULL)
+}
+
+PyObject *obj_Matrix_inverse(repr::matrix_obj *self,PyObject *) {
+    try {
+        repr::matrix_obj::ref_type base = self->get_base();
+        return to_pyobject(base.inverse());
+    } PY_EXCEPT_HANDLERS(NULL)
+}
+
 PyMethodDef obj_Matrix_methods[] = {
     {"scale",reinterpret_cast<PyCFunction>(&obj_Matrix_scale),METH_VARARGS|METH_STATIC,NULL},
     {"values",reinterpret_cast<PyCFunction>(&obj_Matrix_values),METH_NOARGS,"All the matrix elements as a flat sequence"},
     {"rotation",reinterpret_cast<PyCFunction>(&obj_Matrix_rotation),METH_VARARGS|METH_KEYWORDS|METH_STATIC,NULL},
     {"identity",reinterpret_cast<PyCFunction>(&obj_Matrix_identity),METH_O|METH_STATIC,NULL},
+    {"determinant",reinterpret_cast<PyCFunction>(&obj_Matrix_determinant),METH_NOARGS,NULL},
+    {"inverse",reinterpret_cast<PyCFunction>(&obj_Matrix_inverse),METH_NOARGS,NULL},
     {NULL}
 };
 
@@ -1054,7 +1836,7 @@ PyObject *obj_Matrix_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
         py::object values(py::borrowed_ref(ga(true)));
         ga.finished();
 
-        repr::matrix_obj *ptr = reinterpret_cast<repr::matrix_obj*>(py::check_obj(type->tp_alloc(
+        auto ptr = reinterpret_cast<repr::matrix_obj*>(py::check_obj(type->tp_alloc(
             type,
             check_dimension(dimension) * dimension)));
         
@@ -1082,6 +1864,11 @@ PyObject *obj_Matrix_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
         return reinterpret_cast<PyObject*>(ptr);
     } PY_EXCEPT_HANDLERS(NULL)
 }
+
+PyGetSetDef obj_Matrix_getset[] = {
+    {const_cast<char*>("dimension"),OBJ_GETTER(repr::matrix_obj,self->get_base().dimension()),NULL,NULL,NULL},
+    {NULL}
+};
 
 PyTypeObject matrix_obj_base::pytype = {
     PyVarObject_HEAD_INIT(NULL,0)
@@ -1113,7 +1900,7 @@ PyTypeObject matrix_obj_base::pytype = {
     NULL, /* tp_iternext */
     obj_Matrix_methods, /* tp_methods */
     NULL, /* tp_members */
-    NULL, /* tp_getset */
+    obj_Matrix_getset, /* tp_getset */
     NULL, /* tp_base */
     NULL,                         /* tp_dict */
     NULL,                         /* tp_descr_get */
@@ -1125,8 +1912,69 @@ PyTypeObject matrix_obj_base::pytype = {
 };
 
 
+void bad_vectors() {
+    PyErr_SetString(PyExc_TypeError,"argument must be a sequence of vectors");
+    throw py_error_set();
+}
+
+repr::vector_obj::ref_type confirmed_vector(const py::object &o) {
+    return reinterpret_cast<repr::vector_obj*>(o.ref())->get_base();
+}
+
+PyObject *perpendicular_to(PyObject*,PyObject *arg) {
+    try {
+        py::tuple vectors{py::object(py::borrowed_ref(arg))};
+        
+        if(!vectors.size()) bad_vectors();
+        if(!PyObject_TypeCheck(vectors[0].ref(),&repr::vector_obj::pytype)) bad_vectors();
+        int dim = confirmed_vector(vectors[0]).dimension();
+        for(int i=1; i<vectors.size(); ++i) {
+            if(!PyObject_TypeCheck(vectors[i].ref(),&repr::vector_obj::pytype)) bad_vectors();
+            if(confirmed_vector(vectors[i]).dimension() != dim) {
+                PyErr_SetString(PyExc_TypeError,"the vectors must all have the same dimension");
+                return NULL;
+            }
+        }
+        
+        smaller<n_matrix> tmp(dim-1);
+        n_vector r(dim);
+        int f = 2 * (dim % 2) - 1;
+        
+        for(int i=0; i<dim; ++i) {
+            for(int j=0; j<dim-1; ++i) {
+                repr::vector_obj::ref_type v = confirmed_vector(vectors[j]);
+                for(int k=0; k<i; ++k) tmp[k][j] = v[k];
+                for(int k=i+1; k<dim; ++k) tmp[k-1][j] = v[k];
+            }
+            r[i] = f * tmp.determinant();
+            f = -1;
+        }
+        return to_pyobject(r);
+    } PY_EXCEPT_HANDLERS(NULL)
+}
+
 PyMethodDef func_table[] = {
+    {"perpendicular_to",&perpendicular_to,METH_O,NULL},
     {NULL}
+};
+
+
+struct {
+    const char *name;
+    PyTypeObject *type_obj;
+} classes[] = {
+    {"BoxScene",&obj_BoxScene::pytype},
+    {"CompositeScene",&obj_CompositeScene::pytype},
+    {"Primitive",&obj_Primitive::pytype},
+    {"Solid",&obj_Solid::pytype},
+    {"KDNode",&obj_KDNode::pytype},
+    {"KDLeaf",&obj_KDLeaf::pytype},
+    {"KDBranch",&obj_KDBranch::pytype},
+    {"Vector",&repr::vector_obj::pytype},
+    {"MatrixProxy",&obj_MatrixProxy::pytype},
+    {"Camera",&repr::camera_obj::pytype},
+    {"CameraAxes",&obj_CameraAxes::pytype},
+    {"Matrix",&repr::matrix_obj::pytype}
 };
 
 
@@ -1152,34 +2000,32 @@ extern "C" SHARED(PyObject) * APPEND_MODULE_NAME(PyInit_)() {
 extern "C" SHARED(void) APPEND_MODULE_NAME(init)() {
 #endif
     using namespace py;
-        
+
 #ifdef INHERIT_FROM_RENDER_SCENE
     try {
         object scene = object(new_ref(check_obj(PyImport_ImportModule(PACKAGE_STR ".render")))).attr("Scene");
-        if(!PyType_CheckExact(scene.ref())) THROW_PYERR_STRING(TypeError,"render.Scene is supposed to be a class")
-        obj_BoxScene::pytype.tp_base = reinterpret_cast<PyTypeObject*>(scene.ref());
+        if(!PyType_CheckExact(scene.ref())) THROW_PYERR_STRING(TypeError,"render.Scene is supposed to be a class") {
+            auto stype = reinterpret_cast<PyTypeObject*>(scene.ref());
+            obj_BoxScene::pytype.tp_base = stype;
+            obj_CompositeScene::pytype.tp_base = stype;
+        }
     } PY_EXCEPT_HANDLERS(INIT_ERR_VAL)
 #endif
 
-    if(UNLIKELY(PyType_Ready(&obj_BoxScene::pytype) < 0)) return INIT_ERR_VAL;
-    if(UNLIKELY(PyType_Ready(&repr::vector_obj::pytype) < 0)) return INIT_ERR_VAL;
-    if(UNLIKELY(PyType_Ready(&obj_MatrixProxy::pytype) < 0)) return INIT_ERR_VAL;
-    if(UNLIKELY(PyType_Ready(&repr::camera_obj::pytype) < 0)) return INIT_ERR_VAL;
-    if(UNLIKELY(PyType_Ready(&obj_CameraAxes::pytype) < 0)) return INIT_ERR_VAL;
-    if(UNLIKELY(PyType_Ready(&repr::matrix_obj::pytype) < 0)) return INIT_ERR_VAL;
+    for(auto &cls : classes) {
+        if(UNLIKELY(PyType_Ready(cls.type_obj) < 0)) return INIT_ERR_VAL;
+    }
+
 #if PY_MAJOR_VERSION >= 3
     PyObject *m = PyModule_Create(&module_def);
 #else
     PyObject *m = Py_InitModule3(MODULE_STR,func_table,0);
 #endif
     if(UNLIKELY(!m)) return INIT_ERR_VAL;
-
-    add_class(m,"BoxScene",&obj_BoxScene::pytype);
-    add_class(m,"Vector",&repr::vector_obj::pytype);
-    add_class(m,"MatrixProxy",&obj_MatrixProxy::pytype);
-    add_class(m,"Camera",&repr::camera_obj::pytype);
-    add_class(m,"CameraAxes",&obj_CameraAxes::pytype);
-    add_class(m,"Matrix",&repr::matrix_obj::pytype);
+        
+    for(auto &cls : classes) {
+        add_class(m,cls.name,cls.type_obj);
+    }
 
 #if PY_MAJOR_VERSION >= 3
     return m;

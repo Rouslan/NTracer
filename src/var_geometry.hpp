@@ -227,18 +227,16 @@ namespace var {
             assert(o.dimension() == d);
             new(&data()->origin) vector_t(o);
             
-            int i;
+            int i=0;
             try {
-                for(i=0; i<d; ++i) {
+                for(; i<d; ++i) {
                     vector_t tmp = a_init(i);
                     assert(tmp.dimension() == d);
                     new(&data()->axes[i]) vector_t(tmp);
                 }
             } catch(...) {
                 data()->origin.~vector_t();
-                for(int j=0; j<i; ++j) {
-                    data()->axes[j].~vector_t();
-                }
+                while(i) data()->axes[--i].~vector_t();
             }
         }
         

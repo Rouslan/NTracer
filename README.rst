@@ -6,10 +6,10 @@ A fast hyper-spacial ray-tracing library
 
 **Important:** this library makes extensive use of features exclusive to C++11.
 At the time of this writing, the only compilers that can build this library are
-GCC >= 4.7 and Clang >= 3.0.
+GCC >= 4.7 and Clang >= 3.1.
 
-NTracer is a simple ray-tracer that can work with scenes (currently limited to a
-scene containing one hyper-cube) with an arbitrary number of dimensions.
+NTracer is a simple ray-tracer that can work with scenes with an arbitrary
+number of dimensions.
 
 .. image:: http://rouslan.github.io/NTracer/screenshots/ntracer_6d.png
 
@@ -33,17 +33,21 @@ ray-tracer are always taken from the view-point of a three-dimensional observer.
 A two-dimensional image is produced by projecting rays from a single point, onto
 a grid corresponding to the pixels of the image. The consequence of this is that
 the observer can only see a three-dimensional slice of the entire scene with a
-single image. The reason for this can be understood by imagining a lower-
-dimensional analog. If a being existed in a two-dimensional universe, it would
-only be able to see in two dimensions and have three degrees of freedom (two 
-translation and one rotation components). If the being were plucked from its
-universe and placed before a three-dimensional object, it would only be able to
-see a two-dimensional slice of the object at any given time. To see the rest of
-the object, the being would have to either translate or rotate itself in a way
-that exploits one of the newly acquired degrees of freedom (one new translation
-and two new rotation components).
+single image. The reason for this can be understood by imagining a
+lower-dimensional analog. If a being existed in a two-dimensional universe, it
+would only be able to see in two dimensions and have three degrees of freedom
+(two translation and one rotation components). If the being were plucked from
+its universe and placed before a three-dimensional object, it would only be able
+to see a two-dimensional slice of the object at any given time. To see the rest
+of the object, the being would have to either translate or rotate itself in a
+way that exploits one of the newly acquired degrees of freedom (one new
+translation and two new rotation components).
 
-Another consequence of having more than three dimensions is it no longer makes
-sense to rotate about a single axis. Thus the static member function
-``Matrix.rotation``, which creates a rotation matrix, requires two vectors to
-describe a plane of rotation.
+Having more than three dimensions, it no longer makes sense to rotate about a
+single axis.  Thus the static member function ``Matrix.rotation``, which creates
+a rotation matrix, requires two vectors to describe a plane of rotation.
+
+Cross products can only be computed in three-dimensional space. To find
+perpendicular vectors, the function ``perpendicular_to`` is provided, which
+takes a sequence of D-1 linearly independant vectors, where D is the
+dimensionality of the scene.

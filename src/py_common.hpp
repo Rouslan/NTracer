@@ -6,6 +6,7 @@
 #include <structmember.h>
 #include <new>
 #include <limits>
+#include <type_traits>
 
 
 #ifdef __GNUC__
@@ -57,6 +58,23 @@
         PyErr_SetString(PyExc_RuntimeError,e.what());               \
         return RET;                                                 \
     }
+
+
+#define OBJ_GETTER(T,EXPR) [](PyObject *obj_self,void*) -> PyObject* {  \
+    try {                                                               \
+        auto self = reinterpret_cast<T*>(obj_self);                     \
+        return to_pyobject(EXPR);                                       \
+    } PY_EXCEPT_HANDLERS(NULL)                                          \
+}
+
+#define OBJ_SETTER(T,EXPR) [](PyObject *obj_self,PyObject *arg,void*) -> int { \
+    try {                                                                      \
+        setter_no_delete(arg);                                                 \
+        auto self = reinterpret_cast<T*>(self);                                \
+        EXPR = from_pyobject<typename std::decay<decltype(EXPR)>::type>(arg);  \
+        return 0;                                                              \
+    } PY_EXCEPT_HANDLERS(-1)                                                   \
+}
 
 
 extern const char *no_delete_msg;
@@ -287,6 +305,13 @@ struct get_arg {
 };
 
 void NoSuchOverload(PyObject *args);
+
+inline void setter_no_delete(PyObject *arg) {
+    if(!arg) {
+        PyErr_SetString(PyExc_TypeError,no_delete_msg);
+        throw py_error_set();
+    }
+}
 
 
 inline void add_class(PyObject *module,const char *name,PyTypeObject *type) {
