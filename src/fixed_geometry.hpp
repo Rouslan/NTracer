@@ -57,6 +57,12 @@ namespace fixed {
     
     template<int N> struct matrix_store {
         typedef vector_store<N,REAL> v_store;
+        struct pivot_buffer {
+            int data[N];
+            pivot_buffer(int size) {
+                assert(size == N);
+            }
+        };
         
         explicit matrix_store(int d) {
             assert(d == N);

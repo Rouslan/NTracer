@@ -3,6 +3,7 @@
 
 #include <cmath>
 #include <utility>
+#include <stdexcept>
 
 
 #ifdef __GNUC__
@@ -389,7 +390,7 @@ protected:
         Store::rep(r.dimension(),[&r,a](int row,int col){ r[row][col] = row == col ? a : REAL(0); });
     }
     
-    /* Crout matrix decomposition.
+    /* Crout matrix decomposition with partial pivoting.
         
        Although this generates two matrices--an upper (U) and lower (L)
        triangular matrix--the result is stored in a single matrix object like
@@ -404,31 +405,58 @@ protected:
        L[n-1][0] L[n-1][1] L[n-1][2] ... L[n-1][n-1]
         
        Every item of the upper matrix's diagonal is always 1 and is not present
-       in the result.
+       in the result. If the first element of the source matrix is zero, the
+       result will instead be computed from a matrix equal to the source matrix
+       except having the first row swapped with another. The return value
+       indicates how many swaps were performed. If the return value is -1, the
+       matrix is singular and "lu" will be untouched.
     */
-    void decompose(matrix_methods<Store> & RESTRICT lu) const {
+    int decompose(matrix_methods<Store> & RESTRICT lu,int *pivots) const {
         assert(dimension() == lu.dimension());
+        
+        int swapped = 0;
+
+        for(int i=0; i<dimension(); ++i) pivots[i] = i;
         
         for(int j=0; j<dimension(); ++j) {
             for(int i=j; i<dimension(); ++i) {
                 REAL sum = REAL(0);
                 for(int k=0; k<j; ++k) sum += lu[i][k] * lu[k][j];
-                lu[i][j] = (*this)[i][j] - sum;
+                lu[i][j] = (*this)[pivots[i]][j] - sum;
             }
+            
+            if(lu[j][j] == REAL(0)) {
+                for(int i=j+1; i<dimension(); ++i) {
+                    if(lu[i][j] != REAL(0)) {
+                        std::swap(pivots[i],pivots[j]);
+                        ++swapped;
+                        for(int k=0; k<j+1; ++k) std::swap(lu[i][k],lu[j][k]);
+                        goto okay;
+                    }
+                }
+                return -1;
+            }
+        
+        okay:
             
             for(int i=j+1; i<dimension(); ++i) {
                 REAL sum = REAL(0);
                 for(int k=0; k<j; ++k) sum += lu[j][k] * lu[k][i];
-                lu[j][i] = ((*this)[j][i] - sum) / lu[j][j];
+                lu[j][i] = ((*this)[pivots[j]][i] - sum) / lu[j][j];
             }
         }
+        
+        return swapped;
     }
     
     REAL determinant(matrix_methods<Store> & RESTRICT tmp) const {
         assert(dimension() == tmp.dimension());
         
-        decompose(tmp);
-        REAL r = REAL(1);
+        typename Store::pivot_buffer pivot(dimension());
+        int swapped = decompose(tmp,pivot.data);
+        if(swapped < 0) return REAL(0);
+        
+        REAL r = swapped % 2 ? REAL(-1) : REAL(1);
         for(int i=0; i<dimension(); ++i) r *= tmp[i][i];
         return r;
     }
@@ -436,7 +464,9 @@ protected:
     void inverse(matrix_methods<Store> & RESTRICT inv,matrix_methods<Store> & RESTRICT tmp) const {
         assert(dimension() == r.dimension() && dimension() == tmp.dimension());
 
-        decompose(tmp);
+        typename Store::pivot_buffer pivot(dimension());
+        int swapped = decompose(tmp,pivot.data);
+        if(swapped < 0) throw std::domain_error("matrix is singular (uninvertible)");
 
         // forward substitution
         // store the result in the lower triangle of tmp
@@ -444,20 +474,22 @@ protected:
             tmp[c][c] = REAL(1) / tmp[c][c];
             
             for(int r=c+1; r<dimension(); ++r) {
-                tmp[r][c] = REAL(0);
-                for(int i=c; i<r; ++i) tmp[r][c] -= tmp[r][i] * tmp[i][c];
-                tmp[r][c] /= tmp[r][r];
+                REAL sum = 0;
+                for(int i=c; i<r; ++i) sum -= tmp[r][i] * tmp[i][c];
+                tmp[r][c] = sum / tmp[r][r];
             }
         }
 
         // back substitution
         for(int c=0; c<dimension(); ++c) {
-            inv[dimension()-1][c] = tmp[dimension()-1][c];
+            int pc = pivot.data[c];
+            inv[dimension()-1][pc] = tmp[dimension()-1][c];
             
             for(int r=dimension()-2; r>-1; --r) {
-                inv[r][c] = REAL(0);
-                if(r >= c) inv[r][c] = tmp[r][c];
-                for(int i=r+1; i<dimension(); ++i) inv[r][c] -= tmp[r][i] * inv[i][c];
+                REAL sum = 0;
+                if(r >= c) sum = tmp[r][c];
+                for(int i=r+1; i<dimension(); ++i) sum -= tmp[r][i] * inv[i][pc];
+                inv[r][pc] = sum;
             }
         }
     }

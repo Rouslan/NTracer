@@ -1938,16 +1938,16 @@ PyObject *perpendicular_to(PyObject*,PyObject *arg) {
         
         smaller<n_matrix> tmp(dim-1);
         n_vector r(dim);
-        int f = 2 * (dim % 2) - 1;
-        
+        int f = dim % 2 ? -1 : 1;
+                
         for(int i=0; i<dim; ++i) {
-            for(int j=0; j<dim-1; ++i) {
+            for(int j=0; j<dim-1; ++j) {
                 repr::vector_obj::ref_type v = confirmed_vector(vectors[j]);
                 for(int k=0; k<i; ++k) tmp[k][j] = v[k];
                 for(int k=i+1; k<dim; ++k) tmp[k-1][j] = v[k];
             }
             r[i] = f * tmp.determinant();
-            f = -1;
+            f = -f;
         }
         return to_pyobject(r);
     } PY_EXCEPT_HANDLERS(NULL)

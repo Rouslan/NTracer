@@ -144,6 +144,14 @@ namespace var {
         typedef matrix_obj obj_t;
         typedef vector_store<REAL> v_store;
         
+        struct pivot_buffer {
+            int *data;
+            pivot_buffer(int size) : data(new int[size]) {}
+            ~pivot_buffer() {
+                delete[] data;
+            }
+        };
+        
         obj_t *data;
 
         explicit matrix_store(obj_t *obj) : data(obj) {
