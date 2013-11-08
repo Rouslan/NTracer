@@ -409,7 +409,7 @@ protected:
        result will instead be computed from a matrix equal to the source matrix
        except having the first row swapped with another. The return value
        indicates how many swaps were performed. If the return value is -1, the
-       matrix is singular and "lu" will be untouched.
+       matrix is singular and the contents of "lu" will be undefined.
     */
     int decompose(matrix_methods<Store> & RESTRICT lu,int *pivots) const {
         assert(dimension() == lu.dimension());
@@ -495,6 +495,44 @@ protected:
     }
 
 public:
+    /* Calculates the determinant by using itself to store the intermediate
+       calculations. This avoids allocating space for another matrix but loses
+       the contents of this matrix. */
+    REAL determinant_inplace() {
+        int swapped = 0;
+
+        for(int j=0; j<dimension(); ++j) {
+            for(int i=j; i<dimension(); ++i) {
+                REAL sum = REAL(0);
+                for(int k=0; k<j; ++k) sum += (*this)[i][k] * (*this)[k][j];
+                (*this)[i][j] = (*this)[i][j] - sum;
+            }
+            
+            if((*this)[j][j] == REAL(0)) {
+                for(int i=j+1; i<dimension(); ++i) {
+                    if((*this)[i][j] != REAL(0)) {
+                        ++swapped;
+                        for(int k=0; k<dimension(); ++k) std::swap((*this)[i][k],(*this)[j][k]);
+                        goto okay;
+                    }
+                }
+                return REAL(0);
+            }
+        
+        okay:
+            
+            for(int i=j+1; i<dimension(); ++i) {
+                REAL sum = REAL(0);
+                for(int k=0; k<j; ++k) sum += (*this)[j][k] * (*this)[k][i];
+                (*this)[j][i] = ((*this)[j][i] - sum) / (*this)[j][j];
+            }
+        }
+
+        REAL r = swapped % 2 ? REAL(-1) : REAL(1);
+        for(int i=0; i<dimension(); ++i) r *= (*this)[i][i];
+        return r;
+    }
+    
     REAL *operator[](int n) { return store[n]; }
     const REAL *operator[](int n) const { return store[n]; }
 
@@ -590,5 +628,25 @@ template<typename Store> struct _smaller<matrix_methods<Store> > {
 
 template<typename T> using smaller = typename _smaller<T>::type;
 
+
+namespace impl {
+    // generalized cross product
+    template<typename VStore,typename MStore> void cross(vector_methods<VStore> &r,matrix_methods<MStore> &tmp,const vector_methods<VStore> *vs) {
+        assert(r.dimension() == (tmp.dimension()-1));
+
+        int f = r.dimension() % 2 ? 1 : -1;
+        
+        for(int i=0; i<r.dimension(); ++i) {
+            assert(r.dimension() == vs[i].dimension());
+            
+            for(int j=0; j<r.dimension()-1; ++j) {
+                for(int k=0; k<i; ++k) tmp[k][j] = vs[j][k];
+                for(int k=i+1; k<r.dimension(); ++k) tmp[k-1][j] = vs[j][k];
+            }
+            r[i] = f * tmp.determinant_inplace();
+            f = -f;
+        }
+    }
+}
 
 #endif

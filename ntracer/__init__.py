@@ -14,10 +14,11 @@ def vector_wrapper(mod,dim):
         __slots__ = ()
         
         def __new__(cls,*values):
+            if len(values) > 1: return base.__new__(cls,dim,values)
             return base.__new__(cls,dim,*values)
         
         @staticmethod
-        def axis(axis,length):
+        def axis(axis,length=1):
             return base.axis(dim,axis,length)
         
     return Vector
@@ -106,8 +107,9 @@ class NTracer(object):
             obj.KDBranch = mod.KDBranch
             obj.Primitive = mod.Primitive
             obj.Solid = mod.Solid
-            #obj.Triangle = mod.Triangle
-            obj.perpendicular_to = mod.perpendicular_to
+            obj.Triangle = mod.Triangle
+            obj.dot = mod.dot
+            obj.cross = mod.cross
             
             NTracer._cache[dimension] = obj
             

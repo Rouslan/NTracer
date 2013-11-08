@@ -76,6 +76,41 @@ namespace var {
     };
     
     
+    /* an array that can be initialized with a call-back */
+    template<typename T> struct init_array {
+        size_t size;
+        void *data;
+        
+        T &operator[](int i) { return reinterpret_cast<T*>(data)[i]; }
+        const T &operator[](int i) const { return reinterpret_cast<const T*>(data)[i]; }
+        
+        operator T*() { return reinterpret_cast<T*>(data); }
+        operator const T*() const { return reinterpret_cast<const T*>(data); }
+        
+        template<typename F> init_array(size_t size,F f) : size(size) {
+            assert(size);
+            
+            data = operator new(sizeof(T) * size);
+            
+            size_t i=0;
+            try {
+                for(; i<size; ++i) new(&(*this)[i]) T(f(i));
+            } catch(...) {
+                while(i) (*this)[--i].~T();
+                throw;
+            }
+        }
+        
+        init_array(const init_array&) = delete;
+        init_array &operator=(const init_array&) = delete;
+        
+        ~init_array() {
+            for(size_t i=0; i<size; ++i) (*this)[i].~T();
+            operator delete(data);
+        }
+    };
+    
+    
     template<typename T> struct vector_store;
     template<typename T> using py_vector = vector_impl<vector_store<T>,external>;
     template<typename T> using vector = vector_impl<vector_store<T>,internal>;
@@ -210,17 +245,7 @@ namespace var {
     
     struct camera_store {
         typedef py_vector<REAL> vector_t;
-
-        class smaller_array {
-            std::vector<vector_t> items;
-        public:
-            template<typename F> smaller_array(int size,F f) {
-                items.reserve(size);
-                for(int i=0; i<size; ++i) items.push_back(f(i));
-            }
-            vector_t &operator[](int n) { return items[n]; }
-            const vector_t &operator[](int n) const { return items[n]; }
-        };
+        typedef init_array<vector_t> smaller_array;
 
         py::object obj;
         
@@ -284,6 +309,9 @@ namespace var {
         typedef var::vector_obj<REAL> vector_obj;
         typedef var::matrix_obj matrix_obj;
         typedef var::camera_obj camera_obj;
+        
+        template<typename T> using init_array = var::init_array<T>;
+        template<typename T> using smaller_init_array = var::init_array<T>;
     };
 }
 

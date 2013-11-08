@@ -35,6 +35,48 @@ namespace fixed {
             a = b;
         }
     };
+    
+    /* an array that can be initialized with a call-back */
+    template<typename T,size_t Size> struct init_array {
+        static_assert(Size > 0,"zero-sized arrays are not supported");
+        
+        typename std::aligned_storage<sizeof(T) * Size,alignof(T)>::type data;
+        
+        T &operator[](int i) { return reinterpret_cast<T*>(&data)[i]; }
+        const T &operator[](int i) const { return reinterpret_cast<const T*>(&data)[i]; }
+        
+        operator T*() { return reinterpret_cast<T*>(&data); }
+        operator const T*() const { return reinterpret_cast<const T*>(&data); }
+        
+        T *begin() { return operator T*(); }
+        const T *begin() const { return operator T*(); }
+        
+        T *end() { return begin() + Size; }
+        const T *end() const { return begin() + Size; }
+        
+        template<typename F> init_array(size_t size,F f) {
+            assert(size == Size);
+            subinit(f,0);
+        }
+        
+        ~init_array() {
+            for(T &x : *this) x.~T();
+        }
+        
+    private:
+        template<typename F> void subinit(F f,size_t i) {
+            new(&(*this)[i]) T(f(i));
+            
+            if(i < Size-1) {
+                try {
+                    subinit(f,i+1);
+                } catch(...) {
+                    (*this)[i].~T();
+                    throw;
+                }
+            }
+        }
+    };
 
     
     template<int N,typename T> struct vector_store {
@@ -88,47 +130,22 @@ namespace fixed {
     template<int N> using matrix = matrix_impl<matrix_store<N>,alloc>;
 
 
-    template<int N,int Size> struct vector_array {
-        static_assert(N > 0,"zero-sized arrays are not supported");
-        
-        vector_array<N,Size-1> body;
-        vector<N,REAL> tail;
-        
-        template<typename F> vector_array(F f) : body(f), tail(f(Size-1)) {}
-    };
-    
-    template<int N> struct vector_array<N,1> {
-        vector<N,REAL> head;
-        
-        template<typename F> vector_array(F f) : head(f(0)) {}
-    };
-
     template<int N> struct camera_store {
         typedef vector<N,REAL> vector_t;
+        typedef init_array<vector_t,N-1> smaller_array;
         
-        class smaller_array {
-            vector_array<N,N-1> items;
-          public:
-            template<typename F> smaller_array(int size,F f) : items(f) {
-                assert(size == N-1);
-            }
-            
-            vector_t &operator[](int i) { return reinterpret_cast<vector_t*>(&items)[i]; }
-            const vector_t &operator[](int i) const { return reinterpret_cast<const vector_t*>(&items)[i]; }
-        };
-        
-        template<typename F> camera_store(int d,const vector_t &o,F a_init) : _origin(o), _axes(a_init) {
+        template<typename F> camera_store(int d,const vector_t &o,F a_init) : _origin(o), _axes(N,a_init) {
             assert(d == N);
         }
         
         int dimension() const { return N; }
         vector_t &origin() { return _origin; }
         const vector_t &origin() const { return _origin; }
-        vector_t *axes() { return reinterpret_cast<vector_t*>(&_axes); }
-        const vector_t *axes() const { return reinterpret_cast<const vector_t*>(&_axes); }
+        vector_t *axes() { return _axes; }
+        const vector_t *axes() const { return _axes; }
         
         vector_t _origin;
-        vector_array<N,N> _axes;
+        init_array<vector_t,N> _axes;
     };
     
     
@@ -189,6 +206,9 @@ namespace fixed {
         typedef simple_py_wrapper<vector<N,REAL>,vector_obj_base> vector_obj;
         typedef simple_py_wrapper<matrix<N>,matrix_obj_base> matrix_obj;
         typedef fixed::camera_obj<N> camera_obj;
+        
+        template<typename T> using init_array = fixed::init_array<T,N>;
+        template<typename T> using smaller_init_array = fixed::init_array<T,N-1>;
     };
 }
 

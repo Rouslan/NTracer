@@ -391,6 +391,14 @@ namespace py {
         explicit tuple(const _object_base &b) : _object_base(object(py::borrowed_ref(reinterpret_cast<PyObject*>(&PyTuple_Type)))(b)) {
             assert(PyTuple_Check(_ptr));
         }
+        tuple(std::initializer_list<object> ol) : tuple(ol.size()) {
+            auto li = std::begin(ol);
+            auto ti = &PyTuple_GET_ITEM(_ptr,0);
+            
+            for(; li != std::end(ol); ++li, ++ti) {
+                *ti = li->get_new_ref();
+            }
+        }
 
         tuple &operator=(const tuple &b) {
             reset(b._ptr);
@@ -414,6 +422,10 @@ namespace py {
     };    
 
     typedef _nullable<tuple> nullable_tuple;
+    
+    template<typename... Args> tuple make_tuple(const Args&... args) {
+        return {make_object(args)...};
+    }
 
 
     class list_item_proxy {

@@ -47,7 +47,25 @@ Having more than three dimensions, it no longer makes sense to rotate about a
 single axis.  Thus the static member function ``Matrix.rotation``, which creates
 a rotation matrix, requires two vectors to describe a plane of rotation.
 
-Cross products can only be computed in three-dimensional space. To find
-perpendicular vectors, the function ``perpendicular_to`` is provided, which
-takes a sequence of D-1 linearly independant vectors, where D is the
-dimensionality of the scene.
+Normally, cross products can only be computed in three-dimensional space. To
+find perpendicular vectors, the function ``cross`` provides a generalized
+version, which takes a sequence of D-1 linearly independent vectors, where D is
+the dimensionality of the scene.
+
+In three-dimensional space, the surface of a solid object can be constructed out
+of triangles. However, it is impossible to fully enclose objects with more than
+three dimensions using a finite number of triangles, just as three-dimensional
+objects cannot be enclosed using a finite set of lines or points. Therefore,
+instead of triangles, n-dimensional simplexes, where n is one less than the
+number of dimensions of the scene, are used instead. One may be tempted to point
+out that a 3-simplex (three-dimensional simplex, i.e. a tetrahedron) can be
+built out of triangles, a 4-simplex can be built out of 3-simplexes and so on,
+so one should still be able to use triangles to build higher dimensional
+objects, but this is not quite correct. Technically, you can only construct the
+hull of a 3-simplex. In four-dimensional space, a line can pass through a
+3-simplex without intersecting any of its faces. In fact, orienting a line so it
+does intersect a face would be like trying to stab a line of zero thickness with
+a needle of zero thickness in three-dimensional space. It only gets worse with
+even more dimensions. The simplex class provided by this library (which is
+actually named ``Triangle``) is continuous between every point and avoids this
+problem.

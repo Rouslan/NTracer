@@ -100,6 +100,20 @@ template<typename Repr> bool hypersphere_intersects(const ray<Repr> &target,ray<
     return true;
 }
 
+template<typename Repr> typename Repr::py_vector_t cross(int d,const typename Repr::py_vector_t *vs) {
+    typename Repr::py_vector_t r(d);
+    smaller<typename Repr::py_matrix_t> tmp(d-1);
+    impl::cross(r,tmp,vs);
+    return r;
+}
+
+/*template<typename Repr> typename Repr::vector_t cross(int d,const typename Repr::vector_t *vs) {
+    typename Repr::vector_t r(d);
+    smaller<typename Repr::matrix_t> tmp(d-1);
+    impl::cross(r,tmp,vs);
+    return r;
+}*/
+
 enum primitive_type {TRIANGLE=1,CUBE,SPHERE};
 
 template<typename Repr> struct primitive {
@@ -188,41 +202,89 @@ template<typename T,typename Item> struct flexible_struct {
    that is always one less than the dimension of the scene. This is only a
    triangle when the scene has a dimension of three. */
 template<typename Repr> struct triangle : primitive<Repr>, flexible_struct<triangle<Repr>,typename Repr::py_vector_t> {
-    typedef typename Repr::py_vector_t vector_t;
+    typedef typename Repr::vector_t vector_t;
+    typedef typename Repr::py_vector_t py_vector_t;
     
-    using flexible_struct<triangle<Repr>,vector_t>::operator delete;
-    using flexible_struct<triangle<Repr>,vector_t>::operator new;
+    using flexible_struct<triangle<Repr>,py_vector_t>::operator delete;
+    using flexible_struct<triangle<Repr>,py_vector_t>::operator new;
     
-    vector_t normal;
+    REAL d;
+    py_vector_t p1;
+    py_vector_t normal;
     
-    vector_t *points() { return this->flex_array(); }
-    const vector_t *points() const { return this->flex_array(); }
+    py_vector_t *sides() { return this->flex_array(); }
+    const py_vector_t *sides() const { return this->flex_array(); }
     
-    template<typename F> static triangle<Repr> *create(const vector_t &n,F f) {
-        return new(n.dimension()) triangle(n);
+    template<typename F> static triangle<Repr> *create(REAL d,const py_vector_t &p1,const py_vector_t &n,F f) {
+        return new(n.dimension()) triangle(d,p1,n,f);
     }
     
     triangle(const triangle&) = delete;
     ~triangle() {
-        for(int i=0; i<dimension()-1; ++i) points()[i].~vector_t();
+        for(int i=0; i<dimension()-1; ++i) sides()[i].~py_vector_t();
     }
     
     int dimension() const { return normal.dimension(); }
     
-    bool intersects(const ray<Repr> &target,ray<Repr> &normal) const {
+    bool intersects(const ray<Repr> &target,ray<Repr> &_normal) const {
+        REAL denom = dot(normal,target.direction);
+        if(!denom) return false;
+        
+        REAL t = -(dot(normal,target.origin) + d) / denom;
+        if(t < 0) return false;
+        
+        vector_t P = target.origin + t * target.direction;
+        vector_t pside = p1 - P;
+        
+        REAL tot_area = 0;
+        for(int i=0; i<dimension()-1; ++i) {
+            REAL area = dot(sides()[i],pside);
+            if(area < 0 || area > 1) return false;
+            tot_area += area;
+        }
+        
+        if(tot_area >= 0 && tot_area <= 1) {
+            _normal.origin = P;
+            _normal.direction = normal.unit();
+            if(denom > 0) _normal.direction = -_normal.direction;
+            return true;
+        }
         return false;
     }
     
+    static triangle<Repr> *from_points(const py_vector_t *points) {
+        const py_vector_t &P1 = points[0];
+        int n = P1.dimension();
+        smaller<typename Repr::matrix_t> tmp(n-1);
+        
+        typename Repr::template smaller_init_array<vector_t> vsides(n-1,[&P1,points](int i) -> vector_t { return points[i+1] - P1; });
+        py_vector_t N(n);
+        impl::cross(N,tmp,static_cast<vector_t*>(vsides));
+        REAL square = N.square();
+        
+        return create(-dot(N,P1),P1,N,[&,square](int i) -> py_vector_t {
+            vector_t old = vsides[i];
+            vsides[i] = N;
+            py_vector_t r(N.dimension());
+            impl::cross(r,tmp,static_cast<vector_t*>(vsides));
+            vsides[i] = old;
+            r /= square;
+            return r;
+        });
+    }
+    
 private:
-    template<typename F> triangle(const vector_t normal,F f) : primitive<Repr>(TRIANGLE), normal(normal) {
+    template<typename F> triangle(REAL d,const vector_t &p1,const vector_t &normal,F f) : primitive<Repr>(TRIANGLE), d(d), p1(p1), normal(normal) {
         int i=0;
 
         try {
-            vector_t tmp = f(i);
-            assert(tmp.dimension() == normal.dimension());
-            for(; i<normal.dimension()-1; ++i) new(&points()[i]) vector_t(tmp);
+            for(; i<normal.dimension()-1; ++i) {
+                py_vector_t tmp = f(i);
+                assert(tmp.dimension() == normal.dimension());
+                new(&sides()[i]) py_vector_t(tmp);
+            }
         } catch(...) {
-            while(i) points()[--i].~vector_t();
+            while(i) sides()[--i].~py_vector_t();
             throw;
         }
     }
