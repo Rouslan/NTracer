@@ -38,21 +38,27 @@ namespace fixed {
     
     /* an array that can be initialized with a call-back */
     template<typename T,size_t Size> struct init_array {
-        static_assert(Size > 0,"zero-sized arrays are not supported");
-        
         typename std::aligned_storage<sizeof(T) * Size,alignof(T)>::type data;
         
-        T &operator[](int i) { return reinterpret_cast<T*>(&data)[i]; }
-        const T &operator[](int i) const { return reinterpret_cast<const T*>(&data)[i]; }
-        
-        operator T*() { return reinterpret_cast<T*>(&data); }
-        operator const T*() const { return reinterpret_cast<const T*>(&data); }
-        
-        T *begin() { return operator T*(); }
-        const T *begin() const { return operator T*(); }
+        T *begin() { return reinterpret_cast<T*>(&data); }
+        const T *begin() const { return reinterpret_cast<const T*>(&data); }
         
         T *end() { return begin() + Size; }
         const T *end() const { return begin() + Size; }
+        
+        T &front() { return begin()[0]; }
+        const T &front() const { return begin()[0]; }
+        
+        T &back() { return begin()[Size-1]; }
+        const T &back() const { return begin()[Size-1]; }
+        
+        T &operator[](int i) { return begin()[i]; }
+        const T &operator[](int i) const { return begin()[i]; }
+        
+        operator T*() { return begin(); }
+        operator const T*() const { return begin(); }
+        
+        size_t size() const { return size; }
         
         template<typename F> init_array(size_t size,F f) {
             assert(size == Size);
@@ -209,6 +215,34 @@ namespace fixed {
         
         template<typename T> using init_array = fixed::init_array<T,N>;
         template<typename T> using smaller_init_array = fixed::init_array<T,N-1>;
+        
+        template<typename T,typename Item,int StaticSize> struct flexible_obj {
+            static const size_t base_size = sizeof(T);
+            static const size_t item_size = 0;
+            
+            PyObject_HEAD
+            
+            fixed::init_array<Item,StaticSize> &items() { return _items; }
+            const fixed::init_array<Item,StaticSize> &items() const { return _items; }
+            
+            flexible_obj(const flexible_obj&) = delete;
+            
+            void *operator new(size_t size,size_t items) {
+                assert(items == StaticSize);
+                void *ptr = PyObject_Malloc(size);
+                if(!ptr) throw std::bad_alloc();
+                return ptr;
+            }
+            
+            void operator delete(void *ptr) {
+                PyObject_Free(ptr);
+            }
+            
+            template<typename F> flexible_obj(F item_init) : _items(StaticSize,item_init) {}
+            
+        private:
+            fixed::init_array<Item,StaticSize> _items;
+        };
     };
 }
 

@@ -39,8 +39,8 @@ namespace impl {
         const A &a;
         const B &b;
         
-        vector_sum(const vector_sum&) = delete;
-        vector_sum &operator=(const vector_sum&) = delete;
+        vector_sum(const vector_sum<A,B>&) = delete;
+        vector_sum &operator=(const vector_sum<A,B>&) = delete;
 
         int dimension() const { return a.dimension(); }
         vector_item_t<vector_sum<A,B> > operator[](int n) const { return a[n] + b[n]; }
@@ -59,8 +59,8 @@ namespace impl {
         const A &a;
         const B &b;
         
-        vector_diff(const vector_diff&) = delete;
-        vector_diff &operator=(const vector_diff&) = delete;
+        vector_diff(const vector_diff<A,B>&) = delete;
+        vector_diff &operator=(const vector_diff<A,B>&) = delete;
 
         int dimension() const { return a.dimension(); }
         vector_item_t<vector_diff<A,B> > operator[](int n) const { return a[n] - b[n]; }
@@ -78,8 +78,8 @@ namespace impl {
         
         const T &a;
 
-        vector_neg(const vector_neg&) = delete;
-        vector_neg &operator=(const vector_neg&) = delete;
+        vector_neg(const vector_neg<T>&) = delete;
+        vector_neg &operator=(const vector_neg<T>&) = delete;
 
         int dimension() const { return a.dimension(); }
         vector_item_t<T> operator[](int n) const { return -a[n]; }
@@ -99,8 +99,8 @@ namespace impl {
         const T &a;
         vector_item_t<T> b;
         
-        vector_product(const vector_product&) = delete;
-        vector_product &operator=(const vector_product&) = delete;
+        vector_product(const vector_product<T>&) = delete;
+        vector_product &operator=(const vector_product<T>&) = delete;
         
         int dimension() const { return a.dimension(); }
         vector_item_t<T> operator[](int n) const { return a[n] * b; }
@@ -119,8 +119,8 @@ namespace impl {
         const T &a;
         vector_item_t<T> b;
         
-        vector_quotient(const vector_quotient&) = delete;
-        vector_quotient &operator=(const vector_quotient&) = delete;
+        vector_quotient(const vector_quotient<T>&) = delete;
+        vector_quotient &operator=(const vector_quotient<T>&) = delete;
         
         int dimension() const { return a.dimension(); }
         vector_item_t<T> operator[](int n) const { return a[n] / b; }
@@ -140,14 +140,34 @@ namespace impl {
         vector_item_t<T> a;
         const T &b;
 
-        vector_rquotient(const vector_rquotient&) = delete;
-        vector_rquotient &operator=(const vector_rquotient&) = delete;
+        vector_rquotient(const vector_rquotient<T>&) = delete;
+        vector_rquotient &operator=(const vector_rquotient<T>&) = delete;
         
         int dimension() const { return b.dimension(); }
         vector_item_t<T> operator[](int n) const { return a / b[n]; }
         
     private:
         vector_rquotient(vector_item_t<T> a,const T &b) : a(a), b(b) {}
+    };
+    
+    template<typename T,typename F> struct vector_apply;
+    template<typename T,typename F> struct _vector_item_t<vector_apply<T,F> > {
+        typedef typename std::result_of<F(vector_item_t<T>)>::type type;
+    };
+    template<typename T,typename F> struct vector_apply : vector_expr<vector_apply<T,F> > {
+        template<typename U> friend struct vector_expr;
+
+        const T &a;
+        F f;
+
+        vector_apply(const vector_apply<T,F>&) = delete;
+        vector_apply &operator=(const vector_apply<T,F>&) = delete;
+        
+        int dimension() const { return a.dimension(); }
+        vector_item_t<vector_apply<T,F> > operator[](int n) const { return f(a[n]); }
+        
+    private:
+        vector_apply(const T &a,F f) : a(a), f(f) {}
     };
 
     template<typename Store> struct vector_methods;
@@ -202,7 +222,7 @@ namespace impl {
         template<typename B> void fill_with(const vector_expr<B> &b) {
             rep([this,&b](int i){ (*this)[i] = b[i]; });
         }
-        template<typename F> void fill_with(F f) {
+        template<typename F> typename std::enable_if<!std::is_arithmetic<F>::value>::type fill_with(F f) {
             rep([=](int i){ (*this)[i] = f(i); });
         }
         
@@ -268,6 +288,10 @@ namespace impl {
         vector_item_t<T> absolute() const { return std::sqrt(square()); }
         vector_quotient<T> unit() const {
             return {*this,absolute()};
+        }
+        
+        template<typename F> vector_apply<T,F> apply(F f) const {
+            return {*this,f};
         }
     };
     
@@ -341,6 +365,115 @@ template<typename Store,typename Alloc> struct vector_impl : impl::vector_method
 };
 
 
+template<class Store> struct matrix_methods;
+
+namespace impl {
+    template<class Store> struct matrix_row;
+    template<class Store> struct _vector_item_t<matrix_row<Store> > {
+        typedef REAL type;
+    };
+    template<class Store> struct matrix_row : vector_expr<matrix_row<Store> > {
+        friend struct matrix_methods<Store>;
+        
+        matrix_methods<Store> &a;
+        const int row;
+
+        //matrix_row(const matrix_row<Store>&) = delete;
+        matrix_row<Store> &operator=(const matrix_row<Store>&) = delete;
+        
+        template<typename B> matrix_row &operator=(const vector_expr<B> &b) {
+            for(int i=0; i<dimension(); ++i) a.store[row][i] = b[i];
+            return *this;
+        }
+        
+        int dimension() const { return a.dimension(); }
+        REAL &operator[](int n) const {
+            assert(n >= 0 && n < dimension());
+            return a.store[row][n];
+        }
+        
+        operator REAL*() const { return a.store[row]; }
+        
+    private:
+        matrix_row(matrix_methods<Store> &a,int row) : a(a), row(row) {}
+    };
+    
+    template<class Store> struct const_matrix_row;
+    template<class Store> struct _vector_item_t<const_matrix_row<Store> > {
+        typedef REAL type;
+    };
+    template<class Store> struct const_matrix_row : vector_expr<const_matrix_row<Store> > {
+        friend struct matrix_methods<Store>;
+        
+        const matrix_methods<Store> &a;
+        const int row;
+
+        //const_matrix_row(const const_matrix_row<Store>&) = delete;
+        const_matrix_row<Store> &operator=(const const_matrix_row<Store>&) = delete;
+        
+        int dimension() const { return a.dimension(); }
+        REAL operator[](int n) const {
+            assert(n >= 0 && n < dimension());
+            return a.store[row][n];
+        }
+        
+        operator const REAL*() const { return a.store[row]; }
+        
+    private:
+        const_matrix_row(const matrix_methods<Store> &a,int row) : a(a), row(row) {}
+    };
+    
+    template<class Store> struct matrix_column;
+    template<class Store> struct _vector_item_t<matrix_column<Store> > {
+        typedef REAL type;
+    };
+    template<class Store> struct matrix_column : vector_expr<matrix_column<Store> > {
+        friend struct matrix_methods<Store>;
+        
+        matrix_methods<Store> &a;
+        const int col;
+
+        //matrix_column(const matrix_row<Store>&) = delete;
+        matrix_column<Store> &operator=(const matrix_row<Store>&) = delete;
+        
+        template<typename B> matrix_column &operator=(const vector_expr<B> &b) {
+            for(int i=0; i<dimension(); ++i) a.store[i][col] = b[i];
+        }
+        
+        int dimension() const { return a.dimension(); }
+        REAL &operator[](int n) const {
+            assert(n >= 0 && n < dimension());
+            return a.store[n][col];
+        }
+        
+    private:
+        matrix_column(matrix_methods<Store> &a,int col) : a(a), col(col) {}
+    };
+    
+    template<class Store> struct const_matrix_column;
+    template<class Store> struct _vector_item_t<const_matrix_column<Store> > {
+        typedef REAL type;
+    };
+    template<class Store> struct const_matrix_column : vector_expr<const_matrix_column<Store> > {
+        friend struct matrix_methods<Store>;
+        
+        const matrix_methods<Store> &a;
+        const int col;
+
+        //const_matrix_column(const const_matrix_column<Store>&) = delete;
+        const_matrix_column<Store> &operator=(const const_matrix_column<Store>&) = delete;
+        
+        int dimension() const { return a.dimension(); }
+        REAL operator[](int n) const {
+            assert(n >= 0 && n < dimension());
+            return a.store[n][col];
+        }
+        
+    private:
+        const_matrix_column(const matrix_methods<Store> &a,int col) : a(a), col(col) {}
+    };
+}
+
 template<class Store> struct matrix_methods {
     typedef impl::vector_methods<typename Store::v_store> vector_t;
     
@@ -350,7 +483,7 @@ protected:
     ~matrix_methods() = default;
     matrix_methods<Store> &operator=(const matrix_methods<Store> &b) = default;
     
-    void multiply(matrix_methods<Store> & RESTRICT r,const matrix_methods<Store> &b) const {
+    void multiply(matrix_methods<Store> &RESTRICT r,const matrix_methods<Store> &b) const {
         assert(dimension() == r.dimension() && dimension() == b.dimension());
 
         Store::rep(dimension(),[=,&b,&r](int row,int col){
@@ -359,7 +492,7 @@ protected:
         });
     }
     
-    void multiply(vector_t & RESTRICT r,const vector_t &b) const {
+    void multiply(vector_t &RESTRICT r,const vector_t &b) const {
         assert(dimension() == b.dimension());
         r.fill_with(REAL(0));
         Store::rep(dimension(),[&,this](int row,int col){ r[row] += (*this)[row][col] * b[col]; });
@@ -411,7 +544,7 @@ protected:
        indicates how many swaps were performed. If the return value is -1, the
        matrix is singular and the contents of "lu" will be undefined.
     */
-    int decompose(matrix_methods<Store> & RESTRICT lu,int *pivots) const {
+    int decompose(matrix_methods<Store> &RESTRICT lu,int *pivots) const {
         assert(dimension() == lu.dimension());
         
         int swapped = 0;
@@ -449,7 +582,7 @@ protected:
         return swapped;
     }
     
-    REAL determinant(matrix_methods<Store> & RESTRICT tmp) const {
+    REAL determinant(matrix_methods<Store> &RESTRICT tmp) const {
         assert(dimension() == tmp.dimension());
         
         typename Store::pivot_buffer pivot(dimension());
@@ -461,7 +594,7 @@ protected:
         return r;
     }
     
-    void inverse(matrix_methods<Store> & RESTRICT inv,matrix_methods<Store> & RESTRICT tmp) const {
+    void inverse(matrix_methods<Store> &RESTRICT inv,matrix_methods<Store> & RESTRICT tmp) const {
         assert(dimension() == r.dimension() && dimension() == tmp.dimension());
 
         typename Store::pivot_buffer pivot(dimension());
@@ -493,11 +626,17 @@ protected:
             }
         }
     }
+    
+    void transpose(matrix_methods<Store> &RESTRICT t) const {
+        for(int r=0; r<dimension(); ++r) {
+            for(int c=0; c<dimension(); ++c) t[r][c] = (*this)[c][r];
+        }
+    }
 
 public:
     /* Calculates the determinant by using itself to store the intermediate
        calculations. This avoids allocating space for another matrix but loses
-       the contents of this matrix. */
+       the original contents of this matrix. */
     REAL determinant_inplace() {
         int swapped = 0;
 
@@ -533,8 +672,14 @@ public:
         return r;
     }
     
-    REAL *operator[](int n) { return store[n]; }
-    const REAL *operator[](int n) const { return store[n]; }
+    impl::matrix_row<Store> operator[](int n) { return {*this,n}; }
+    impl::const_matrix_row<Store> operator[](int n) const { return {*this,n}; }
+    
+    REAL *data() { return store[0]; }
+    const REAL *data() const { return store[0]; }
+    
+    impl::matrix_column<Store> column(int n) { return {*this,n}; }
+    impl::const_matrix_column<Store> column(int n) const { return {*this,n}; }
 
     int dimension() const { return store.dimension(); }
 
@@ -578,6 +723,10 @@ template<typename Store,typename Alloc> struct matrix_impl : matrix_methods<Stor
         base::multiply(r,b);
         return r;
     }
+    
+    template<typename B> vector_concrete operator*(const impl::vector_expr<B> &b) const {
+        return operator*(vector_concrete(b));
+    }
 
     static matrix_impl<Store,Alloc> rotation(const vector_t &a,const vector_t &b,REAL theta) {
         matrix_impl<Store,Alloc> r(a.dimension());
@@ -599,6 +748,12 @@ template<typename Store,typename Alloc> struct matrix_impl : matrix_methods<Stor
 
     static matrix_impl<Store,Alloc> identity(int d) {
         return scale(d,REAL(1));
+    }
+    
+    matrix_impl<Store,Alloc> transpose() const {
+        matrix_impl<Store,Alloc> r(base::dimension());
+        base::transpose(r);
+        return r;
     }
     
     matrix_impl<Store,Alloc> inverse() const {

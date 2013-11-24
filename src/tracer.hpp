@@ -24,7 +24,7 @@ public:
 
 //Ray operator*(const Matrix &mat,const Ray &ray);
 
-template<typename Repr> bool hypercube_intersects(const ray<Repr> &target,ray<Repr> &normal);
+template<typename Repr> REAL hypercube_intersects(const ray<Repr> &target,ray<Repr> &normal);
 template<typename Repr> color background_color(const typename Repr::vector_t &dir);
 
 template<typename Repr> class BoxScene : public Scene {
@@ -58,23 +58,23 @@ public:
     void unlock() throw() { locked = false; }
 };
 
-template<typename Repr> bool hypercube_intersects(const ray<Repr> &target,ray<Repr> &normal) {
+template<typename Repr> REAL hypercube_intersects(const ray<Repr> &target,ray<Repr> &normal) {
     assert(target.dimension() == normal.dimension());
     
     for(int i=0; i<target.dimension(); ++i) {
         if(target.direction[i]) {
             if(target.direction[i]) {
-                normal.origin[i] = target.direction[i] < REAL(0) ? REAL(1) : REAL(-1);
-                REAL m = (normal.origin[i] - target.origin[i]) / target.direction[i];
-                if(m > REAL(0)) {
+                normal.origin[i] = target.direction[i] < 0 ? REAL(1) : REAL(-1);
+                REAL dist = (normal.origin[i] - target.origin[i]) / target.direction[i];
+                if(dist > 0) {
                     for(int j=0; j<target.dimension(); ++j) {
                         if(i != j) {
-                            normal.origin[j] = target.direction[j] * m + target.origin[j];
+                            normal.origin[j] = target.direction[j] * dist + target.origin[j];
                             if(std::abs(normal.origin[j]) > REAL(1)) goto miss;
                         }
                     }
                     normal.direction = Repr::vector_t::axis(target.dimension(),i,normal.origin[i]);
-                    return true;
+                    return dist;
 
                 miss: ;
                 }
@@ -82,22 +82,22 @@ template<typename Repr> bool hypercube_intersects(const ray<Repr> &target,ray<Re
         }
     }
         
-    return false;
+    return 0;
 }
 
-template<typename Repr> bool hypersphere_intersects(const ray<Repr> &target,ray<Repr> &normal) {
+template<typename Repr> REAL hypersphere_intersects(const ray<Repr> &target,ray<Repr> &normal) {
     REAL a = target.direction.square();
     REAL b = 2 * dot(target.direction,target.origin);
     REAL c = target.origin.square() - 1;
     
     REAL discriminant = b*b - 4*a*c;
-    if(discriminant < REAL(0)) return false;
+    if(discriminant < 0) return 0;
     
-    REAL distance = (-b - std::sqrt(discriminant)) / (2 * a);
-    if(distance <= REAL(0)) return false;
+    REAL dist = (-b - std::sqrt(discriminant)) / (2 * a);
+    if(dist <= 0) return 0;
     
-    normal.direction = normal.origin = target.origin + target.direction * distance;
-    return true;
+    normal.direction = normal.origin = target.origin + target.direction * dist;
+    return dist;
 }
 
 template<typename Repr> typename Repr::py_vector_t cross(int d,const typename Repr::py_vector_t *vs) {
@@ -114,70 +114,65 @@ template<typename Repr> typename Repr::py_vector_t cross(int d,const typename Re
     return r;
 }*/
 
-enum primitive_type {TRIANGLE=1,CUBE,SPHERE};
-
 template<typename Repr> struct primitive {
-    /* instead of relying on a virtual method table, this member is checked
-       manually */
-    primitive_type type;
-    
-    void *operator new(size_t size) {
-        return py::malloc(size);
-    }
-    
-    void operator delete(void *ptr) {
-        return py::free(ptr);
-    }
-    
-    bool intersects(const ray<Repr> &target,ray<Repr> &normal) const;
+    REAL intersects(const ray<Repr> &target,ray<Repr> &normal) const;
     int dimension() const;
     
-    static void destroy(primitive<Repr> *ptr);
-    
 protected:
-    primitive(primitive_type type) : type(type) {}
+    primitive() = default;
     ~primitive() = default;
 };
 
-template<typename Repr> struct solid : primitive<Repr> {
+
+enum solid_type {CUBE=1,SPHERE};
+
+struct solid_common {
+    static PyTypeObject pytype;
+    
+    PY_MEM_NEW_DELETE
+    PyObject_HEAD
+};
+
+template<typename Repr> struct solid : solid_common, primitive<Repr> {
     typedef typename Repr::py_matrix_t matrix_t;
     typedef typename Repr::py_vector_t vector_t;
+    
+    solid_type type;
     
     matrix_t orientation;
     matrix_t inv_orientation;
     vector_t position;
     
-    solid(primitive_type type,matrix_t o,vector_t p) : primitive<Repr>(type), orientation(o), inv_orientation(o.inverse()), position(p) {
-        assert(o.dimension() == p.dimension());
+    solid(solid_type type,const matrix_t &o,const matrix_t &io,const vector_t &p) : type(type), orientation(o), inv_orientation(io), position(p) {
+        assert(o.dimension() == p.dimension() && o.dimension() == io.dimension());
+        PyObject_Init(reinterpret_cast<PyObject*>(this),&pytype);
     }
     
-    bool intersects(const ray<Repr> &target,ray<Repr> &normal) const {
+    solid(solid_type type,matrix_t o,vector_t p) : solid(type,o,o.inverse(),p) {}
+    
+    REAL intersects(const ray<Repr> &target,ray<Repr> &normal) const {
         ray<Repr> transformed(target.origin - position,inv_orientation * target.direction);
         
-        switch(this->type) {
-        case CUBE:
-            if(!hypercube_intersects(transformed,normal)) return false;
-            break;
-        case SPHERE:
-            if(!hypersphere_intersects(transformed,normal)) return false;
-            break;
-        default:
-            assert(false);
+        REAL dist;
+        if(type == CUBE) {
+            dist = hypercube_intersects(transformed,normal);
+            if(!dist) return 0;
+        } else {
+            assert(type == SPHERE);
+            
+            dist = hypersphere_intersects(transformed,normal);
+            if(!dist) return 0;
         }
         
         normal.origin += position;
         normal.direction = orientation * normal.direction;
-        return true;
+        return dist;
     }
     
     int dimension() const {
         return orientation.dimension();
     }
 };
-
-constexpr size_t aligned(size_t size,size_t alignment) {
-    return ((size + alignment - 1) / alignment) * alignment;
-}
 
 template<typename T,typename Item> struct flexible_struct {
     static const size_t item_offset = aligned(sizeof(T),alignof(Item));
@@ -198,58 +193,50 @@ template<typename T,typename Item> struct flexible_struct {
     }
 };
 
+struct triangle_common {
+    static PyTypeObject pytype;
+};
+
 /* Despite being named triangle, this is actually a simplex with a dimension
    that is always one less than the dimension of the scene. This is only a
    triangle when the scene has a dimension of three. */
-template<typename Repr> struct triangle : primitive<Repr>, flexible_struct<triangle<Repr>,typename Repr::py_vector_t> {
+#define TRIANGLE_BASE Repr::template flexible_obj<triangle<Repr>,typename Repr::py_vector_t,Repr::required_d-1>
+template<typename Repr> struct triangle : triangle_common, primitive<Repr>, TRIANGLE_BASE {
     typedef typename Repr::vector_t vector_t;
     typedef typename Repr::py_vector_t py_vector_t;
     
-    using flexible_struct<triangle<Repr>,py_vector_t>::operator delete;
-    using flexible_struct<triangle<Repr>,py_vector_t>::operator new;
-    
     REAL d;
     py_vector_t p1;
-    py_vector_t normal;
+    py_vector_t face_normal;
     
-    py_vector_t *sides() { return this->flex_array(); }
-    const py_vector_t *sides() const { return this->flex_array(); }
-    
-    template<typename F> static triangle<Repr> *create(REAL d,const py_vector_t &p1,const py_vector_t &n,F f) {
-        return new(n.dimension()) triangle(d,p1,n,f);
+    int dimension() const {
+        return p1.dimension();
     }
     
-    triangle(const triangle&) = delete;
-    ~triangle() {
-        for(int i=0; i<dimension()-1; ++i) sides()[i].~py_vector_t();
-    }
-    
-    int dimension() const { return normal.dimension(); }
-    
-    bool intersects(const ray<Repr> &target,ray<Repr> &_normal) const {
-        REAL denom = dot(normal,target.direction);
-        if(!denom) return false;
+    REAL intersects(const ray<Repr> &target,ray<Repr> &normal) const {
+        REAL denom = dot(face_normal,target.direction);
+        if(!denom) return 0;
         
-        REAL t = -(dot(normal,target.origin) + d) / denom;
-        if(t < 0) return false;
+        REAL t = -(dot(face_normal,target.origin) + d) / denom;
+        if(t <= 0) return 0;
         
         vector_t P = target.origin + t * target.direction;
         vector_t pside = p1 - P;
         
         REAL tot_area = 0;
-        for(int i=0; i<dimension()-1; ++i) {
-            REAL area = dot(sides()[i],pside);
-            if(area < 0 || area > 1) return false;
+        for(auto &edge : this->items()) {
+            REAL area = dot(edge,pside);
+            if(area < 0 || area > 1) return 0;
             tot_area += area;
         }
         
         if(tot_area >= 0 && tot_area <= 1) {
-            _normal.origin = P;
-            _normal.direction = normal.unit();
-            if(denom > 0) _normal.direction = -_normal.direction;
-            return true;
+            normal.origin = P;
+            normal.direction = face_normal.unit();
+            if(denom > 0) normal.direction = -normal.direction;
+            return t;
         }
-        return false;
+        return 0;
     }
     
     static triangle<Repr> *from_points(const py_vector_t *points) {
@@ -262,7 +249,7 @@ template<typename Repr> struct triangle : primitive<Repr>, flexible_struct<trian
         impl::cross(N,tmp,static_cast<vector_t*>(vsides));
         REAL square = N.square();
         
-        return create(-dot(N,P1),P1,N,[&,square](int i) -> py_vector_t {
+        return create(P1,N,[&,square](int i) -> py_vector_t {
             vector_t old = vsides[i];
             vsides[i] = N;
             py_vector_t r(N.dimension());
@@ -273,46 +260,32 @@ template<typename Repr> struct triangle : primitive<Repr>, flexible_struct<trian
         });
     }
     
+    template<typename F> static triangle<Repr> *create(const py_vector_t &p1,const py_vector_t &face_normal,F edge_normals) {
+        return new(p1.dimension()-1) triangle<Repr>(p1,face_normal,edge_normals);
+    }
+    
 private:
-    template<typename F> triangle(REAL d,const vector_t &p1,const vector_t &normal,F f) : primitive<Repr>(TRIANGLE), d(d), p1(p1), normal(normal) {
-        int i=0;
-
-        try {
-            for(; i<normal.dimension()-1; ++i) {
-                py_vector_t tmp = f(i);
-                assert(tmp.dimension() == normal.dimension());
-                new(&sides()[i]) py_vector_t(tmp);
-            }
-        } catch(...) {
-            while(i) sides()[--i].~py_vector_t();
-            throw;
-        }
+    template<typename F> triangle(const py_vector_t &p1,const py_vector_t &face_normal,F edge_normals) : TRIANGLE_BASE(edge_normals), d(-dot(face_normal,p1)), p1(p1), face_normal(face_normal) {
+        assert(p1.dimension() == face_normal.dimension() &&
+            std::all_of(items().begin(),items().end(),[&](const py_vector_t &e){ return e.dimension() == p1.dimension() }));
+        PyObject_Init(reinterpret_cast<PyObject*>(this),&pytype);
     }
 };
 
-template<typename Repr> bool primitive<Repr>::intersects(const ray<Repr> &target,ray<Repr> &normal) const {
-    if(type == TRIANGLE) return static_cast<const triangle<Repr>*>(this)->intersects(target,normal);
+template<typename Repr> REAL primitive<Repr>::intersects(const ray<Repr> &target,ray<Repr> &normal) const {
+    if(Py_TYPE(this) == &triangle_common::pytype) return static_cast<const triangle<Repr>*>(this)->intersects(target,normal);
     
-    assert(type == CUBE || type == SPHERE);
+    assert(Py_TYPE(this) == &solid_common::pytype);
     return static_cast<const solid<Repr>*>(this)->intersects(target,normal);
 }
 
 template<typename Repr> int primitive<Repr>::dimension() const {
     if(Repr::required_d) return Repr::required_d;
     
-    if(type == TRIANGLE) return static_cast<const triangle<Repr>*>(this)->dimension();
+    if(Py_TYPE(this) == &triangle_common::pytype) return static_cast<const triangle<Repr>*>(this)->dimension();
     
-    assert(type == CUBE || type == SPHERE);
+    assert(Py_TYPE(this) == &solid_common::pytype);
     return static_cast<const solid<Repr>*>(this)->dimension();
-}
-
-template<typename Repr> void primitive<Repr>::destroy(primitive<Repr> *ptr) {
-    if(ptr->type == TRIANGLE) {
-        delete static_cast<triangle<Repr>*>(ptr);
-    } else {
-        assert(ptr->type == CUBE || ptr->type == SPHERE);
-        delete static_cast<solid<Repr>*>(ptr);
-    }
 }
 
 
@@ -391,29 +364,46 @@ template<typename Repr> struct kd_leaf : kd_node<Repr>, flexible_struct<kd_leaf<
     }
     
     ~kd_leaf() {
-        for(auto ptr : *this) primitive<Repr>::destroy(ptr);
+        for(auto ptr : *this) Py_DECREF(ptr);
     }
     
     bool intersects(const ray<Repr> &target,ray<Repr> &normal) const {
         assert(dimension() == target.dimension() && dimension() == normal.dimension());
         
-        for(auto ptr : *this) {
-            if(ptr->intersects(target,normal)) return true;
+        REAL dist;
+        size_t i=0;
+        for(; i<size; ++i) {
+            dist = items()[i]->intersects(target,normal);
+            if(dist) goto hit;
         }
         return false;
+        
+    hit:
+        // is there anything closer?
+        REAL new_dist;
+        ray<Repr> new_normal(target.dimension());
+        for(; i<size; ++i) {
+            new_dist = items()[i]->intersects(target,new_normal);
+            if(new_dist && new_dist < dist) {
+                dist = new_dist;
+                normal = new_normal;
+            }
+        }
+        return true;
     }
     
     int dimension() const {
+        assert(size);
         return items()[0]->dimension();
     }
     
 private:
     template<typename F> kd_leaf(size_t size,F f) : kd_node<Repr>(LEAF), size(size) {        
-        int i=0;
+        size_t i=0;
         try {
-            for(size_t i=0; i<size; ++i) items()[i] = f(i);
+            for(i=0; i<size; ++i) items()[i] = f(i);
         } catch(...) {
-            while(i) primitive<Repr>::destroy(items()[--i]);
+            while(i) py::decref(reinterpret_cast<PyObject*>(items()[--i]));
             throw;
         }
     }

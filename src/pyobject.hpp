@@ -9,7 +9,7 @@
 #include "py_common.hpp"
 
 
-#define THROW_PYERR_STRING(exception,message) { PyErr_SetString(PyExc_##exception,message); throw py_error_set(); }
+#define THROW_PYERR_STRING(exception,message) PyErr_SetString(PyExc_##exception,message), throw py_error_set()
 
 
 namespace py {
@@ -38,6 +38,18 @@ namespace py {
     inline PyObject *xincref(PyObject *o) {
         Py_XINCREF(o);
         return o;
+    }
+    
+    /* wrapping it in a function prevents evaluating an expression more than
+       once due to macro expansion */
+    inline void decref(PyObject *o) {
+        Py_DECREF(o);
+    }
+    
+    /* wrapping it in a function prevents evaluating an expression more than
+       once due to macro expansion */
+    inline void xdecref(PyObject *o) {
+        Py_XDECREF(o);
     }
 
     struct borrowed_ref {
@@ -124,6 +136,10 @@ namespace py {
 
         template<typename T> object_item_proxy at(T key) const;
         template<typename T> object_item_proxy operator[](T key) const;
+        
+        PyTypeObject *type() const {
+            return Py_TYPE(_ptr);
+        }
 
         int gc_traverse(visitproc visit,void *arg) const { return _ptr != Py_None ? (*visit)(_ptr,arg) : 0; }
         void gc_clear() { reset(Py_None); }
@@ -803,7 +819,7 @@ namespace py {
         const size_t size;
         T *const items;
         void index_check(Py_ssize_t i) const {
-            if(i < 0 || size_t(i) >= size) THROW_PYERR_STRING(IndexError,"index out of range")
+            if(i < 0 || size_t(i) >= size) THROW_PYERR_STRING(IndexError,"index out of range");
         }
 
     public:
@@ -870,31 +886,30 @@ template<typename T> inline T from_pyobject(const py::_object_base &o) {
 }
 
 template<> inline py::tuple from_pyobject<py::tuple>(PyObject *o) {
-    if(!PyTuple_Check(o)) THROW_PYERR_STRING(TypeError,"object is not an instance of tuple")
+    if(!PyTuple_Check(o)) THROW_PYERR_STRING(TypeError,"object is not an instance of tuple");
     return py::borrowed_ref(o);
 }
 
 template<> inline py::dict from_pyobject<py::dict>(PyObject *o) {
-    if(!PyDict_Check(o)) THROW_PYERR_STRING(TypeError,"object is not an instance of dict")
+    if(!PyDict_Check(o)) THROW_PYERR_STRING(TypeError,"object is not an instance of dict");
     return py::borrowed_ref(o);
 }
 
 template<> inline py::list from_pyobject<py::list>(PyObject *o) {
-    if(!PyList_Check(o)) THROW_PYERR_STRING(TypeError,"object is not an instance of list")
+    if(!PyList_Check(o)) THROW_PYERR_STRING(TypeError,"object is not an instance of list");
     return py::borrowed_ref(o);
 }
 
 template<> inline py::bytes from_pyobject<py::bytes>(PyObject *o) {
-    if(!PYBYTES(Check(o))) {
-        PyErr_SetString(PyExc_TypeError,"object is not an instance of "
+    if(!PYBYTES(Check(o)))
+        THROW_PYERR_STRING(TypeError,"object is not an instance of "
 #if PY_MAJOR_VERSION >= 3
             "bytes"
 #else
             "str"
 #endif
             );
-        throw py_error_set();
-    }
+
     return py::borrowed_ref(o);
 }
 

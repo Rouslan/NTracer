@@ -33,15 +33,23 @@ namespace var {
         }
         
         template<typename Store> static Store copy_store(const Store &s) {
+            assert(s.data);
+            
             Py_INCREF(s.data);
             return s;
         }
         
         template<typename Store> static void free_store(Store &s) {
-            Py_DECREF(s.data);
+            /* Py_XDECREF is used instead of Py_DECREF so that the destructor
+               can be called inside the tp_dealloc function of another object
+               without worrying whether it was successfully initialized inside
+               tp_new. */
+            Py_XDECREF(s.data);
         }
         
         template<typename Store> static void replace_store(Store &a,const Store &b) {
+            assert(a.data && b.data);
+            
             typename Store::obj_t *old = a.data;
             a.data = b.data;
             Py_INCREF(a.data);
@@ -78,23 +86,37 @@ namespace var {
     
     /* an array that can be initialized with a call-back */
     template<typename T> struct init_array {
-        size_t size;
+        size_t _size;
         void *data;
         
-        T &operator[](int i) { return reinterpret_cast<T*>(data)[i]; }
-        const T &operator[](int i) const { return reinterpret_cast<const T*>(data)[i]; }
+        T *begin() { return reinterpret_cast<T*>(data); }
+        const T *begin() const { return reinterpret_cast<const T*>(data); }
         
-        operator T*() { return reinterpret_cast<T*>(data); }
-        operator const T*() const { return reinterpret_cast<const T*>(data); }
+        T *end() { return begin() + _size; }
+        const T *end() const { return begin() + _size; }
         
-        template<typename F> init_array(size_t size,F f) : size(size) {
-            assert(size);
+        T &front() { return begin()[0]; }
+        const T &front() const { return begin()[0]; }
+        
+        T &back() { return begin()[_size-1]; }
+        const T &back() const { return begin()[_size-1]; }
+        
+        T &operator[](int i) { return begin()[i]; }
+        const T &operator[](int i) const { return begin()[i]; }
+        
+        operator T*() { return begin(); }
+        operator const T*() const { return begin(); }
+        
+        size_t size() const { return _size; }
+        
+        template<typename F> init_array(size_t _size,F f) : _size(_size) {
+            assert(_size);
             
-            data = operator new(sizeof(T) * size);
+            data = operator new(sizeof(T) * _size);
             
             size_t i=0;
             try {
-                for(; i<size; ++i) new(&(*this)[i]) T(f(i));
+                for(; i<_size; ++i) new(&(*this)[i]) T(f(i));
             } catch(...) {
                 while(i) (*this)[--i].~T();
                 throw;
@@ -105,7 +127,7 @@ namespace var {
         init_array &operator=(const init_array&) = delete;
         
         ~init_array() {
-            for(size_t i=0; i<size; ++i) (*this)[i].~T();
+            for(size_t i=0; i<_size; ++i) (*this)[i].~T();
             operator delete(data);
         }
     };
@@ -295,6 +317,66 @@ namespace var {
         camera_store(d,blank_v(0),blank_v,reinterpret_cast<PyObject*>(this));
     }
     
+    template<typename T,typename Item> struct flexible_obj {
+        static const size_t base_size = aligned(sizeof(T),alignof(Item));
+        static const size_t item_size = sizeof(Item);
+        
+        PyObject_VAR_HEAD
+            
+        template<typename U> struct item_array {
+            typedef typename std::conditional<std::is_const<U>::value,const Item,Item>::type item_t;
+            
+            item_array(U *self) : self(self) {}
+            
+            item_t *begin() const { return reinterpret_cast<item_t*>(const_cast<char*>(reinterpret_cast<const char*>(self)) + base_size); }
+            item_t *end() const { return begin() + size(); }
+            
+            item_t &front() const { return begin()[0]; }
+            item_t &back() const { return begin()[size()-1]; }
+            
+            item_t &operator[](size_t i) const { return begin()[i]; }
+            
+            size_t size() const { return Py_SIZE(self); }
+            
+            operator item_t*() const { return begin(); }
+            
+        private:
+            U *const self;
+        };
+        
+        item_array<flexible_obj<T,Item> > items() { return this; }
+        item_array<const flexible_obj<T,Item> > items() const { return this; }
+        
+        flexible_obj(const flexible_obj<T,Item>&) = delete;
+        
+        void *operator new(size_t size,size_t items) {
+            assert(size == sizeof(T));
+            void *ptr = PyObject_Malloc(base_size + sizeof(Item)*items);
+            if(!ptr) throw std::bad_alloc();
+            return ptr;
+        }
+        
+        void operator delete(void *ptr) {
+            PyObject_Free(ptr);
+        }
+        
+    protected:
+        template<typename F> flexible_obj(F item_init) {
+            size_t i=0;
+            
+            try {
+                for(; i<items().size(); ++i) new(&items()[i]) Item(item_init(i));
+            } catch(...) {
+                while(i) items()[--i].~Item();
+                throw;
+            }
+        }
+
+        ~flexible_obj() {
+            for(auto &item : items()) item.~Item();
+        }
+    };
+    
     struct repr {
         typedef py_vector<REAL> py_vector_t;
         typedef py_matrix py_matrix_t;
@@ -312,6 +394,8 @@ namespace var {
         
         template<typename T> using init_array = var::init_array<T>;
         template<typename T> using smaller_init_array = var::init_array<T>;
+        
+        template<typename T,typename Item,int StaticSize> using flexible_obj = var::flexible_obj<T,Item>;
     };
 }
 

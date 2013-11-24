@@ -77,12 +77,39 @@
 }
 
 
+#if defined(__GNUC__) && __GNUC__ == 4 && __GNUC_MINOR__ < 8
+namespace std {
+    template<typename T> struct is_trivially_destructible : has_trivial_destructor<T> {};
+}
+#endif
+
+
 extern const char *no_delete_msg;
 extern const char *not_init_msg;
 extern const char *unspecified_err_msg;
 extern const char *no_keywords_msg;
 extern const char *init_on_derived_msg;
 extern const char *not_implemented_msg;
+
+
+constexpr size_t aligned(size_t size,size_t alignment) {
+    return ((size + alignment - 1) / alignment) * alignment;
+}
+
+template<typename T> struct range {
+    T begin() const { return _begin; }
+    T end() const { return _end; }
+    
+    range(T begin,T end) : _begin(begin), _end(end) {}
+    
+private:
+    const T _begin;
+    const T _end;
+};
+
+template<typename T> range<T> make_range(T begin,T end) {
+    return range<T>(begin,end);
+}
 
 
 /* when thrown, indicates that a PyErr_X function was already called with the
