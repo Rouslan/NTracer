@@ -23,12 +23,15 @@
 #define PACKAGE_STR STR(PACKAGE)
 
 
+using namespace type_object_abbrev;
+
+
 typedef repr::py_vector_t n_vector;
 typedef repr::py_matrix_t n_matrix;
 typedef repr::camera_t n_camera;
 
 
-template<typename T> PyObject *to_pyobject(const impl::vector_expr<T> &e) {
+template<typename T> PyObject *to_pyobject(const ::impl::vector_expr<T> &e) {
     return to_pyobject(n_vector(e));
 }
 
@@ -163,20 +166,20 @@ struct obj_MatrixProxy {
     static PyTypeObject pytype;
     
     PyObject_HEAD
-    py::array_adapter<REAL> base;
+    py::array_adapter<real> base;
     PY_MEM_NEW_DELETE
-    obj_MatrixProxy(py::array_adapter<REAL> const &_0) : base(_0) {
+    obj_MatrixProxy(py::array_adapter<real> const &_0) : base(_0) {
         PyObject_Init(reinterpret_cast<PyObject*>(this),&pytype);
     }
-    obj_MatrixProxy(PyObject *_0,long unsigned int _1,REAL *_2) : base(_0,_1,_2) {
+    obj_MatrixProxy(PyObject *_0,long unsigned int _1,real *_2) : base(_0,_1,_2) {
         PyObject_Init(reinterpret_cast<PyObject*>(this),&pytype);
     }
     
-    py::array_adapter<REAL> &cast_base() { return base; }
-    py::array_adapter<REAL> &get_base() { return base; }
+    py::array_adapter<real> &cast_base() { return base; }
+    py::array_adapter<real> &get_base() { return base; }
 };
 
-template<> struct wrapped_type<py::array_adapter<REAL> > {
+template<> struct wrapped_type<py::array_adapter<real> > {
     typedef obj_MatrixProxy type;
 };
 
@@ -379,7 +382,11 @@ template<> n_vector from_pyobject<n_vector>(PyObject *o) {
             THROW_PYERR_STRING(ValueError,"too many items for a vector");
         
         check_dimension(PyTuple_GET_SIZE(o));
-        return {int(PyTuple_GET_SIZE(o)),[=](int i){ return from_pyobject<REAL>(PyTuple_GET_ITEM(o,i)); }};
+        return {int(PyTuple_GET_SIZE(o)),[=](int i){ return from_pyobject<real>(PyTuple_GET_ITEM(o,i)); }};
+    }
+    if(Py_TYPE(o) == &obj_MatrixProxy::pytype) {
+        auto &mp = reinterpret_cast<obj_MatrixProxy*>(o)->base;
+        return {int(mp.size),[&](int i){ return mp.items[i]; }};
     }
     return get_base<n_vector>(o);
 }
@@ -449,7 +456,7 @@ PyObject *obj_BoxScene_get_camera(obj_BoxScene *self,PyObject *) {
 PyObject *obj_BoxScene_set_fov(obj_BoxScene *self,PyObject *arg) {
     try {
         ensure_unlocked(self);
-        self->base.fov = from_pyobject<REAL>(arg);
+        self->base.fov = from_pyobject<real>(arg);
         Py_RETURN_NONE;
     } PY_EXCEPT_HANDLERS(NULL)
 }
@@ -468,7 +475,7 @@ PyObject *obj_BoxScene_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
             try {
                 const char *names[] = {"dimension"};
                 get_arg ga(args,kwds,names,"BoxScene.__new__");
-                REAL d = from_pyobject<REAL>(ga(true));
+                real d = from_pyobject<real>(ga(true));
                 ga.finished();
                 
                 new(&ptr->base) BoxScene<repr>(d);
@@ -484,50 +491,22 @@ PyObject *obj_BoxScene_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
 }
 
 PyMemberDef obj_BoxScene_members[] = {
-    {const_cast<char*>("fov"),member_macro<REAL>::value,offsetof(obj_BoxScene,base.fov),READONLY,NULL},
+    {const_cast<char*>("fov"),member_macro<real>::value,offsetof(obj_BoxScene,base.fov),READONLY,NULL},
     {NULL}
 };
 
-PyTypeObject obj_BoxScene::pytype = {
-    PyVarObject_HEAD_INIT(NULL,0)
-    MODULE_STR ".BoxScene", /* tp_name */
-    sizeof(obj_BoxScene), /* tp_basicsize */
-    0,                         /* tp_itemsize */
-    destructor_dealloc<obj_BoxScene>::value, /* tp_dealloc */
-    NULL,                         /* tp_print */
-    NULL,                         /* tp_getattr */
-    NULL,                         /* tp_setattr */
-    NULL, /* tp_compare */
-    NULL, /* tp_repr */
-    NULL, /* tp_as_number */
-    NULL, /* tp_as_sequence */
-    NULL, /* tp_as_mapping */
-    NULL, /* tp_hash */
-    NULL, /* tp_call */
-    NULL, /* tp_str */
-    NULL, /* tp_getattro */
-    NULL, /* tp_setattro */
-    NULL,                         /* tp_as_buffer */
-    Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE|Py_TPFLAGS_CHECKTYPES|Py_TPFLAGS_HAVE_GC, /* tp_flags */
-    NULL, /* tp_doc */
-    reinterpret_cast<traverseproc>(&obj_BoxScene_traverse), /* tp_traverse */
-    reinterpret_cast<inquiry>(&obj_BoxScene_clear), /* tp_clear */
-    NULL, /* tp_richcompare */
-    offsetof(obj_BoxScene,weaklist), /* tp_weaklistoffset */
-    NULL, /* tp_iter */
-    NULL, /* tp_iternext */
-    obj_BoxScene_methods, /* tp_methods */
-    obj_BoxScene_members, /* tp_members */
-    NULL, /* tp_getset */
-    NULL, /* tp_base */
-    NULL,                         /* tp_dict */
-    NULL,                         /* tp_descr_get */
-    NULL,                         /* tp_descr_set */
-    offsetof(obj_BoxScene,idict), /* tp_dictoffset */
-    NULL, /* tp_init */
-    NULL,                         /* tp_alloc */
-    &obj_BoxScene_new /* tp_new */
-};
+PyTypeObject obj_BoxScene::pytype = make_type_object(
+    MODULE_STR ".BoxScene",
+    sizeof(obj_BoxScene),
+    tp_dealloc = destructor_dealloc<obj_BoxScene>::value,
+    tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE|Py_TPFLAGS_CHECKTYPES|Py_TPFLAGS_HAVE_GC,
+    tp_traverse = &obj_BoxScene_traverse,
+    tp_clear = &obj_BoxScene_clear,
+    tp_weaklistoffset = offsetof(obj_BoxScene,weaklist),
+    tp_methods = obj_BoxScene_methods,
+    tp_members = obj_BoxScene_members,
+    tp_dictoffset = offsetof(obj_BoxScene,idict),
+    tp_new = &obj_BoxScene_new);
 
 
 int obj_CompositeScene_traverse(obj_CompositeScene *self,visitproc visit,void *arg) {
@@ -570,7 +549,7 @@ PyObject *obj_CompositeScene_get_camera(obj_CompositeScene *self,PyObject *) {
 PyObject *obj_CompositeScene_set_fov(obj_CompositeScene *self,PyObject *arg) {
     try {
         ensure_unlocked(self);
-        self->base.fov = from_pyobject<REAL>(arg);
+        self->base.fov = from_pyobject<real>(arg);
         Py_RETURN_NONE;
     } PY_EXCEPT_HANDLERS(NULL)
 }
@@ -611,50 +590,22 @@ PyObject *obj_CompositeScene_new(PyTypeObject *type,PyObject *args,PyObject *kwd
 }
 
 PyMemberDef obj_CompositeScene_members[] = {
-    {const_cast<char*>("fov"),member_macro<REAL>::value,offsetof(obj_CompositeScene,base.fov),READONLY,NULL},
+    {const_cast<char*>("fov"),member_macro<real>::value,offsetof(obj_CompositeScene,base.fov),READONLY,NULL},
     {NULL}
 };
 
-PyTypeObject obj_CompositeScene::pytype = {
-    PyVarObject_HEAD_INIT(NULL,0)
-    MODULE_STR ".CompositeScene", /* tp_name */
-    sizeof(obj_CompositeScene), /* tp_basicsize */
-    0,                         /* tp_itemsize */
-    destructor_dealloc<obj_CompositeScene>::value, /* tp_dealloc */
-    NULL,                         /* tp_print */
-    NULL,                         /* tp_getattr */
-    NULL,                         /* tp_setattr */
-    NULL, /* tp_compare */
-    NULL, /* tp_repr */
-    NULL, /* tp_as_number */
-    NULL, /* tp_as_sequence */
-    NULL, /* tp_as_mapping */
-    NULL, /* tp_hash */
-    NULL, /* tp_call */
-    NULL, /* tp_str */
-    NULL, /* tp_getattro */
-    NULL, /* tp_setattro */
-    NULL,                         /* tp_as_buffer */
-    Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE|Py_TPFLAGS_CHECKTYPES|Py_TPFLAGS_HAVE_GC, /* tp_flags */
-    NULL, /* tp_doc */
-    reinterpret_cast<traverseproc>(&obj_CompositeScene_traverse), /* tp_traverse */
-    reinterpret_cast<inquiry>(&obj_CompositeScene_clear), /* tp_clear */
-    NULL, /* tp_richcompare */
-    offsetof(obj_CompositeScene,weaklist), /* tp_weaklistoffset */
-    NULL, /* tp_iter */
-    NULL, /* tp_iternext */
-    obj_CompositeScene_methods, /* tp_methods */
-    obj_CompositeScene_members, /* tp_members */
-    NULL, /* tp_getset */
-    NULL, /* tp_base */
-    NULL,                         /* tp_dict */
-    NULL,                         /* tp_descr_get */
-    NULL,                         /* tp_descr_set */
-    offsetof(obj_CompositeScene,idict), /* tp_dictoffset */
-    NULL, /* tp_init */
-    NULL,                         /* tp_alloc */
-    &obj_CompositeScene_new /* tp_new */
-};
+PyTypeObject obj_CompositeScene::pytype = make_type_object(
+    MODULE_STR ".CompositeScene",
+    sizeof(obj_CompositeScene),
+    tp_dealloc = destructor_dealloc<obj_CompositeScene>::value,
+    tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE|Py_TPFLAGS_CHECKTYPES|Py_TPFLAGS_HAVE_GC,
+    tp_traverse = &obj_CompositeScene_traverse,
+    tp_clear = &obj_CompositeScene_clear,
+    tp_weaklistoffset = offsetof(obj_CompositeScene,weaklist),
+    tp_methods = obj_CompositeScene_methods,
+    tp_members = obj_CompositeScene_members,
+    tp_dictoffset = offsetof(obj_CompositeScene,idict),
+    tp_new = &obj_CompositeScene_new);
 
 
 PyObject *obj_Primitive_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
@@ -662,46 +613,10 @@ PyObject *obj_Primitive_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
     return NULL;
 }
 
-PyTypeObject obj_Primitive::pytype = {
-    PyVarObject_HEAD_INIT(NULL,0)
-    MODULE_STR ".Primitive",      /* tp_name */
-    sizeof(obj_Primitive),        /* tp_basicsize */
-    0,                            /* tp_itemsize */
-    NULL,                         /* tp_dealloc */
-    NULL,                         /* tp_print */
-    NULL,                         /* tp_getattr */
-    NULL,                         /* tp_setattr */
-    NULL,                         /* tp_compare */
-    NULL,                         /* tp_repr */
-    NULL,                         /* tp_as_number */
-    NULL,                         /* tp_as_sequence */
-    NULL,                         /* tp_as_mapping */
-    NULL,                         /* tp_hash */
-    NULL,                         /* tp_call */
-    NULL,                         /* tp_str */
-    NULL,                         /* tp_getattro */
-    NULL,                         /* tp_setattro */
-    NULL,                         /* tp_as_buffer */
-    Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE|Py_TPFLAGS_CHECKTYPES, /* tp_flags */
-    NULL,                         /* tp_doc */
-    NULL,                         /* tp_traverse */
-    NULL,                         /* tp_clear */
-    NULL,                         /* tp_richcompare */
-    0,                            /* tp_weaklistoffset */
-    NULL,                         /* tp_iter */
-    NULL,                         /* tp_iternext */
-    NULL,                         /* tp_methods */
-    NULL,                         /* tp_members */
-    NULL,                         /* tp_getset */
-    NULL,                         /* tp_base */
-    NULL,                         /* tp_dict */
-    NULL,                         /* tp_descr_get */
-    NULL,                         /* tp_descr_set */
-    0,                            /* tp_dictoffset */
-    NULL,                         /* tp_init */
-    NULL,                         /* tp_alloc */
-    &obj_Primitive_new            /* tp_new */
-};
+PyTypeObject obj_Primitive::pytype = make_type_object(
+    MODULE_STR ".Primitive",
+    sizeof(obj_Primitive),
+    tp_new = &obj_Primitive_new);
 
 
 template<typename T> int kd_tree_item_traverse(PyObject *self,visitproc visit,void *arg) {
@@ -786,46 +701,13 @@ PyGetSetDef obj_Solid_getset[] = {
     {NULL}
 };
 
-PyTypeObject solid_common::pytype = {
-    PyVarObject_HEAD_INIT(NULL,0)
-    MODULE_STR ".Solid",          /* tp_name */
-    sizeof(solid<repr>),          /* tp_basicsize */
-    0,                            /* tp_itemsize */
-    destructor_dealloc<solid<repr> >::value, /* tp_dealloc */
-    NULL,                         /* tp_print */
-    NULL,                         /* tp_getattr */
-    NULL,                         /* tp_setattr */
-    NULL,                         /* tp_compare */
-    NULL,                         /* tp_repr */
-    NULL,                         /* tp_as_number */
-    NULL,                         /* tp_as_sequence */
-    NULL,                         /* tp_as_mapping */
-    NULL,                         /* tp_hash */
-    NULL,                         /* tp_call */
-    NULL,                         /* tp_str */
-    NULL,                         /* tp_getattro */
-    NULL,                         /* tp_setattro */
-    NULL,                         /* tp_as_buffer */
-    Py_TPFLAGS_DEFAULT|Py_TPFLAGS_CHECKTYPES, /* tp_flags */
-    NULL,                         /* tp_doc */
-    NULL,                         /* tp_traverse */
-    NULL,                         /* tp_clear */
-    NULL,                         /* tp_richcompare */
-    0,                            /* tp_weaklistoffset */
-    NULL,                         /* tp_iter */
-    NULL,                         /* tp_iternext */
-    NULL,//obj_Solid_methods,            /* tp_methods */
-    NULL,                         /* tp_members */
-    obj_Solid_getset,             /* tp_getset */
-    NULL,                         /* tp_base */
-    NULL,                         /* tp_dict */
-    NULL,                         /* tp_descr_get */
-    NULL,                         /* tp_descr_set */
-    0,                            /* tp_dictoffset */
-    NULL,                         /* tp_init */
-    NULL,                         /* tp_alloc */
-    &obj_Solid_new                /* tp_new */
-};
+PyTypeObject solid_common::pytype = make_type_object(
+    MODULE_STR ".Solid",
+    sizeof(solid<repr>),
+    tp_dealloc = destructor_dealloc<solid<repr> >::value,
+    tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_CHECKTYPES,
+    tp_getset = obj_Solid_getset,
+    tp_new = &obj_Solid_new);
 
 
 PyObject *obj_Triangle_intersects(triangle<repr> *self,PyObject *args,PyObject *kwds) {
@@ -931,50 +813,20 @@ PyGetSetDef obj_Triangle_getset[] = {
 };
 
 PyMemberDef obj_Triangle_members[] = {
-    {const_cast<char*>("d"),member_macro<REAL>::value,offsetof(triangle<repr>,d),READONLY,NULL},
+    {const_cast<char*>("d"),member_macro<real>::value,offsetof(triangle<repr>,d),READONLY,NULL},
     {NULL}
 };
 
-PyTypeObject triangle_common::pytype = {
-    PyVarObject_HEAD_INIT(NULL,0)
-    MODULE_STR ".Triangle",       /* tp_name */
-    triangle<repr>::base_size,    /* tp_basicsize */
-    triangle<repr>::item_size,    /* tp_itemsize */
-    destructor_dealloc<triangle<repr> >::value, /* tp_dealloc */
-    NULL,                         /* tp_print */
-    NULL,                         /* tp_getattr */
-    NULL,                         /* tp_setattr */
-    NULL,                         /* tp_compare */
-    NULL,                         /* tp_repr */
-    NULL,                         /* tp_as_number */
-    NULL,                         /* tp_as_sequence */
-    NULL,                         /* tp_as_mapping */
-    NULL,                         /* tp_hash */
-    NULL,                         /* tp_call */
-    NULL,                         /* tp_str */
-    NULL,                         /* tp_getattro */
-    NULL,                         /* tp_setattro */
-    NULL,                         /* tp_as_buffer */
-    Py_TPFLAGS_DEFAULT|Py_TPFLAGS_CHECKTYPES, /* tp_flags */
-    NULL,                         /* tp_doc */
-    NULL,                         /* tp_traverse */
-    NULL,                         /* tp_clear */
-    NULL,                         /* tp_richcompare */
-    0,                            /* tp_weaklistoffset */
-    NULL,                         /* tp_iter */
-    NULL,                         /* tp_iternext */
-    obj_Triangle_methods,         /* tp_methods */
-    obj_Triangle_members,         /* tp_members */
-    obj_Triangle_getset,          /* tp_getset */
-    NULL,                         /* tp_base */
-    NULL,                         /* tp_dict */
-    NULL,                         /* tp_descr_get */
-    NULL,                         /* tp_descr_set */
-    0,                            /* tp_dictoffset */
-    NULL,                         /* tp_init */
-    NULL,                         /* tp_alloc */
-    &obj_Triangle_new             /* tp_new */
-};
+PyTypeObject triangle_common::pytype = make_type_object(
+    MODULE_STR ".Triangle",
+    triangle<repr>::base_size,
+    tp_itemsize = triangle<repr>::item_size,
+    tp_dealloc = destructor_dealloc<triangle<repr> >::value,
+    tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_CHECKTYPES,
+    tp_methods = obj_Triangle_methods,
+    tp_members = obj_Triangle_members,
+    tp_getset = obj_Triangle_getset,
+    tp_new = &obj_Triangle_new);
 
 
 Py_ssize_t obj_FrozenVectorView___sequence_len__(obj_FrozenVectorView *self) {
@@ -1012,46 +864,14 @@ PyObject *obj_FrozenVectorView_new(PyTypeObject *type,PyObject *args,PyObject *k
     return NULL;
 }
 
-PyTypeObject obj_FrozenVectorView::pytype = {
-    PyVarObject_HEAD_INIT(NULL,0)
-    MODULE_STR ".FrozenVectorView", /* tp_name */
-    sizeof(obj_FrozenVectorView), /* tp_basicsize */
-    0,                         /* tp_itemsize */
-    destructor_dealloc<obj_FrozenVectorView>::value, /* tp_dealloc */
-    NULL,                         /* tp_print */
-    NULL,                         /* tp_getattr */
-    NULL,                         /* tp_setattr */
-    NULL, /* tp_compare */
-    NULL, /* tp_repr */
-    NULL, /* tp_as_number */
-    &obj_FrozenVectorView_sequence_methods, /* tp_as_sequence */
-    NULL, /* tp_as_mapping */
-    NULL, /* tp_hash */
-    NULL, /* tp_call */
-    NULL, /* tp_str */
-    NULL, /* tp_getattro */
-    NULL, /* tp_setattro */
-    NULL,                         /* tp_as_buffer */
-    Py_TPFLAGS_DEFAULT|Py_TPFLAGS_CHECKTYPES|Py_TPFLAGS_HAVE_GC, /* tp_flags */
-    NULL, /* tp_doc */
-    reinterpret_cast<traverseproc>(&obj_FrozenVectorView_traverse), /* tp_traverse */
-    NULL, /* tp_clear */
-    NULL, /* tp_richcompare */
-    0, /* tp_weaklistoffset */
-    NULL, /* tp_iter */
-    NULL, /* tp_iternext */
-    NULL, /* tp_methods */
-    NULL, /* tp_members */
-    NULL, /* tp_getset */
-    NULL, /* tp_base */
-    NULL,                         /* tp_dict */
-    NULL,                         /* tp_descr_get */
-    NULL,                         /* tp_descr_set */
-    0, /* tp_dictoffset */
-    NULL, /* tp_init */
-    NULL,                         /* tp_alloc */
-    &obj_FrozenVectorView_new /* tp_new */
-};
+PyTypeObject obj_FrozenVectorView::pytype = make_type_object(
+    MODULE_STR ".FrozenVectorView",
+    sizeof(obj_FrozenVectorView),
+    tp_dealloc = destructor_dealloc<obj_FrozenVectorView>::value,
+    tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_CHECKTYPES|Py_TPFLAGS_HAVE_GC,
+    tp_as_sequence = &obj_FrozenVectorView_sequence_methods,
+    tp_traverse = &obj_FrozenVectorView_traverse,
+    tp_new = &obj_FrozenVectorView_new);
 
 
 PyObject *obj_KDNode_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
@@ -1059,46 +879,10 @@ PyObject *obj_KDNode_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
     return NULL;
 }
 
-PyTypeObject obj_KDNode::pytype = {
-    PyVarObject_HEAD_INIT(NULL,0)
-    MODULE_STR ".KDNode",         /* tp_name */
-    sizeof(obj_KDNode),           /* tp_basicsize */
-    0,                            /* tp_itemsize */
-    NULL,                         /* tp_dealloc */
-    NULL,                         /* tp_print */
-    NULL,                         /* tp_getattr */
-    NULL,                         /* tp_setattr */
-    NULL,                         /* tp_compare */
-    NULL,                         /* tp_repr */
-    NULL,                         /* tp_as_number */
-    NULL,                         /* tp_as_sequence */
-    NULL,                         /* tp_as_mapping */
-    NULL,                         /* tp_hash */
-    NULL,                         /* tp_call */
-    NULL,                         /* tp_str */
-    NULL,                         /* tp_getattro */
-    NULL,                         /* tp_setattro */
-    NULL,                         /* tp_as_buffer */
-    Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE|Py_TPFLAGS_CHECKTYPES, /* tp_flags */
-    NULL,                         /* tp_doc */
-    NULL,                         /* tp_traverse */
-    NULL,                         /* tp_clear */
-    NULL,                         /* tp_richcompare */
-    0,                            /* tp_weaklistoffset */
-    NULL,                         /* tp_iter */
-    NULL,                         /* tp_iternext */
-    NULL,                         /* tp_methods */
-    NULL,                         /* tp_members */
-    NULL,                         /* tp_getset */
-    NULL,                         /* tp_base */
-    NULL,                         /* tp_dict */
-    NULL,                         /* tp_descr_get */
-    NULL,                         /* tp_descr_set */
-    0,                            /* tp_dictoffset */
-    NULL,                         /* tp_init */
-    NULL,                         /* tp_alloc */
-    &obj_KDNode_new               /* tp_new */
-};
+PyTypeObject obj_KDNode::pytype = make_type_object(
+    MODULE_STR ".KDNode",
+    sizeof(obj_KDNode),
+    tp_new = &obj_KDNode_new);
 
 
 Py_ssize_t obj_KDLeaf___sequence_len__(obj_KDLeaf *self) {
@@ -1179,46 +963,16 @@ PyGetSetDef obj_KDLeaf_getset[] = {
     {NULL}
 };
 
-PyTypeObject obj_KDLeaf::pytype = {
-    PyVarObject_HEAD_INIT(NULL,0)
-    MODULE_STR ".KDLeaf",         /* tp_name */
-    sizeof(obj_KDLeaf),           /* tp_basicsize */
-    0,                            /* tp_itemsize */
-    destructor_dealloc<obj_KDLeaf>::value, /* tp_dealloc */
-    NULL,                         /* tp_print */
-    NULL,                         /* tp_getattr */
-    NULL,                         /* tp_setattr */
-    NULL,                         /* tp_compare */
-    NULL,                         /* tp_repr */
-    NULL,                         /* tp_as_number */
-    &obj_KDLeaf_sequence_methods, /* tp_as_sequence */
-    NULL,                         /* tp_as_mapping */
-    NULL,                         /* tp_hash */
-    NULL,                         /* tp_call */
-    NULL,                         /* tp_str */
-    NULL,                         /* tp_getattro */
-    NULL,                         /* tp_setattro */
-    NULL,                         /* tp_as_buffer */
-    Py_TPFLAGS_DEFAULT|Py_TPFLAGS_CHECKTYPES|Py_TPFLAGS_HAVE_GC, /* tp_flags */
-    NULL,                         /* tp_doc */
-    &kd_tree_item_traverse<obj_KDLeaf>, /* tp_traverse */
-    &kd_tree_item_clear<obj_KDLeaf>, /* tp_clear */
-    NULL,                         /* tp_richcompare */
-    0,                            /* tp_weaklistoffset */
-    NULL,                         /* tp_iter */
-    NULL,                         /* tp_iternext */
-    NULL,                         /* tp_methods */
-    NULL,                         /* tp_members */
-    obj_KDLeaf_getset,            /* tp_getset */
-    NULL,                         /* tp_base */
-    NULL,                         /* tp_dict */
-    NULL,                         /* tp_descr_get */
-    NULL,                         /* tp_descr_set */
-    0,                            /* tp_dictoffset */
-    NULL,                         /* tp_init */
-    NULL,                         /* tp_alloc */
-    &obj_KDLeaf_new               /* tp_new */
-};
+PyTypeObject obj_KDLeaf::pytype = make_type_object(
+    MODULE_STR ".KDLeaf",
+    sizeof(obj_KDLeaf),
+    tp_dealloc = destructor_dealloc<obj_KDLeaf>::value,
+    tp_as_sequence = &obj_KDLeaf_sequence_methods,
+    tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_CHECKTYPES|Py_TPFLAGS_HAVE_GC,
+    tp_traverse = &kd_tree_item_traverse<obj_KDLeaf>,
+    tp_clear = &kd_tree_item_clear<obj_KDLeaf>,
+    tp_getset = obj_KDLeaf_getset,
+    tp_new = &obj_KDLeaf_new);
 
 
 PyObject *obj_KDBranch_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
@@ -1228,7 +982,7 @@ PyObject *obj_KDBranch_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
             try {
                 const char *names[] = {"split","left","right"};
                 get_arg ga(args,kwds,names,"KDBranch.__new__");
-                auto split = from_pyobject<REAL>(ga(true));
+                auto split = from_pyobject<real>(ga(true));
                 auto left = ga(true);
                 auto right = ga(true);
                 ga.finished();
@@ -1289,46 +1043,15 @@ PyGetSetDef obj_KDBranch_getset[] = {
     {NULL}
 };
 
-PyTypeObject obj_KDBranch::pytype = {
-    PyVarObject_HEAD_INIT(NULL,0)
-    MODULE_STR ".KDBranch",         /* tp_name */
-    sizeof(obj_KDLeaf),           /* tp_basicsize */
-    0,                            /* tp_itemsize */
-    destructor_dealloc<obj_KDBranch>::value, /* tp_dealloc */
-    NULL,                         /* tp_print */
-    NULL,                         /* tp_getattr */
-    NULL,                         /* tp_setattr */
-    NULL,                         /* tp_compare */
-    NULL,                         /* tp_repr */
-    NULL,                         /* tp_as_number */
-    NULL,                         /* tp_as_sequence */
-    NULL,                         /* tp_as_mapping */
-    NULL,                         /* tp_hash */
-    NULL,                         /* tp_call */
-    NULL,                         /* tp_str */
-    NULL,                         /* tp_getattro */
-    NULL,                         /* tp_setattro */
-    NULL,                         /* tp_as_buffer */
-    Py_TPFLAGS_DEFAULT|Py_TPFLAGS_CHECKTYPES|Py_TPFLAGS_HAVE_GC, /* tp_flags */
-    NULL,                         /* tp_doc */
-    &kd_tree_item_traverse<obj_KDBranch>, /* tp_traverse */
-    &kd_tree_item_clear<obj_KDBranch>, /* tp_clear */
-    NULL,                         /* tp_richcompare */
-    0,                            /* tp_weaklistoffset */
-    NULL,                         /* tp_iter */
-    NULL,                         /* tp_iternext */
-    NULL,                         /* tp_methods */
-    NULL,                         /* tp_members */
-    obj_KDBranch_getset,          /* tp_getset */
-    NULL,                         /* tp_base */
-    NULL,                         /* tp_dict */
-    NULL,                         /* tp_descr_get */
-    NULL,                         /* tp_descr_set */
-    0,                            /* tp_dictoffset */
-    NULL,                         /* tp_init */
-    NULL,                         /* tp_alloc */
-    &obj_KDBranch_new             /* tp_new */
-};
+PyTypeObject obj_KDBranch::pytype = make_type_object(
+    MODULE_STR ".KDBranch",
+    sizeof(obj_KDLeaf),
+    tp_dealloc = destructor_dealloc<obj_KDBranch>::value,
+    tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_CHECKTYPES|Py_TPFLAGS_HAVE_GC,
+    tp_traverse = &kd_tree_item_traverse<obj_KDBranch>,
+    tp_clear = &kd_tree_item_clear<obj_KDBranch>,
+    tp_getset = obj_KDBranch_getset,
+    tp_new = &obj_KDBranch_new);
 
 
 PyObject *obj_Vector_str(repr::vector_obj *self) {
@@ -1425,11 +1148,11 @@ PyObject *obj_Vector___mul__(PyObject *a,PyObject *b) {
     try {
         if(PyObject_TypeCheck(a,&repr::vector_obj::pytype)) {
             if(PyNumber_Check(b)) {
-                return to_pyobject(reinterpret_cast<repr::vector_obj*>(a)->get_base() * from_pyobject<REAL>(b));
+                return to_pyobject(reinterpret_cast<repr::vector_obj*>(a)->get_base() * from_pyobject<real>(b));
             }
         } else {
             if(PyNumber_Check(a)) {
-                return to_pyobject(from_pyobject<REAL>(a) * reinterpret_cast<repr::vector_obj*>(b)->get_base());
+                return to_pyobject(from_pyobject<real>(a) * reinterpret_cast<repr::vector_obj*>(b)->get_base());
             }
         }
     } PY_EXCEPT_HANDLERS(NULL)
@@ -1490,7 +1213,7 @@ PyObject *obj_Vector_axis(PyObject*,PyObject *args,PyObject *kwds) {
         int dimension = from_pyobject<int>(ga(true));
         int axis = from_pyobject<int>(ga(true));
         PyObject *temp = ga(false);
-        REAL length = temp ? from_pyobject<float>(temp) : REAL(1);
+        real length = temp ? from_pyobject<float>(temp) : real(1);
         ga.finished();
 
         check_dimension(dimension);
@@ -1520,7 +1243,7 @@ PyObject *obj_Vector_apply(repr::vector_obj *_self,PyObject *_func) {
         py::object func = py::borrowed_ref(_func);
         
         for(int i=0; i<self.dimension(); ++i)
-            r[i] = from_pyobject<REAL>(func(self[i]));
+            r[i] = from_pyobject<real>(func(self[i]));
         
         return to_pyobject(r);
     } PY_EXCEPT_HANDLERS(NULL)
@@ -1550,7 +1273,7 @@ PyObject *obj_Vector_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
         if(values) {
             sized_iter itr(*values,dimension);
             for(int i=0; i<dimension; ++i) {
-                ptr->cast_base()[i] = from_pyobject<REAL>(itr.next());
+                ptr->cast_base()[i] = from_pyobject<real>(itr.next());
             }
             itr.finished();
         }
@@ -1564,46 +1287,18 @@ PyGetSetDef obj_Vector_getset[] = {
     {NULL}
 };
 
-PyTypeObject vector_obj_base::pytype = {
-    PyVarObject_HEAD_INIT(NULL,0)
-    MODULE_STR ".Vector",             /* tp_name */
-    sizeof(repr::vector_obj) - repr::vector_obj::item_size, /* tp_basicsize */
-    repr::vector_obj::item_size,        /* tp_itemsize */
-    NULL,                         /* tp_dealloc */
-    NULL,                         /* tp_print */
-    NULL,                         /* tp_getattr */
-    NULL,                         /* tp_setattr */
-    NULL,                         /* tp_compare */
-    reinterpret_cast<reprfunc>(&obj_Vector_repr), /* tp_repr */
-    &obj_Vector_number_methods,   /* tp_as_number */
-    &obj_Vector_sequence_methods, /* tp_as_sequence */
-    NULL,                         /* tp_as_mapping */
-    NULL,                         /* tp_hash */
-    NULL,                         /* tp_call */
-    reinterpret_cast<reprfunc>(&obj_Vector_str), /* tp_str */
-    NULL,                         /* tp_getattro */
-    NULL,                         /* tp_setattro */
-    NULL,                         /* tp_as_buffer */
-    Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE|Py_TPFLAGS_CHECKTYPES, /* tp_flags */
-    NULL,                         /* tp_doc */
-    NULL,                         /* tp_traverse */
-    NULL,                         /* tp_clear */
-    reinterpret_cast<richcmpfunc>(&obj_Vector_richcompare), /* tp_richcompare */
-    0,                            /* tp_weaklistoffset */
-    NULL,                         /* tp_iter */
-    NULL,                         /* tp_iternext */
-    obj_Vector_methods,           /* tp_methods */
-    NULL,                         /* tp_members */
-    obj_Vector_getset,            /* tp_getset */
-    NULL,                         /* tp_base */
-    NULL,                         /* tp_dict */
-    NULL,                         /* tp_descr_get */
-    NULL,                         /* tp_descr_set */
-    0,                            /* tp_dictoffset */
-    NULL,                         /* tp_init */
-    NULL,                         /* tp_alloc */
-    &obj_Vector_new               /* tp_new */
-};
+PyTypeObject vector_obj_base::pytype = make_type_object(
+    MODULE_STR ".Vector",
+    sizeof(repr::vector_obj) - repr::vector_obj::item_size,
+    tp_itemsize = repr::vector_obj::item_size,
+    tp_repr = &obj_Vector_repr,
+    tp_as_number = &obj_Vector_number_methods,
+    tp_as_sequence = &obj_Vector_sequence_methods,
+    tp_str = &obj_Vector_str,
+    tp_richcompare = &obj_Vector_richcompare,
+    tp_methods = obj_Vector_methods,
+    tp_getset = obj_Vector_getset,
+    tp_new = &obj_Vector_new);
 
 
 Py_ssize_t obj_MatrixProxy___sequence_len__(obj_MatrixProxy *self) {
@@ -1634,46 +1329,13 @@ PyObject *obj_MatrixProxy_new(PyTypeObject *type,PyObject *args,PyObject *kwds) 
     return NULL;
 }
 
-PyTypeObject obj_MatrixProxy::pytype = {
-    PyVarObject_HEAD_INIT(NULL,0)
-    MODULE_STR ".MatrixProxy",    /* tp_name */
-    sizeof(obj_MatrixProxy),      /* tp_basicsize */
-    0,                            /* tp_itemsize */
-    destructor_dealloc<obj_MatrixProxy>::value, /* tp_dealloc */
-    NULL,                         /* tp_print */
-    NULL,                         /* tp_getattr */
-    NULL,                         /* tp_setattr */
-    NULL,                         /* tp_compare */
-    NULL,                         /* tp_repr */
-    NULL,                         /* tp_as_number */
-    &obj_MatrixProxy_sequence_methods, /* tp_as_sequence */
-    NULL,                         /* tp_as_mapping */
-    NULL,                         /* tp_hash */
-    NULL,                         /* tp_call */
-    NULL,                         /* tp_str */
-    NULL,                         /* tp_getattro */
-    NULL,                         /* tp_setattro */
-    NULL,                         /* tp_as_buffer */
-    Py_TPFLAGS_DEFAULT|Py_TPFLAGS_CHECKTYPES, /* tp_flags */
-    NULL,                         /* tp_doc */
-    NULL,                         /* tp_traverse */
-    NULL,                         /* tp_clear */
-    NULL,                         /* tp_richcompare */
-    0,                            /* tp_weaklistoffset */
-    NULL,                         /* tp_iter */
-    NULL,                         /* tp_iternext */
-    NULL,                         /* tp_methods */
-    NULL,                         /* tp_members */
-    NULL,                         /* tp_getset */
-    NULL,                         /* tp_base */
-    NULL,                         /* tp_dict */
-    NULL,                         /* tp_descr_get */
-    NULL,                         /* tp_descr_set */
-    0,                            /* tp_dictoffset */
-    NULL,                         /* tp_init */
-    NULL,                         /* tp_alloc */
-    &obj_MatrixProxy_new          /* tp_new */
-};
+PyTypeObject obj_MatrixProxy::pytype = make_type_object(
+    MODULE_STR ".MatrixProxy",
+    sizeof(obj_MatrixProxy),
+    tp_dealloc = destructor_dealloc<obj_MatrixProxy>::value,
+    tp_as_sequence = &obj_MatrixProxy_sequence_methods,
+    tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_CHECKTYPES,
+    tp_new = &obj_MatrixProxy_new);
 
 
 void obj_Camera_dealloc(repr::camera_obj *self) {
@@ -1753,13 +1415,13 @@ PyObject *obj_Camera_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
     } PY_EXCEPT_HANDLERS(NULL)
 }
 
-template<int N> void zero_vector(fixed::vector<N,REAL> &v) {
-    v.fill_with(REAL(0));
+template<int N> void zero_vector(fixed::vector<N,real> &v) {
+    v.fill_with(real(0));
 }
 
 void zero_vector(var::repr::py_vector_t &v) {
     if(Py_REFCNT(v.store.data) == 1) {
-        v.fill_with(REAL(0));
+        v.fill_with(real(0));
     } else {
         /* we don't need to assign any values to the elements since memory
            allocated by Python is automatically zeroed out */
@@ -1775,59 +1437,32 @@ int obj_Camera_init(repr::camera_obj *self,PyObject *args,PyObject *kwds) {
         
         for(int i=0; i<base.dimension(); ++i) {
             zero_vector(base.axes()[i]);
-            base.axes()[i][i] = REAL(1);
+            base.axes()[i][i] = 1;
         }
         
         return 0;
     } PY_EXCEPT_HANDLERS(-1);
 }
 
-PyTypeObject camera_obj_base::pytype = {
-    PyVarObject_HEAD_INIT(NULL,0)
-    MODULE_STR ".Camera",         /* tp_name */
-    sizeof(repr::camera_obj) - repr::camera_obj::item_size, /* tp_basicsize */
-    repr::camera_obj::item_size,  /* tp_itemsize */
-    reinterpret_cast<destructor>(&obj_Camera_dealloc), /* tp_dealloc */
-    NULL,                         /* tp_print */
-    NULL,                         /* tp_getattr */
-    NULL,                         /* tp_setattr */
-    NULL,                         /* tp_compare */
-    NULL,                         /* tp_repr */
-    NULL,                         /* tp_as_number */
-    NULL,                         /* tp_as_sequence */
-    NULL,                         /* tp_as_mapping */
-    NULL,                         /* tp_hash */
-    NULL,                         /* tp_call */
-    NULL,                         /* tp_str */
-    NULL,                         /* tp_getattro */
-    NULL,                         /* tp_setattro */
-    NULL,                         /* tp_as_buffer */
-    Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE|Py_TPFLAGS_CHECKTYPES|Py_TPFLAGS_HAVE_GC, /* tp_flags */
-    NULL,                         /* tp_doc */
-    reinterpret_cast<traverseproc>(&obj_Camera_traverse), /* tp_traverse */
-    reinterpret_cast<inquiry>(&obj_Camera_clear), /* tp_clear */
-    NULL,                         /* tp_richcompare */
-    offsetof(repr::camera_obj,weaklist), /* tp_weaklistoffset */
-    NULL,                         /* tp_iter */
-    NULL,                         /* tp_iternext */
-    obj_Camera_methods,           /* tp_methods */
-    NULL,                         /* tp_members */
-    obj_Camera_getset,            /* tp_getset */
-    NULL,                         /* tp_base */
-    NULL,                         /* tp_dict */
-    NULL,                         /* tp_descr_get */
-    NULL,                         /* tp_descr_set */
-    offsetof(repr::camera_obj,idict), /* tp_dictoffset */
-    reinterpret_cast<initproc>(&obj_Camera_init), /* tp_init */
-    NULL,                         /* tp_alloc */
-    &obj_Camera_new               /* tp_new */
-};
+PyTypeObject camera_obj_base::pytype = make_type_object(
+    MODULE_STR ".Camera",
+    sizeof(repr::camera_obj) - repr::camera_obj::item_size,
+    tp_itemsize = repr::camera_obj::item_size,
+    tp_dealloc = &obj_Camera_dealloc,
+    tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE|Py_TPFLAGS_CHECKTYPES|Py_TPFLAGS_HAVE_GC,
+    tp_traverse = &obj_Camera_traverse,
+    tp_clear = &obj_Camera_clear,
+    tp_weaklistoffset = offsetof(repr::camera_obj,weaklist),
+    tp_methods = obj_Camera_methods,
+    tp_getset = obj_Camera_getset,
+    tp_dictoffset = offsetof(repr::camera_obj,idict),
+    tp_init = &obj_Camera_init,
+    tp_new = &obj_Camera_new);
 
 
 Py_ssize_t obj_CameraAxes___sequence_len__(obj_CameraAxes *self) {
     return self->base.length();
 }
-
 
 PyObject *obj_CameraAxes___sequence_getitem__(obj_CameraAxes *self,Py_ssize_t index) {
     try {
@@ -1867,46 +1502,14 @@ PyObject *obj_CameraAxes_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
     return NULL;
 }
 
-PyTypeObject obj_CameraAxes::pytype = {
-    PyVarObject_HEAD_INIT(NULL,0)
-    MODULE_STR ".CameraAxes", /* tp_name */
-    sizeof(obj_CameraAxes), /* tp_basicsize */
-    0,                         /* tp_itemsize */
-    destructor_dealloc<obj_CameraAxes>::value, /* tp_dealloc */
-    NULL,                         /* tp_print */
-    NULL,                         /* tp_getattr */
-    NULL,                         /* tp_setattr */
-    NULL, /* tp_compare */
-    NULL, /* tp_repr */
-    NULL, /* tp_as_number */
-    &obj_CameraAxes_sequence_methods, /* tp_as_sequence */
-    NULL, /* tp_as_mapping */
-    NULL, /* tp_hash */
-    NULL, /* tp_call */
-    NULL, /* tp_str */
-    NULL, /* tp_getattro */
-    NULL, /* tp_setattro */
-    NULL,                         /* tp_as_buffer */
-    Py_TPFLAGS_DEFAULT|Py_TPFLAGS_CHECKTYPES|Py_TPFLAGS_HAVE_GC, /* tp_flags */
-    NULL, /* tp_doc */
-    reinterpret_cast<traverseproc>(&obj_CameraAxes_traverse), /* tp_traverse */
-    NULL, /* tp_clear */
-    NULL, /* tp_richcompare */
-    0, /* tp_weaklistoffset */
-    NULL, /* tp_iter */
-    NULL, /* tp_iternext */
-    NULL, /* tp_methods */
-    NULL, /* tp_members */
-    NULL, /* tp_getset */
-    NULL, /* tp_base */
-    NULL,                         /* tp_dict */
-    NULL,                         /* tp_descr_get */
-    NULL,                         /* tp_descr_set */
-    0, /* tp_dictoffset */
-    NULL, /* tp_init */
-    NULL,                         /* tp_alloc */
-    &obj_CameraAxes_new /* tp_new */
-};
+PyTypeObject obj_CameraAxes::pytype = make_type_object(
+    MODULE_STR ".CameraAxes",
+    sizeof(obj_CameraAxes),
+    tp_dealloc = destructor_dealloc<obj_CameraAxes>::value,
+    tp_as_sequence = &obj_CameraAxes_sequence_methods,
+    tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_CHECKTYPES|Py_TPFLAGS_HAVE_GC,
+    tp_traverse = &obj_CameraAxes_traverse,
+    tp_new = &obj_CameraAxes_new);
 
 
 PyObject *obj_Matrix___mul__(PyObject *a,PyObject *b) {
@@ -1982,7 +1585,7 @@ PyObject *obj_Matrix_scale(PyObject*,PyObject *args) {
                     reinterpret_cast<repr::vector_obj*>(PyTuple_GET_ITEM(args,0))->get_base()));
             }
         } else if(PyTuple_GET_SIZE(args) == 2
-                && PyLong_Check(PyTuple_GET_ITEM(args,0))
+                && is_int_or_long(PyTuple_GET_ITEM(args,0))
                 && PyNumber_Check(PyTuple_GET_ITEM(args,1))) {
             int dimension = from_pyobject<int>(PyTuple_GET_ITEM(args,0));
             check_dimension(dimension);
@@ -2062,7 +1665,7 @@ PyMethodDef obj_Matrix_methods[] = {
 void copy_row(repr::matrix_obj *m,py::object values,int row,int len) {
     sized_iter itr(values,len);
     for(int col=0; col<len; ++col) {
-        m->cast_base()[row][col] = from_pyobject<REAL>(itr.next());
+        m->cast_base()[row][col] = from_pyobject<real>(itr.next());
     }
     itr.finished();
 }
@@ -2084,9 +1687,9 @@ PyObject *obj_Matrix_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
         if(PyNumber_Check(item.ref())) {
             itr.expected_len = dimension * dimension;
             
-            ptr->cast_base()[0][0] = from_pyobject<REAL>(item);
+            ptr->cast_base()[0][0] = from_pyobject<real>(item);
             for(int i=1; i<dimension*dimension; ++i) {
-                ptr->cast_base().data()[i] = from_pyobject<REAL>(itr.next());
+                ptr->cast_base().data()[i] = from_pyobject<real>(itr.next());
             }
         } else {
             itr.expected_len = dimension;
@@ -2106,58 +1709,27 @@ PyGetSetDef obj_Matrix_getset[] = {
     {NULL}
 };
 
-PyTypeObject matrix_obj_base::pytype = {
-    PyVarObject_HEAD_INIT(NULL,0)
-    MODULE_STR ".Matrix", /* tp_name */
-    sizeof(repr::matrix_obj) - repr::matrix_obj::item_size, /* tp_basicsize */
-    repr::matrix_obj::item_size,                         /* tp_itemsize */
-    NULL, /* tp_dealloc */
-    NULL,                         /* tp_print */
-    NULL,                         /* tp_getattr */
-    NULL,                         /* tp_setattr */
-    NULL, /* tp_compare */
-    NULL, /* tp_repr */
-    &obj_Matrix_number_methods, /* tp_as_number */
-    &obj_Matrix_sequence_methods, /* tp_as_sequence */
-    NULL, /* tp_as_mapping */
-    NULL, /* tp_hash */
-    NULL, /* tp_call */
-    NULL, /* tp_str */
-    NULL, /* tp_getattro */
-    NULL, /* tp_setattro */
-    NULL,                         /* tp_as_buffer */
-    Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE|Py_TPFLAGS_CHECKTYPES, /* tp_flags */
-    NULL, /* tp_doc */
-    NULL, /* tp_traverse */
-    NULL, /* tp_clear */
-    NULL, /* tp_richcompare */
-    0, /* tp_weaklistoffset */
-    NULL, /* tp_iter */
-    NULL, /* tp_iternext */
-    obj_Matrix_methods, /* tp_methods */
-    NULL, /* tp_members */
-    obj_Matrix_getset, /* tp_getset */
-    NULL, /* tp_base */
-    NULL,                         /* tp_dict */
-    NULL,                         /* tp_descr_get */
-    NULL,                         /* tp_descr_set */
-    0, /* tp_dictoffset */
-    NULL, /* tp_init */
-    NULL,                         /* tp_alloc */
-    &obj_Matrix_new /* tp_new */
-};
+PyTypeObject matrix_obj_base::pytype = make_type_object(
+    MODULE_STR ".Matrix",
+    sizeof(repr::matrix_obj) - repr::matrix_obj::item_size,
+    tp_itemsize = repr::matrix_obj::item_size,
+    tp_as_number = &obj_Matrix_number_methods,
+    tp_as_sequence = &obj_Matrix_sequence_methods,
+    tp_methods = obj_Matrix_methods,
+    tp_getset = obj_Matrix_getset,
+    tp_new = &obj_Matrix_new);
 
 
 PyObject *aabb_split(obj_AABB *self,PyObject *args,PyObject *kwds,bool right) {
     obj_AABB *r;
     int axis;
-    REAL split;
+    real split;
     
     try {
         const char *names[] = {"axis","split"};
         get_arg ga(args,kwds,names,right ? "AABB.right" : "AABB.left");
         axis = from_pyobject<int>(ga(true));
-        split = from_pyobject<REAL>(ga(false));
+        split = from_pyobject<real>(ga(false));
         ga.finished();
         
         if(axis < 0 || axis >= self->start.dimension()) {
@@ -2186,30 +1758,30 @@ PyObject *obj_AABB_right(obj_AABB *self,PyObject *args,PyObject *kwds) {
     return aabb_split(self,args,kwds,true);
 }
 
-REAL clamp(REAL x) {
+real clamp(real x) {
     if(x > 1) return 1;
     if(x < -1) return -1;
     return x;
 }
 
-REAL skip_dot(const n_vector &a,const n_vector &b,int skip) {
+real skip_dot(const n_vector &a,const n_vector &b,int skip) {
     assert(a.dimension() == b.dimension());
     
-    REAL tot = 0;
+    real tot = 0;
     for(int i=0; i<skip; ++i) tot += a[i] * b[i];
     for(int i=skip+1; i<a.dimension(); ++i) tot += a[i] * b[i];
     return tot;
 }
 
 bool aabb_triangle_intersects(const obj_AABB *aabb,const obj_TrianglePrototype *tp) {
-    n_vector t_max(aabb->dimension(),std::numeric_limits<REAL>::lowest());
+    n_vector t_max(aabb->dimension(),std::numeric_limits<real>::lowest());
     for(int i=0; i<aabb->dimension(); ++i) {
         for(int j=0; j<aabb->dimension(); ++j) {
             if(tp->items()[i].point[j] > t_max[j]) t_max[j] = tp->items()[i].point[j];
         }
     }
     
-    n_vector t_min(aabb->dimension(),std::numeric_limits<REAL>::max());
+    n_vector t_min(aabb->dimension(),std::numeric_limits<real>::max());
     for(int i=0; i<aabb->dimension(); ++i) {
         for(int j=0; j<aabb->dimension(); ++j) {
             if(tp->items()[i].point[j] < t_min[j]) t_min[j] = tp->items()[i].point[j];
@@ -2220,14 +1792,14 @@ bool aabb_triangle_intersects(const obj_AABB *aabb,const obj_TrianglePrototype *
         if(t_min[i] > aabb->end[i] || t_max[i] < aabb->start[i]) return false;
     }
     
-    REAL n_offset = dot(tp->face_normal,tp->items()[0].point);
+    real n_offset = dot(tp->face_normal,tp->items()[0].point);
     n_vector origin = (aabb->start + aabb->end) * 0.5;
     
-    REAL po = dot(origin,tp->face_normal);
+    real po = dot(origin,tp->face_normal);
     
-    REAL b_max = 0;
+    real b_max = 0;
     for(int i=0; i<aabb->dimension(); ++i) b_max += std::abs((aabb->end[i] - aabb->start[i])/2 * tp->face_normal[i]);
-    REAL b_min = po - b_max;
+    real b_min = po - b_max;
     b_max += po;
     
     if(b_max < n_offset || b_min > n_offset) return false;
@@ -2236,8 +1808,8 @@ bool aabb_triangle_intersects(const obj_AABB *aabb,const obj_TrianglePrototype *
         const n_vector &axis = tp->items()[i].edge_normal;
         
         for(int j=0; j<aabb->dimension(); ++j) {
-            REAL t_max = skip_dot(tp->items()[0].point,axis,j);
-            REAL t_min = skip_dot(tp->items()[i ? i : 1].point,axis,j);
+            real t_max = skip_dot(tp->items()[0].point,axis,j);
+            real t_min = skip_dot(tp->items()[i ? i : 1].point,axis,j);
             if(t_min > t_max) std::swap(t_max,t_min);
             
             po = skip_dot(-origin,axis,j);
@@ -2265,13 +1837,13 @@ inline auto cube_component(const solid<repr> *c,int axis) -> decltype(c->orienta
 }
 
 bool box_box_axis_test(const obj_AABB *aabb,const solid<repr> *c,const n_vector &axis) {
-    REAL a_po = dot(c->position,axis);
-    REAL b_po = dot((aabb->start + aabb->end) * 0.5,axis);
+    real a_po = dot(c->position,axis);
+    real b_po = dot((aabb->start + aabb->end) * 0.5,axis);
     
-    REAL a_max = 0;
+    real a_max = 0;
     for(int i=0; i<aabb->dimension(); ++i) a_max += std::abs(dot(cube_component(c,i),axis));
     
-    REAL b_max = 0;
+    real b_max = 0;
     for(int i=0; i<aabb->dimension(); ++i) b_max += std::abs((aabb->end[i] - aabb->start[i])/2 * axis[i]);
     
     return b_po+b_max < a_po-a_max || b_po-b_max > a_po+a_max;
@@ -2279,7 +1851,7 @@ bool box_box_axis_test(const obj_AABB *aabb,const solid<repr> *c,const n_vector 
 
 bool aabb_cube_intersects(const obj_AABB *aabb,const solid<repr> *c) {
     n_vector max(aabb->dimension(),0);
-    for(int i=0; i<aabb->dimension(); ++i) max += cube_component(c,i).apply(static_cast<REAL (*)(REAL)>(&std::abs));
+    for(int i=0; i<aabb->dimension(); ++i) max += cube_component(c,i).apply(static_cast<real (*)(real)>(&std::abs));
     
     for(int i=0; i<aabb->dimension(); ++i) {
         if(aabb->end[i] < c->position[i] - max[i] || aabb->start[i] > c->position[i] + max[i]) return false;
@@ -2305,7 +1877,7 @@ bool aabb_cube_intersects(const obj_AABB *aabb,const solid<repr> *c) {
 bool aabb_sphere_intersects(const obj_AABB *aabb,const solid<repr> *s) {
     n_vector box_p = s->position - s->inv_orientation * ((aabb->start + aabb->end) * 0.5);
             
-    n_vector closest(aabb->dimension(),REAL(0));
+    n_vector closest(aabb->dimension(),0);
     
     for(int i=0; i<aabb->dimension(); ++i) {
         // equivalent to: s->orientation.transpose() * n_vector::axis(i,(aabb->end[i] - aabb->start[i])/2)
@@ -2314,6 +1886,19 @@ bool aabb_sphere_intersects(const obj_AABB *aabb,const solid<repr> *s) {
     }
     
     return (s->position - closest).square() <= 1;
+}
+
+PyObject *intersect_type_error(PyObject *o) {
+    if(PyObject_TypeCheck(o,&triangle_common::pytype)) {
+        PyErr_SetString(PyExc_TypeError,
+            "Instances of Triangle cannot be used directly. Use TrianglePrototype instead.");
+        return NULL;
+    }
+    
+    PyErr_SetString(PyExc_TypeError,
+        "object must be an instance of " MODULE_STR ".TrianglePrototype or "
+        MODULE_STR ".Solid");
+    return NULL;
 }
 
 PyObject *obj_AABB_intersects(obj_AABB *self,PyObject *obj) {
@@ -2345,17 +1930,8 @@ PyObject *obj_AABB_intersects(obj_AABB *self,PyObject *obj) {
             assert(solid_obj->type == SPHERE);
             return to_pyobject(aabb_sphere_intersects(self,solid_obj));
         }
-        
-        if(PyObject_TypeCheck(obj,&triangle_common::pytype)) {
-            PyErr_SetString(PyExc_TypeError,
-                "Instances of Triangle cannot be used directly. Use TrianglePrototype instead.");
-            return NULL;
-        }
-        
-        PyErr_SetString(PyExc_TypeError,
-            "object must be an instance of " MODULE_STR ".TrianglePrototype or "
-            MODULE_STR ".Solid");
-        return NULL;
+
+        return intersect_type_error(obj);
     } PY_EXCEPT_HANDLERS(NULL)
 }
 
@@ -2386,7 +1962,7 @@ PyObject *obj_AABB_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
                 if(dimension != start.dimension())
                     THROW_PYERR_STRING(TypeError,"\"start\" has a dimension different from \"dimension\"");
                 new(&ptr->start) n_vector(start);
-            } else new(&ptr->start) n_vector(dimension,std::numeric_limits<REAL>::lowest());
+            } else new(&ptr->start) n_vector(dimension,std::numeric_limits<real>::lowest());
         
 
             if(end_obj) {
@@ -2394,7 +1970,7 @@ PyObject *obj_AABB_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
                 if(dimension != end.dimension())
                     THROW_PYERR_STRING(TypeError,"\"end\" has a dimension different from \"dimension\"");
                 new(&ptr->end) n_vector(end);
-            } else new(&ptr->end) n_vector(dimension,std::numeric_limits<REAL>::max());
+            } else new(&ptr->end) n_vector(dimension,std::numeric_limits<real>::max());
  
         } catch(...) {
             Py_DECREF(ptr);
@@ -2411,46 +1987,13 @@ PyGetSetDef obj_AABB_getset[] = {
     {NULL}
 };
 
-PyTypeObject obj_AABB::pytype = {
-    PyVarObject_HEAD_INIT(NULL,0)
-    MODULE_STR ".AABB",           /* tp_name */
-    sizeof(obj_AABB),             /* tp_basicsize */
-    0,                            /* tp_itemsize */
-    destructor_dealloc<obj_AABB>::value, /* tp_dealloc */
-    NULL,                         /* tp_print */
-    NULL,                         /* tp_getattr */
-    NULL,                         /* tp_setattr */
-    NULL,                         /* tp_compare */
-    NULL,                         /* tp_repr */
-    NULL,                         /* tp_as_number */
-    NULL,                         /* tp_as_sequence */
-    NULL,                         /* tp_as_mapping */
-    NULL,                         /* tp_hash */
-    NULL,                         /* tp_call */
-    NULL,                         /* tp_str */
-    NULL,                         /* tp_getattro */
-    NULL,                         /* tp_setattro */
-    NULL,                         /* tp_as_buffer */
-    Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE|Py_TPFLAGS_CHECKTYPES, /* tp_flags */
-    NULL,                         /* tp_doc */
-    NULL,                         /* tp_traverse */
-    NULL,                         /* tp_clear */
-    NULL,                         /* tp_richcompare */
-    0,                            /* tp_weaklistoffset */
-    NULL,                         /* tp_iter */
-    NULL,                         /* tp_iternext */
-    obj_AABB_methods,             /* tp_methods */
-    NULL,                         /* tp_members */
-    obj_AABB_getset,              /* tp_getset */
-    NULL,                         /* tp_base */
-    NULL,                         /* tp_dict */
-    NULL,                         /* tp_descr_get */
-    NULL,                         /* tp_descr_set */
-    0,                            /* tp_dictoffset */
-    NULL,                         /* tp_init */
-    NULL,                         /* tp_alloc */
-    &obj_AABB_new                 /* tp_new */
-};
+PyTypeObject obj_AABB::pytype = make_type_object(
+    MODULE_STR ".AABB",
+    sizeof(obj_AABB),
+    tp_dealloc = destructor_dealloc<obj_AABB>::value,
+    tp_methods = obj_AABB_methods,
+    tp_getset = obj_AABB_getset,
+    tp_new = &obj_AABB_new);
 
 
 PyObject *obj_TrianglePrototype_realize(obj_TrianglePrototype *self,PyObject*) {
@@ -2486,10 +2029,10 @@ PyObject *obj_TrianglePrototype_new(PyTypeObject *type,PyObject *args,PyObject *
             
             repr::smaller_init_array<n_vector> vsides(dim-1,[&](int i) -> n_vector { return points[i+1] - points[0]; });
             new(&ptr->face_normal) n_vector(dim);
-            impl::cross(ptr->face_normal,tmp,static_cast<n_vector*>(vsides));
+            ::impl::cross(ptr->face_normal,tmp,static_cast<n_vector*>(vsides));
             auto square = ptr->face_normal.square();
             
-            new(&ptr->items()[0]) triangle_point(points[0],n_vector(dim,REAL(0)));
+            new(&ptr->items()[0]) triangle_point(points[0],n_vector(dim,0));
             
             for(int i=1; i<dim; ++i) {
                 auto old = vsides[i-1];
@@ -2497,7 +2040,7 @@ PyObject *obj_TrianglePrototype_new(PyTypeObject *type,PyObject *args,PyObject *
                 
                 new(&ptr->items()[i]) triangle_point(points[i],n_vector(dim));
                 
-                impl::cross(ptr->items()[i].edge_normal,tmp,static_cast<n_vector*>(vsides));
+                ::impl::cross(ptr->items()[i].edge_normal,tmp,static_cast<n_vector*>(vsides));
                 vsides[i-1] = old;
                 ptr->items()[i].edge_normal /= square;
                 
@@ -2517,52 +2060,20 @@ PyGetSetDef obj_TrianglePrototype_getset[] = {
     {NULL}
 };
 
-PyTypeObject obj_TrianglePrototype::pytype = {
-    PyVarObject_HEAD_INIT(NULL,0)
-    MODULE_STR ".TrianglePrototype", /* tp_name */
-    obj_TrianglePrototype::base_size, /* tp_basicsize */
-    obj_TrianglePrototype::item_size, /* tp_itemsize */
-    destructor_dealloc<obj_TrianglePrototype>::value, /* tp_dealloc */
-    NULL,                         /* tp_print */
-    NULL,                         /* tp_getattr */
-    NULL,                         /* tp_setattr */
-    NULL,                         /* tp_compare */
-    NULL,                         /* tp_repr */
-    NULL,                         /* tp_as_number */
-    NULL,                         /* tp_as_sequence */
-    NULL,                         /* tp_as_mapping */
-    NULL,                         /* tp_hash */
-    NULL,                         /* tp_call */
-    NULL,                         /* tp_str */
-    NULL,                         /* tp_getattro */
-    NULL,                         /* tp_setattro */
-    NULL,                         /* tp_as_buffer */
-    Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE|Py_TPFLAGS_CHECKTYPES, /* tp_flags */
-    NULL,                         /* tp_doc */
-    NULL,                         /* tp_traverse */
-    NULL,                         /* tp_clear */
-    NULL,                         /* tp_richcompare */
-    0,                            /* tp_weaklistoffset */
-    NULL,                         /* tp_iter */
-    NULL,                         /* tp_iternext */
-    obj_TrianglePrototype_methods, /* tp_methods */
-    NULL,                         /* tp_members */
-    obj_TrianglePrototype_getset, /* tp_getset */
-    NULL,                         /* tp_base */
-    NULL,                         /* tp_dict */
-    NULL,                         /* tp_descr_get */
-    NULL,                         /* tp_descr_set */
-    0,                            /* tp_dictoffset */
-    NULL,                         /* tp_init */
-    NULL,                         /* tp_alloc */
-    &obj_TrianglePrototype_new    /* tp_new */
-};
+PyTypeObject obj_TrianglePrototype::pytype = make_type_object(
+    MODULE_STR ".TrianglePrototype",
+    obj_TrianglePrototype::base_size,
+    tp_itemsize = obj_TrianglePrototype::item_size,
+    tp_dealloc = destructor_dealloc<obj_TrianglePrototype>::value,
+    tp_methods = obj_TrianglePrototype_methods,
+    tp_getset = obj_TrianglePrototype_getset,
+    tp_new = &obj_TrianglePrototype_new);
 
 
-PyObject *obj_Vector_dot(PyObject*,PyObject *args,PyObject *kwds) {
+PyObject *obj_dot(PyObject*,PyObject *args,PyObject *kwds) {
     try {
         const char *names[] = {"a","b"};
-        get_arg ga(args,kwds,names,"Vector.dot");
+        get_arg ga(args,kwds,names,"dot");
         auto a = from_pyobject<n_vector>(ga(true));
         auto b = from_pyobject<n_vector>(ga(true));
         ga.finished();
@@ -2601,9 +2112,74 @@ PyObject *obj_cross(PyObject*,PyObject *arg) {
     } PY_EXCEPT_HANDLERS(NULL)
 }
 
+PyObject *obj_axis_intersection(PyObject*,PyObject *args,PyObject *kwds) {
+    const char *range_err = "axis is out of range";
+    
+    try {
+        const char *names[] = {"axis","position","primitive"};
+        get_arg ga(args,kwds,names,"axis_intersection");
+        auto axis = from_pyobject<int>(ga(true));
+        auto position = from_pyobject<real>(ga(true));
+        auto p = ga(true);
+        ga.finished();
+        
+        if(axis < 0) THROW_PYERR_STRING(TypeError,range_err);
+        
+        int r;
+        
+        if(PyObject_TypeCheck(p,&obj_TrianglePrototype::pytype)) {
+            auto tp = reinterpret_cast<obj_TrianglePrototype*>(p);
+            
+            if(axis >= tp->dimension()) THROW_PYERR_STRING(TypeError,range_err);
+            
+            r = 1;
+            
+            for(auto &point : tp->items()) {
+                if(point.point[axis] <= position) {
+                    r = -1;
+                    for(auto &point : tp->items()) {
+                        if(point.point[axis] >= position) {
+                            r = 0;
+                            break;
+                        }
+                    }
+                    break;
+                }
+            }
+        } else if(PyObject_TypeCheck(p,&solid_common::pytype)) {
+            auto solid_obj = reinterpret_cast<solid<repr>*>(p);
+            
+            if(axis >= solid_obj->dimension()) THROW_PYERR_STRING(TypeError,range_err);
+            
+            r = 0;
+        
+            if(solid_obj->type == CUBE) {
+                real max = 0;
+                for(int i=0; i<solid_obj->dimension(); ++i) max += std::abs(cube_component(solid_obj,i)[axis]);
+                
+                if(position > solid_obj->position[axis] + max) r = 1;
+                else if(position < solid_obj->position[axis] - max) r = -1;
+            } else {
+                assert(solid_obj->type == SPHERE);
+                real plane_dist = dot(
+                    solid_obj->inv_orientation * (n_vector::axis(solid_obj->dimension(),axis,position) - solid_obj->position),
+                    solid_obj->orientation[axis].unit());
+
+                if(plane_dist < -1) r = -1;
+                else if(plane_dist > 1) r = 1;
+            }
+        } else {
+            return intersect_type_error(p);
+        }
+        
+        return to_pyobject(r);
+    } PY_EXCEPT_HANDLERS(NULL)
+}
+
 PyMethodDef func_table[] = {
-    {"dot",reinterpret_cast<PyCFunction>(&obj_Vector_dot),METH_VARARGS|METH_KEYWORDS,NULL},
+    {"dot",reinterpret_cast<PyCFunction>(&obj_dot),METH_VARARGS|METH_KEYWORDS,NULL},
     {"cross",&obj_cross,METH_O,NULL},
+    {"axis_intersection",reinterpret_cast<PyCFunction>(&obj_axis_intersection),METH_VARARGS|METH_KEYWORDS,NULL},
     {NULL}
 };
 

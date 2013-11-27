@@ -6,6 +6,7 @@
 #include <structmember.h>
 #include <new>
 #include <limits>
+#include <utility>
 #include <type_traits>
 
 
@@ -130,12 +131,19 @@ template<typename T> inline T py_to_xint(PyObject *po);
 
 #if PY_MAJOR_VERSION >= 3
     #define _compat_Int_FromLong PyLong_FromLong
+    inline bool is_int_or_long(PyObject *x) {
+        return PyLong_Check(x) != 0;
+    }
+
     #define Py_TPFLAGS_CHECKTYPES 0
 
     #define PYBYTES(X) PyBytes_ ## X
     #define PYSTR(X) PyUnicode_ ## X
 #else
     #define _compat_Int_FromLong PyInt_FromLong
+    inline bool is_int_or_long(PyObject *x) {
+        return PyInt_Check(x) or PyLong_Check(x);
+    }
 
     #define PYBYTES(X) PyString_ ## X
     #define PYSTR(X) PyString_ ## X
@@ -344,6 +352,148 @@ inline void setter_no_delete(PyObject *arg) {
 inline void add_class(PyObject *module,const char *name,PyTypeObject *type) {
     Py_INCREF(type);
     PyModule_AddObject(module,name,reinterpret_cast<PyObject*>(type));
+}
+
+
+namespace type_object_abbrev {
+    namespace impl {
+        //template<typename T> constexpr T get_param() {
+        //    return T();
+        //}
+
+        //template<typename T,typename _,typename... Params> constexpr T get_param(const T &param,const Params&...) {
+        //    return param;
+        //}
+        
+        //template<typename T,typename Param1,typename... Params> constexpr T get_param(const Param1&,const Params&... params) {
+        //    return get_param<T,Params...>(params...);
+        //}
+
+        /* GCC 4.7.2 has a problem with variadic template function parameters.
+           This is a work-around: */
+        template<typename T,typename... Params> struct get_param;
+        
+        template<typename T> struct get_param<T> {
+            static constexpr T _() { return T(); }
+        };
+        
+        template<typename T,typename... Params> struct get_param<T,T,Params...> {
+            static constexpr T _(const T &param,const Params&...) {
+                return param;
+            }
+        };
+
+        template<typename T,typename Param1,typename... Params> struct get_param<T,Param1,Params...> {
+            static constexpr T _(const Param1&,const Params&... params) {
+                return get_param<T,Params...>::_(params...);
+            }
+        };
+        
+        template<size_t unique,typename T,T Default> struct simple_param {
+            T value;
+            constexpr simple_param(T value = Default) : value(value) {}
+            constexpr simple_param<unique,T,Default> operator=(T v) { return v; }
+        };
+        
+        template<size_t unique,typename T> struct generic_func_param {};
+        template<size_t unique,typename Ret,typename Arg1,typename... Args> struct generic_func_param<unique,Ret (*)(Arg1,Args...)> {
+            typedef Ret (*original_t)(Arg1,Args...);
+            template<typename T> using derived_t = Ret (*)(T,Args...);
+            
+            original_t value;
+            constexpr generic_func_param(original_t value = nullptr) : value(value) {}
+            template<typename T> constexpr generic_func_param<unique,original_t> operator=(derived_t<T> v) { return reinterpret_cast<original_t>(v); }
+        };
+    }
+    
+#define SIMPLE_PARAM(NAME,DEFAULT) constexpr impl::simple_param<offsetof(PyTypeObject,NAME),decltype(std::declval<PyTypeObject>().NAME),DEFAULT> NAME
+#define GENERIC_FUNC_PARAM(NAME) constexpr impl::generic_func_param<offsetof(PyTypeObject,NAME),decltype(std::declval<PyTypeObject>().NAME)> NAME
+    
+    SIMPLE_PARAM(tp_itemsize,0);
+    GENERIC_FUNC_PARAM(tp_dealloc);
+    GENERIC_FUNC_PARAM(tp_print);
+    GENERIC_FUNC_PARAM(tp_repr);
+    SIMPLE_PARAM(tp_as_number,nullptr);
+    SIMPLE_PARAM(tp_as_sequence,nullptr);
+    SIMPLE_PARAM(tp_as_mapping,nullptr);
+    GENERIC_FUNC_PARAM(tp_hash);
+    GENERIC_FUNC_PARAM(tp_call);
+    GENERIC_FUNC_PARAM(tp_str);
+    GENERIC_FUNC_PARAM(tp_getattro);
+    GENERIC_FUNC_PARAM(tp_setattro);
+    SIMPLE_PARAM(tp_as_buffer,nullptr);
+    SIMPLE_PARAM(tp_flags,Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE|Py_TPFLAGS_CHECKTYPES);
+    SIMPLE_PARAM(tp_doc,nullptr);
+    GENERIC_FUNC_PARAM(tp_traverse);
+    GENERIC_FUNC_PARAM(tp_clear);
+    GENERIC_FUNC_PARAM(tp_richcompare);
+    SIMPLE_PARAM(tp_weaklistoffset,0);
+    GENERIC_FUNC_PARAM(tp_iter);
+    GENERIC_FUNC_PARAM(tp_iternext);
+    SIMPLE_PARAM(tp_methods,nullptr);
+    SIMPLE_PARAM(tp_members,nullptr);
+    SIMPLE_PARAM(tp_getset,nullptr);
+    SIMPLE_PARAM(tp_base,nullptr);
+    SIMPLE_PARAM(tp_dict,nullptr);
+    GENERIC_FUNC_PARAM(tp_descr_get);
+    GENERIC_FUNC_PARAM(tp_descr_set);
+    SIMPLE_PARAM(tp_dictoffset,0);
+    GENERIC_FUNC_PARAM(tp_init);
+    SIMPLE_PARAM(tp_alloc,nullptr);
+    SIMPLE_PARAM(tp_new,nullptr);
+    SIMPLE_PARAM(tp_free,nullptr);
+    GENERIC_FUNC_PARAM(tp_is_gc);
+    
+#undef SIMPLE_PARAM
+#undef GENERIC_FUNC_PARAM
+    
+#define GET_PARAM(P) impl::get_param<std::decay<decltype(P)>::type,Params...>::_(params...).value
+    
+    template<typename... Params> constexpr PyTypeObject make_type_object(const char *name,int basic_size,const Params&... params) {
+        return {
+            PyVarObject_HEAD_INIT(NULL,0)
+            name, // tp_name
+            basic_size, // tp_basicsize
+            GET_PARAM(tp_itemsize),
+            GET_PARAM(tp_dealloc),
+            GET_PARAM(tp_print),
+            nullptr, // tp_getattr (deprecated)
+            nullptr, // tp_setattr (deprecated)
+            nullptr, // tp_compare (obsolete)
+            GET_PARAM(tp_repr),
+            GET_PARAM(tp_as_number),
+            GET_PARAM(tp_as_sequence),
+            GET_PARAM(tp_as_mapping),
+            GET_PARAM(tp_hash),
+            GET_PARAM(tp_call),
+            GET_PARAM(tp_str),
+            GET_PARAM(tp_getattro),
+            GET_PARAM(tp_setattro),
+            GET_PARAM(tp_as_buffer),
+            GET_PARAM(tp_flags),
+            GET_PARAM(tp_doc),
+            GET_PARAM(tp_traverse),
+            GET_PARAM(tp_clear),
+            GET_PARAM(tp_richcompare),
+            GET_PARAM(tp_weaklistoffset),
+            GET_PARAM(tp_iter),
+            GET_PARAM(tp_iternext),
+            GET_PARAM(tp_methods),
+            GET_PARAM(tp_members),
+            GET_PARAM(tp_getset),
+            GET_PARAM(tp_base),
+            GET_PARAM(tp_dict),
+            GET_PARAM(tp_descr_get),
+            GET_PARAM(tp_descr_set),
+            GET_PARAM(tp_dictoffset),
+            GET_PARAM(tp_init),
+            GET_PARAM(tp_alloc),
+            GET_PARAM(tp_new),
+            GET_PARAM(tp_free),
+            GET_PARAM(tp_is_gc)
+        };
+    }
+#undef GET_PARAM
 }
 
 #endif

@@ -814,7 +814,7 @@ namespace py {
     }
 
 
-    template<typename T> class array_adapter {
+    template<typename T> struct array_adapter {
         const object origin;
         const size_t size;
         T *const items;
@@ -822,7 +822,6 @@ namespace py {
             if(i < 0 || size_t(i) >= size) THROW_PYERR_STRING(IndexError,"index out of range");
         }
 
-    public:
         array_adapter(PyObject *origin,size_t size,T *items) : origin(borrowed_ref(origin)), size(size), items(items) {}
         T &sequence_getitem(Py_ssize_t i) const { 
             index_check(i);

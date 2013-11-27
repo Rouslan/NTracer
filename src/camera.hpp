@@ -7,7 +7,7 @@
 template<class Store> struct _camera {
     typedef typename Store::vector_t vector_t;
     
-    _camera(int d) : store(d,vector_t(d,REAL(0)),[d](int i){ return vector_t::axis(d,i); }) {}
+    _camera(int d) : store(d,vector_t(d,0),[d](int i){ return vector_t::axis(d,i); }) {}
     template<typename F> _camera(int d,const vector_t &origin,F axes) : store(d,origin,axes) {}
     _camera(int d,const vector_t &origin,const vector_t *axes) : store(d,origin,[axes](int i){ return axes[i]; }) {}
     _camera(const Store &store) : store(store) {}
@@ -17,10 +17,10 @@ template<class Store> struct _camera {
     }
     
     void normalize() {
-        typename Store::smaller_array new_axes(dimension()-1,[this](int i){
-            vector_t x(this->dimension(),REAL(0));
+        typename Store::smaller_array new_axes(dimension()-1,[this](int i) -> vector_t {
+            vector_t x(this->dimension(),0);
             for(int j=0; j<i; ++j) x += dot(this->axes()[i+1],this->axes()[j]) * this->axes()[j];
-            return vector_t(this->axes()[i+1] - x);
+            return this->axes()[i+1] - x;
         });
 
         axes()[0].normalize();

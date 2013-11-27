@@ -24,7 +24,7 @@ public:
 
 //Ray operator*(const Matrix &mat,const Ray &ray);
 
-template<typename Repr> REAL hypercube_intersects(const ray<Repr> &target,ray<Repr> &normal);
+template<typename Repr> real hypercube_intersects(const ray<Repr> &target,ray<Repr> &normal);
 template<typename Repr> color background_color(const typename Repr::vector_t &dir);
 
 template<typename Repr> class BoxScene : public Scene {
@@ -32,22 +32,22 @@ public:
     typedef typename Repr::vector_t vector_t;
     
     bool locked;
-    REAL fov;
+    real fov;
     
     typename Repr::camera_t camera;
 
     BoxScene(int d) : locked(false), fov(0.8), camera(d) {}
     
     color calculate_color(int x,int y,int w,int h) const {
-        REAL fovI = (2 * std::tan(fov/2)) / w;
+        real fovI = (2 * std::tan(fov/2)) / w;
 
         ray<Repr> view = ray<Repr>(
             camera.origin(),
             (camera.forward() + camera.right() * (fovI * (x - w/2)) - camera.up() * (fovI * (y - h/2))).unit());
         ray<Repr> normal(dimension());
         if(hypercube_intersects<Repr>(view,normal)) {
-            REAL sine = dot(view.direction,normal.direction);
-            return (sine <= REAL(0) ? -sine : REAL(0)) * color(1.0f,0.5f,0.5f);
+            real sine = dot(view.direction,normal.direction);
+            return (sine <= 0 ? -sine : real(0)) * color(1.0f,0.5f,0.5f);
         }
         return background_color<Repr>(view.direction);
     }
@@ -58,19 +58,19 @@ public:
     void unlock() throw() { locked = false; }
 };
 
-template<typename Repr> REAL hypercube_intersects(const ray<Repr> &target,ray<Repr> &normal) {
+template<typename Repr> real hypercube_intersects(const ray<Repr> &target,ray<Repr> &normal) {
     assert(target.dimension() == normal.dimension());
     
     for(int i=0; i<target.dimension(); ++i) {
         if(target.direction[i]) {
             if(target.direction[i]) {
-                normal.origin[i] = target.direction[i] < 0 ? REAL(1) : REAL(-1);
-                REAL dist = (normal.origin[i] - target.origin[i]) / target.direction[i];
+                normal.origin[i] = target.direction[i] < 0 ? 1 : -1;
+                real dist = (normal.origin[i] - target.origin[i]) / target.direction[i];
                 if(dist > 0) {
                     for(int j=0; j<target.dimension(); ++j) {
                         if(i != j) {
                             normal.origin[j] = target.direction[j] * dist + target.origin[j];
-                            if(std::abs(normal.origin[j]) > REAL(1)) goto miss;
+                            if(std::abs(normal.origin[j]) > 1) goto miss;
                         }
                     }
                     normal.direction = Repr::vector_t::axis(target.dimension(),i,normal.origin[i]);
@@ -85,15 +85,15 @@ template<typename Repr> REAL hypercube_intersects(const ray<Repr> &target,ray<Re
     return 0;
 }
 
-template<typename Repr> REAL hypersphere_intersects(const ray<Repr> &target,ray<Repr> &normal) {
-    REAL a = target.direction.square();
-    REAL b = 2 * dot(target.direction,target.origin);
-    REAL c = target.origin.square() - 1;
+template<typename Repr> real hypersphere_intersects(const ray<Repr> &target,ray<Repr> &normal) {
+    real a = target.direction.square();
+    real b = 2 * dot(target.direction,target.origin);
+    real c = target.origin.square() - 1;
     
-    REAL discriminant = b*b - 4*a*c;
+    real discriminant = b*b - 4*a*c;
     if(discriminant < 0) return 0;
     
-    REAL dist = (-b - std::sqrt(discriminant)) / (2 * a);
+    real dist = (-b - std::sqrt(discriminant)) / (2 * a);
     if(dist <= 0) return 0;
     
     normal.direction = normal.origin = target.origin + target.direction * dist;
@@ -115,7 +115,7 @@ template<typename Repr> typename Repr::py_vector_t cross(int d,const typename Re
 }*/
 
 template<typename Repr> struct primitive {
-    REAL intersects(const ray<Repr> &target,ray<Repr> &normal) const;
+    real intersects(const ray<Repr> &target,ray<Repr> &normal) const;
     int dimension() const;
     
 protected:
@@ -150,10 +150,10 @@ template<typename Repr> struct solid : solid_common, primitive<Repr> {
     
     solid(solid_type type,matrix_t o,vector_t p) : solid(type,o,o.inverse(),p) {}
     
-    REAL intersects(const ray<Repr> &target,ray<Repr> &normal) const {
+    real intersects(const ray<Repr> &target,ray<Repr> &normal) const {
         ray<Repr> transformed(target.origin - position,inv_orientation * target.direction);
         
-        REAL dist;
+        real dist;
         if(type == CUBE) {
             dist = hypercube_intersects(transformed,normal);
             if(!dist) return 0;
@@ -205,7 +205,7 @@ template<typename Repr> struct triangle : triangle_common, primitive<Repr>, TRIA
     typedef typename Repr::vector_t vector_t;
     typedef typename Repr::py_vector_t py_vector_t;
     
-    REAL d;
+    real d;
     py_vector_t p1;
     py_vector_t face_normal;
     
@@ -213,19 +213,19 @@ template<typename Repr> struct triangle : triangle_common, primitive<Repr>, TRIA
         return p1.dimension();
     }
     
-    REAL intersects(const ray<Repr> &target,ray<Repr> &normal) const {
-        REAL denom = dot(face_normal,target.direction);
+    real intersects(const ray<Repr> &target,ray<Repr> &normal) const {
+        real denom = dot(face_normal,target.direction);
         if(!denom) return 0;
         
-        REAL t = -(dot(face_normal,target.origin) + d) / denom;
+        real t = -(dot(face_normal,target.origin) + d) / denom;
         if(t <= 0) return 0;
         
         vector_t P = target.origin + t * target.direction;
         vector_t pside = p1 - P;
         
-        REAL tot_area = 0;
+        real tot_area = 0;
         for(auto &edge : this->items()) {
-            REAL area = dot(edge,pside);
+            real area = dot(edge,pside);
             if(area < 0 || area > 1) return 0;
             tot_area += area;
         }
@@ -247,7 +247,7 @@ template<typename Repr> struct triangle : triangle_common, primitive<Repr>, TRIA
         typename Repr::template smaller_init_array<vector_t> vsides(n-1,[&P1,points](int i) -> vector_t { return points[i+1] - P1; });
         py_vector_t N(n);
         impl::cross(N,tmp,static_cast<vector_t*>(vsides));
-        REAL square = N.square();
+        real square = N.square();
         
         return create(P1,N,[&,square](int i) -> py_vector_t {
             vector_t old = vsides[i];
@@ -272,7 +272,7 @@ private:
     }
 };
 
-template<typename Repr> REAL primitive<Repr>::intersects(const ray<Repr> &target,ray<Repr> &normal) const {
+template<typename Repr> real primitive<Repr>::intersects(const ray<Repr> &target,ray<Repr> &normal) const {
     if(Py_TYPE(this) == &triangle_common::pytype) return static_cast<const triangle<Repr>*>(this)->intersects(target,normal);
     
     assert(Py_TYPE(this) == &solid_common::pytype);
@@ -296,7 +296,7 @@ template<typename Repr> struct kd_node {
        manually */
     node_type type;
     
-    bool intersects(const ray<Repr> &target,ray<Repr> &normal,REAL t_near,REAL t_far,int cur_d) const;
+    bool intersects(const ray<Repr> &target,ray<Repr> &normal,real t_near,real t_far,int cur_d) const;
     
     void *operator new(size_t size) {
         return py::malloc(size);
@@ -311,20 +311,20 @@ protected:
 };
 
 template<typename Repr> struct kd_branch : kd_node<Repr> {
-    REAL split;
+    real split;
     std::unique_ptr<kd_node<Repr> > left; // < split
     std::unique_ptr<kd_node<Repr> > right; // > split
     
-    kd_branch(REAL split,kd_node<Repr> *left,kd_node<Repr> *right) : kd_node<Repr>(BRANCH), split(split), left(left), right(right) {}
-    kd_branch(REAL split,std::unique_ptr<kd_node<Repr> > &&left,std::unique_ptr<kd_node<Repr> > &&right) : kd_node<Repr>(BRANCH), split(split), left(left), right(right) {}
+    kd_branch(real split,kd_node<Repr> *left,kd_node<Repr> *right) : kd_node<Repr>(BRANCH), split(split), left(left), right(right) {}
+    kd_branch(real split,std::unique_ptr<kd_node<Repr> > &&left,std::unique_ptr<kd_node<Repr> > &&right) : kd_node<Repr>(BRANCH), split(split), left(left), right(right) {}
     
-    bool intersects(const ray<Repr> &target,ray<Repr> &normal,REAL t_near,REAL t_far,int cur_d) const {
+    bool intersects(const ray<Repr> &target,ray<Repr> &normal,real t_near,real t_far,int cur_d) const {
         assert(target.dimension() == normal.dimension());
         
         cur_d = (cur_d + 1) % target.dimension();
         
         if(target.direction[cur_d]) {
-            REAL t = (split - target.origin[cur_d]) / target.direction[cur_d];
+            real t = (split - target.origin[cur_d]) / target.direction[cur_d];
             
             auto n_near = left.get();
             auto n_far = right.get();
@@ -333,7 +333,7 @@ template<typename Repr> struct kd_branch : kd_node<Repr> {
                 n_far = left.get();
             }
 
-            if(t < REAL(0) || t >= t_far) return n_near->intersects(target,normal,t_near,t_far,cur_d);
+            if(t < 0 || t >= t_far) return n_near->intersects(target,normal,t_near,t_far,cur_d);
             if(t <= t_near) return n_far->intersects(target,normal,t_near,t_far,cur_d);
         
             if(n_near->intersects(target,normal,t_near,t,cur_d)) return true;
@@ -370,7 +370,7 @@ template<typename Repr> struct kd_leaf : kd_node<Repr>, flexible_struct<kd_leaf<
     bool intersects(const ray<Repr> &target,ray<Repr> &normal) const {
         assert(dimension() == target.dimension() && dimension() == normal.dimension());
         
-        REAL dist;
+        real dist;
         size_t i=0;
         for(; i<size; ++i) {
             dist = items()[i]->intersects(target,normal);
@@ -380,7 +380,7 @@ template<typename Repr> struct kd_leaf : kd_node<Repr>, flexible_struct<kd_leaf<
         
     hit:
         // is there anything closer?
-        REAL new_dist;
+        real new_dist;
         ray<Repr> new_normal(target.dimension());
         for(; i<size; ++i) {
             new_dist = items()[i]->intersects(target,new_normal);
@@ -409,7 +409,7 @@ private:
     }
 };
 
-template<typename Repr> bool kd_node<Repr>::intersects(const ray<Repr> &target,ray<Repr> &normal,REAL t_near,REAL t_far,int cur_d) const {
+template<typename Repr> bool kd_node<Repr>::intersects(const ray<Repr> &target,ray<Repr> &normal,real t_near,real t_far,int cur_d) const {
     if(type == LEAF) return static_cast<const kd_leaf<Repr>*>(this)->intersects(target,normal);
     
     assert(type == BRANCH);
@@ -421,22 +421,22 @@ template<typename Repr> struct composite_scene : Scene {
     typedef typename Repr::vector_t vector_t;
     
     bool locked;
-    REAL fov;
+    real fov;
     typename Repr::camera_t camera;
     std::unique_ptr<kd_node<Repr> > root;
 
     composite_scene(int d,kd_node<Repr> *data) : locked(false), fov(0.8), camera(d), root(data) {}
     
     color calculate_color(int x,int y,int w,int h) const {
-        REAL fovI = (2 * std::tan(fov/2)) / w;
+        real fovI = (2 * std::tan(fov/2)) / w;
 
         ray<Repr> view = ray<Repr>(
             camera.origin(),
             (camera.forward() + camera.right() * (fovI * (x - w/2)) - camera.up() * (fovI * (y - h/2))).unit());
         ray<Repr> normal(dimension());
         if(root->intersects(view,normal,-INFINITY,INFINITY,-1)) {
-            REAL sine = dot(view.direction,normal.direction);
-            return (sine <= REAL(0) ? -sine : REAL(0)) * color(1.0f,0.5f,0.5f);
+            real sine = dot(view.direction,normal.direction);
+            return (sine <= 0 ? -sine : real(0)) * color(1.0f,0.5f,0.5f);
         }
         return background_color<Repr>(view.direction);
     }
@@ -448,8 +448,8 @@ template<typename Repr> struct composite_scene : Scene {
 };
 
 template<typename Repr> color background_color(const typename Repr::vector_t &dir) {
-    REAL intensity = dot(dir,Repr::vector_t::axis(dir.dimension(),0));
-    return intensity > REAL(0) ? color(intensity,intensity,intensity) :
+    real intensity = dot(dir,Repr::vector_t::axis(dir.dimension(),0));
+    return intensity > 0 ? color(intensity,intensity,intensity) :
         color(0.0f,-intensity,-intensity);
 }
 

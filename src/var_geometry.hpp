@@ -187,19 +187,19 @@ namespace var {
     struct matrix_obj : matrix_obj_base {
         PyObject_VAR_HEAD
         int dimension;
-        REAL items[1];
+        real items[1];
         
         inline py_matrix cast_base();
         inline py_matrix get_base();
         
-        static const size_t item_size = sizeof(REAL);
+        static const size_t item_size = sizeof(real);
         
         typedef py_matrix ref_type;
     };
 
     struct matrix_store {
         typedef matrix_obj obj_t;
-        typedef vector_store<REAL> v_store;
+        typedef vector_store<real> v_store;
         
         struct pivot_buffer {
             int *data;
@@ -228,7 +228,7 @@ namespace var {
         
         template<class F> static void rep1(int d,F f) { ::rep(d,f); }
 
-        REAL *operator[](int n) const { return data->items + n*dimension(); }
+        real *operator[](int n) const { return data->items + n*dimension(); }
 
         int dimension() const { return data->dimension; }
         
@@ -247,26 +247,26 @@ namespace var {
 
         PyObject *idict;
         PyObject *weaklist;
-        py_vector<REAL> origin;
-        py_vector<REAL> axes[1];
+        py_vector<real> origin;
+        py_vector<real> axes[1];
         
         inline _camera<camera_store> cast_base();
         inline _camera<camera_store> get_base();
         
-        static const size_t item_size = sizeof(py_vector<REAL>);
+        static const size_t item_size = sizeof(py_vector<real>);
         
         typedef _camera<camera_store> ref_type;
         
         void dealloc() {
-            origin.~py_vector<REAL>();
-            for(int i=0; i<Py_SIZE(this); ++i) axes[i].~py_vector<REAL>();
+            origin.~py_vector<real>();
+            for(int i=0; i<Py_SIZE(this); ++i) axes[i].~py_vector<real>();
         }
         
         inline void alloc(int d);
     };
     
     struct camera_store {
-        typedef py_vector<REAL> vector_t;
+        typedef py_vector<real> vector_t;
         typedef init_array<vector_t> smaller_array;
 
         py::object obj;
@@ -313,7 +313,7 @@ namespace var {
     inline _camera<camera_store> camera_obj::get_base() { return cast_base(); }
     
     inline void camera_obj::alloc(int d) {
-        auto blank_v = [d](int i){ return py_vector<REAL>(d); };
+        auto blank_v = [d](int i){ return py_vector<real>(d); };
         camera_store(d,blank_v(0),blank_v,reinterpret_cast<PyObject*>(this));
     }
     
@@ -378,17 +378,17 @@ namespace var {
     };
     
     struct repr {
-        typedef py_vector<REAL> py_vector_t;
+        typedef py_vector<real> py_vector_t;
         typedef py_matrix py_matrix_t;
         
-        typedef vector<REAL> vector_t;
+        typedef vector<real> vector_t;
         typedef matrix matrix_t;
         
         typedef _camera<camera_store> camera_t;
         
         static const int required_d = 0;
         
-        typedef var::vector_obj<REAL> vector_obj;
+        typedef var::vector_obj<real> vector_obj;
         typedef var::matrix_obj matrix_obj;
         typedef var::camera_obj camera_obj;
         

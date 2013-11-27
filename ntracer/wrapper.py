@@ -32,7 +32,7 @@ def matrix_wrapper(mod,dim):
         
         @staticmethod
         def scale(factor):
-            if isinstance(factor,_nt.Vector):
+            if isinstance(factor,mod.Vector):
                 return base.scale(factor)
             return base.scale(dim,factor)
         
@@ -119,7 +119,8 @@ class NTracer(object):
                 'Triangle',
                 'TrianglePrototype',
                 'dot',
-                'cross']:
+                'cross',
+                'axis_intersection']:
                 setattr(obj,n,getattr(mod,n))
             
             NTracer._cache[dimension] = obj

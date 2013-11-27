@@ -104,7 +104,7 @@ namespace fixed {
     
     
     template<int N> struct matrix_store {
-        typedef vector_store<N,REAL> v_store;
+        typedef vector_store<N,real> v_store;
         struct pivot_buffer {
             int data[N];
             pivot_buffer(int size) {
@@ -122,22 +122,22 @@ namespace fixed {
         
         template<typename F> static void rep1(int d,F f) { fixed::rep<N>(f); }
         
-        typedef impl::vector_methods<vector_store<N,REAL> > vector_t;
+        typedef impl::vector_methods<vector_store<N,real> > vector_t;
         
-        REAL *operator[](int n) { return val[n]; }
-        const REAL *operator[](int n) const { return val[n]; }
+        real *operator[](int n) { return val[n]; }
+        const real *operator[](int n) const { return val[n]; }
         
         static constexpr int _dimension = N;
         int dimension() const { return N; }
         
-        REAL val[N][N];
+        real val[N][N];
     };
     
     template<int N> using matrix = matrix_impl<matrix_store<N>,alloc>;
 
 
     template<int N> struct camera_store {
-        typedef vector<N,REAL> vector_t;
+        typedef vector<N,real> vector_t;
         typedef init_array<vector_t,N-1> smaller_array;
         
         template<typename F> camera_store(int d,const vector_t &o,F a_init) : _origin(o), _axes(N,a_init) {
@@ -199,17 +199,17 @@ namespace fixed {
     
     
     template<int N> struct repr {
-        typedef vector<N,REAL> py_vector_t;
+        typedef vector<N,real> py_vector_t;
         typedef matrix<N> py_matrix_t;
         
-        typedef vector<N,REAL> vector_t;
+        typedef vector<N,real> vector_t;
         typedef matrix<N> matrix_t;
         
         typedef _camera<camera_store<N> > camera_t;
         
         static const int required_d = N;
         
-        typedef simple_py_wrapper<vector<N,REAL>,vector_obj_base> vector_obj;
+        typedef simple_py_wrapper<vector<N,real>,vector_obj_base> vector_obj;
         typedef simple_py_wrapper<matrix<N>,matrix_obj_base> matrix_obj;
         typedef fixed::camera_obj<N> camera_obj;
         
@@ -253,7 +253,7 @@ template<int N> struct smaller_store<fixed::matrix_store<N> > {
 };
 
 
-template<int N> inline PyObject *to_pyobject(const fixed::vector<N,REAL> &v) {
+template<int N> inline PyObject *to_pyobject(const fixed::vector<N,real> &v) {
     return reinterpret_cast<PyObject*>(new typename fixed::repr<N>::vector_obj(v));
 }
 

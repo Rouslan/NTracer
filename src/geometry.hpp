@@ -16,7 +16,7 @@
 using std::declval;
 
 
-typedef float REAL;
+typedef float real;
 
 
 template<typename F> inline void rep(int d,F f) {
@@ -169,6 +169,21 @@ namespace impl {
     private:
         vector_apply(const T &a,F f) : a(a), f(f) {}
     };
+    
+    template<typename T> struct vector_axis;
+    template<typename T> struct _vector_item_t<vector_axis<T> > {
+        typedef T type;
+    };
+    template<typename T> struct vector_axis : vector_expr<vector_axis<T> > {
+        int _dimension;
+        int axis;
+        T length;
+        
+        int dimension() const { return _dimension; }
+        T operator[](int n) const { return n == axis ? length : 0; }
+
+        vector_axis(int d,int axis,T length) : _dimension(d), axis(axis), length(length) {}
+    };
 
     template<typename Store> struct vector_methods;
     template<typename Store> struct _vector_item_t<vector_methods<Store> > {
@@ -230,6 +245,10 @@ namespace impl {
         item_t operator[](int n) const { return store[n]; }
         
         void normalize() { divide(this->absolute()); }
+        
+        static vector_axis<item_t> axis(int d,int n,item_t length = item_t(1)) {
+            return {d,n,length};
+        }
         
         Store store;
     };
@@ -356,12 +375,6 @@ template<typename Store,typename Alloc> struct vector_impl : impl::vector_method
         base::divide(b);
         return *this;
     }
-
-    static vector_impl<Store,Alloc> axis(int d,int n,item_t length = item_t(1)) {
-        vector_impl<Store,Alloc> r(d);
-        r.make_axis(n,length);
-        return r;
-    }
 };
 
 
@@ -370,7 +383,7 @@ template<class Store> struct matrix_methods;
 namespace impl {
     template<class Store> struct matrix_row;
     template<class Store> struct _vector_item_t<matrix_row<Store> > {
-        typedef REAL type;
+        typedef real type;
     };
     template<class Store> struct matrix_row : vector_expr<matrix_row<Store> > {
         friend struct matrix_methods<Store>;
@@ -378,7 +391,6 @@ namespace impl {
         matrix_methods<Store> &a;
         const int row;
 
-        //matrix_row(const matrix_row<Store>&) = delete;
         matrix_row<Store> &operator=(const matrix_row<Store>&) = delete;
         
         template<typename B> matrix_row &operator=(const vector_expr<B> &b) {
@@ -387,12 +399,12 @@ namespace impl {
         }
         
         int dimension() const { return a.dimension(); }
-        REAL &operator[](int n) const {
+        real &operator[](int n) const {
             assert(n >= 0 && n < dimension());
             return a.store[row][n];
         }
         
-        operator REAL*() const { return a.store[row]; }
+        operator real*() const { return a.store[row]; }
         
     private:
         matrix_row(matrix_methods<Store> &a,int row) : a(a), row(row) {}
@@ -400,7 +412,7 @@ namespace impl {
     
     template<class Store> struct const_matrix_row;
     template<class Store> struct _vector_item_t<const_matrix_row<Store> > {
-        typedef REAL type;
+        typedef real type;
     };
     template<class Store> struct const_matrix_row : vector_expr<const_matrix_row<Store> > {
         friend struct matrix_methods<Store>;
@@ -408,16 +420,15 @@ namespace impl {
         const matrix_methods<Store> &a;
         const int row;
 
-        //const_matrix_row(const const_matrix_row<Store>&) = delete;
         const_matrix_row<Store> &operator=(const const_matrix_row<Store>&) = delete;
         
         int dimension() const { return a.dimension(); }
-        REAL operator[](int n) const {
+        real operator[](int n) const {
             assert(n >= 0 && n < dimension());
             return a.store[row][n];
         }
         
-        operator const REAL*() const { return a.store[row]; }
+        operator const real*() const { return a.store[row]; }
         
     private:
         const_matrix_row(const matrix_methods<Store> &a,int row) : a(a), row(row) {}
@@ -425,7 +436,7 @@ namespace impl {
     
     template<class Store> struct matrix_column;
     template<class Store> struct _vector_item_t<matrix_column<Store> > {
-        typedef REAL type;
+        typedef real type;
     };
     template<class Store> struct matrix_column : vector_expr<matrix_column<Store> > {
         friend struct matrix_methods<Store>;
@@ -433,7 +444,6 @@ namespace impl {
         matrix_methods<Store> &a;
         const int col;
 
-        //matrix_column(const matrix_row<Store>&) = delete;
         matrix_column<Store> &operator=(const matrix_row<Store>&) = delete;
         
         template<typename B> matrix_column &operator=(const vector_expr<B> &b) {
@@ -441,7 +451,7 @@ namespace impl {
         }
         
         int dimension() const { return a.dimension(); }
-        REAL &operator[](int n) const {
+        real &operator[](int n) const {
             assert(n >= 0 && n < dimension());
             return a.store[n][col];
         }
@@ -452,7 +462,7 @@ namespace impl {
     
     template<class Store> struct const_matrix_column;
     template<class Store> struct _vector_item_t<const_matrix_column<Store> > {
-        typedef REAL type;
+        typedef real type;
     };
     template<class Store> struct const_matrix_column : vector_expr<const_matrix_column<Store> > {
         friend struct matrix_methods<Store>;
@@ -460,11 +470,10 @@ namespace impl {
         const matrix_methods<Store> &a;
         const int col;
 
-        //const_matrix_column(const const_matrix_column<Store>&) = delete;
         const_matrix_column<Store> &operator=(const const_matrix_column<Store>&) = delete;
         
         int dimension() const { return a.dimension(); }
-        REAL operator[](int n) const {
+        real operator[](int n) const {
             assert(n >= 0 && n < dimension());
             return a.store[n][col];
         }
@@ -487,28 +496,28 @@ protected:
         assert(dimension() == r.dimension() && dimension() == b.dimension());
 
         Store::rep(dimension(),[=,&b,&r](int row,int col){
-            r[row][col] = REAL(0);
+            r[row][col] = 0;
             Store::rep1(this->dimension(),[=,&b,&r](int i){ r[row][col] += (*this)[row][i] * b[i][col]; });
         });
     }
     
     void multiply(vector_t &RESTRICT r,const vector_t &b) const {
         assert(dimension() == b.dimension());
-        r.fill_with(REAL(0));
+        r.fill_with(real(0));
         Store::rep(dimension(),[&,this](int row,int col){ r[row] += (*this)[row][col] * b[col]; });
     }
     
     /* given vector p, produces matrix r such that r * p is equal to:
        dot(p,a)*(a*(std::cos(theta)-1) - b*std::sin(theta)) + dot(p,b)*(b*(std::cos(theta)-1) + a*std::sin(theta)) + p */
-    static void rotation(matrix_methods<Store> &r,const vector_t &a, const vector_t &b, REAL theta) {
+    static void rotation(matrix_methods<Store> &r,const vector_t &a, const vector_t &b, real theta) {
         assert(r.dimension() == a.dimension() && r.dimension() == b.dimension());
 
-        REAL c = std::cos(theta) - REAL(1);
-        REAL s = std::sin(theta);
+        real c = std::cos(theta) - 1;
+        real s = std::sin(theta);
 
         Store::rep(r.dimension(),[&,c,s](int row,int col){
-            REAL x = a[row]*(a[col]*c - b[col]*s) + b[row]*(b[col]*c + a[col]*s);
-            if(col == row) x += REAL(1);
+            real x = a[row]*(a[col]*c - b[col]*s) + b[row]*(b[col]*c + a[col]*s);
+            if(col == row) ++x;
             
             r[row][col] = x;
         });
@@ -516,11 +525,11 @@ protected:
     
     static void scale(matrix_methods<Store> &r,const vector_t &a) {
         assert(r.dimension() == a.dimension());
-        Store::rep(r.dimension(),[&](int row,int col){ r[row][col] = row == col ? a[row] : REAL(0); });
+        Store::rep(r.dimension(),[&](int row,int col){ r[row][col] = row == col ? a[row] : real(0); });
     }
 
-    static void scale(matrix_methods<Store> &r,REAL a) {
-        Store::rep(r.dimension(),[&r,a](int row,int col){ r[row][col] = row == col ? a : REAL(0); });
+    static void scale(matrix_methods<Store> &r,real a) {
+        Store::rep(r.dimension(),[&r,a](int row,int col){ r[row][col] = row == col ? a : real(0); });
     }
     
     /* Crout matrix decomposition with partial pivoting.
@@ -538,11 +547,9 @@ protected:
        L[n-1][0] L[n-1][1] L[n-1][2] ... L[n-1][n-1]
         
        Every item of the upper matrix's diagonal is always 1 and is not present
-       in the result. If the first element of the source matrix is zero, the
-       result will instead be computed from a matrix equal to the source matrix
-       except having the first row swapped with another. The return value
-       indicates how many swaps were performed. If the return value is -1, the
-       matrix is singular and the contents of "lu" will be undefined.
+       in the result. The return value indicates how many swaps were performed.
+       If the return value is -1, the matrix is singular and the contents of
+       "lu" will be undefined.
     */
     int decompose(matrix_methods<Store> &RESTRICT lu,int *pivots) const {
         assert(dimension() == lu.dimension());
@@ -553,14 +560,14 @@ protected:
         
         for(int j=0; j<dimension(); ++j) {
             for(int i=j; i<dimension(); ++i) {
-                REAL sum = REAL(0);
+                real sum = 0;
                 for(int k=0; k<j; ++k) sum += lu[i][k] * lu[k][j];
                 lu[i][j] = (*this)[pivots[i]][j] - sum;
             }
             
-            if(lu[j][j] == REAL(0)) {
+            if(lu[j][j] == 0) {
                 for(int i=j+1; i<dimension(); ++i) {
-                    if(lu[i][j] != REAL(0)) {
+                    if(lu[i][j] != 0) {
                         std::swap(pivots[i],pivots[j]);
                         ++swapped;
                         for(int k=0; k<j+1; ++k) std::swap(lu[i][k],lu[j][k]);
@@ -573,7 +580,7 @@ protected:
         okay:
             
             for(int i=j+1; i<dimension(); ++i) {
-                REAL sum = REAL(0);
+                real sum = 0;
                 for(int k=0; k<j; ++k) sum += lu[j][k] * lu[k][i];
                 lu[j][i] = ((*this)[pivots[j]][i] - sum) / lu[j][j];
             }
@@ -582,14 +589,14 @@ protected:
         return swapped;
     }
     
-    REAL determinant(matrix_methods<Store> &RESTRICT tmp) const {
+    real determinant(matrix_methods<Store> &RESTRICT tmp) const {
         assert(dimension() == tmp.dimension());
         
         typename Store::pivot_buffer pivot(dimension());
         int swapped = decompose(tmp,pivot.data);
-        if(swapped < 0) return REAL(0);
+        if(swapped < 0) return 0;
         
-        REAL r = swapped % 2 ? REAL(-1) : REAL(1);
+        real r = swapped % 2 ? -1 : 1;
         for(int i=0; i<dimension(); ++i) r *= tmp[i][i];
         return r;
     }
@@ -604,10 +611,10 @@ protected:
         // forward substitution
         // store the result in the lower triangle of tmp
         for(int c=0; c<dimension(); ++c) {
-            tmp[c][c] = REAL(1) / tmp[c][c];
+            tmp[c][c] = real(1) / tmp[c][c];
             
             for(int r=c+1; r<dimension(); ++r) {
-                REAL sum = 0;
+                real sum = 0;
                 for(int i=c; i<r; ++i) sum -= tmp[r][i] * tmp[i][c];
                 tmp[r][c] = sum / tmp[r][r];
             }
@@ -619,7 +626,7 @@ protected:
             inv[dimension()-1][pc] = tmp[dimension()-1][c];
             
             for(int r=dimension()-2; r>-1; --r) {
-                REAL sum = 0;
+                real sum = 0;
                 if(r >= c) sum = tmp[r][c];
                 for(int i=r+1; i<dimension(); ++i) sum -= tmp[r][i] * inv[i][pc];
                 inv[r][pc] = sum;
@@ -637,37 +644,37 @@ public:
     /* Calculates the determinant by using itself to store the intermediate
        calculations. This avoids allocating space for another matrix but loses
        the original contents of this matrix. */
-    REAL determinant_inplace() {
+    real determinant_inplace() {
         int swapped = 0;
 
         for(int j=0; j<dimension(); ++j) {
             for(int i=j; i<dimension(); ++i) {
-                REAL sum = REAL(0);
+                real sum = 0;
                 for(int k=0; k<j; ++k) sum += (*this)[i][k] * (*this)[k][j];
                 (*this)[i][j] = (*this)[i][j] - sum;
             }
             
-            if((*this)[j][j] == REAL(0)) {
+            if((*this)[j][j] == 0) {
                 for(int i=j+1; i<dimension(); ++i) {
-                    if((*this)[i][j] != REAL(0)) {
+                    if((*this)[i][j] != 0) {
                         ++swapped;
                         for(int k=0; k<dimension(); ++k) std::swap((*this)[i][k],(*this)[j][k]);
                         goto okay;
                     }
                 }
-                return REAL(0);
+                return 0;
             }
         
         okay:
             
             for(int i=j+1; i<dimension(); ++i) {
-                REAL sum = REAL(0);
+                real sum = 0;
                 for(int k=0; k<j; ++k) sum += (*this)[j][k] * (*this)[k][i];
                 (*this)[j][i] = ((*this)[j][i] - sum) / (*this)[j][j];
             }
         }
 
-        REAL r = swapped % 2 ? REAL(-1) : REAL(1);
+        real r = swapped % 2 ? -1 : 1;
         for(int i=0; i<dimension(); ++i) r *= (*this)[i][i];
         return r;
     }
@@ -675,8 +682,8 @@ public:
     impl::matrix_row<Store> operator[](int n) { return {*this,n}; }
     impl::const_matrix_row<Store> operator[](int n) const { return {*this,n}; }
     
-    REAL *data() { return store[0]; }
-    const REAL *data() const { return store[0]; }
+    real *data() { return store[0]; }
+    const real *data() const { return store[0]; }
     
     impl::matrix_column<Store> column(int n) { return {*this,n}; }
     impl::const_matrix_column<Store> column(int n) const { return {*this,n}; }
@@ -728,7 +735,7 @@ template<typename Store,typename Alloc> struct matrix_impl : matrix_methods<Stor
         return operator*(vector_concrete(b));
     }
 
-    static matrix_impl<Store,Alloc> rotation(const vector_t &a,const vector_t &b,REAL theta) {
+    static matrix_impl<Store,Alloc> rotation(const vector_t &a,const vector_t &b,real theta) {
         matrix_impl<Store,Alloc> r(a.dimension());
         base::rotation(r,a,b,theta);
         return r;
@@ -740,14 +747,14 @@ template<typename Store,typename Alloc> struct matrix_impl : matrix_methods<Stor
         return r;
     }
 
-    static matrix_impl<Store,Alloc> scale(int d,REAL a) {
+    static matrix_impl<Store,Alloc> scale(int d,real a) {
         matrix_impl<Store,Alloc> r(d);
         base::scale(r,a);
         return r;
     }
 
     static matrix_impl<Store,Alloc> identity(int d) {
-        return scale(d,REAL(1));
+        return scale(d,1);
     }
     
     matrix_impl<Store,Alloc> transpose() const {
@@ -762,7 +769,7 @@ template<typename Store,typename Alloc> struct matrix_impl : matrix_methods<Stor
         return r;
     }
     
-    REAL determinant() const {
+    real determinant() const {
         matrix_impl<Store,Alloc> tmp(base::dimension());
         return base::determinant(tmp);
     }

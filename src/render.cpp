@@ -38,6 +38,9 @@
 #include "scene.hpp"
 
 
+using namespace type_object_abbrev;
+
+
 const int FRAME_READY = SDL_USEREVENT;
 
 
@@ -406,46 +409,11 @@ PyObject *obj_Scene_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
     return NULL;
 }
 
-PyTypeObject obj_Scene::pytype = {
-    PyVarObject_HEAD_INIT(NULL,0)
-    "render.Scene", /* tp_name */
-    sizeof(obj_Scene), /* tp_basicsize */
-    0,                         /* tp_itemsize */
-    NULL, /* tp_dealloc */
-    NULL,                         /* tp_print */
-    NULL,                         /* tp_getattr */
-    NULL,                         /* tp_setattr */
-    NULL, /* tp_compare */
-    NULL, /* tp_repr */
-    NULL, /* tp_as_number */
-    NULL, /* tp_as_sequence */
-    NULL, /* tp_as_mapping */
-    NULL, /* tp_hash */
-    NULL, /* tp_call */
-    NULL, /* tp_str */
-    NULL, /* tp_getattro */
-    NULL, /* tp_setattro */
-    NULL,                         /* tp_as_buffer */
-    Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE|Py_TPFLAGS_CHECKTYPES, /* tp_flags */
-    NULL, /* tp_doc */
-    NULL, /* tp_traverse */
-    NULL, /* tp_clear */
-    NULL, /* tp_richcompare */
-    0, /* tp_weaklistoffset */
-    NULL, /* tp_iter */
-    NULL, /* tp_iternext */
-    NULL, /* tp_methods */
-    NULL, /* tp_members */
-    NULL, /* tp_getset */
-    NULL, /* tp_base */
-    NULL,                         /* tp_dict */
-    NULL,                         /* tp_descr_get */
-    NULL,                         /* tp_descr_set */
-    0, /* tp_dictoffset */
-    NULL, /* tp_init */
-    NULL,                         /* tp_alloc */
-    &obj_Scene_new /* tp_new */
-};
+PyTypeObject obj_Scene::pytype = make_type_object(
+    "render.Scene",
+    sizeof(obj_Scene),
+    tp_new = &obj_Scene_new);
+
 
 void obj_Renderer_dealloc(obj_Renderer *self) {
     switch(self->mode) {
@@ -467,15 +435,13 @@ int obj_Renderer_traverse(obj_Renderer *self,visitproc visit,void *arg) {
     return 0;
 }
 
-
 int obj_Renderer_clear(obj_Renderer *self) {
     Py_CLEAR(self->idict);
 
     return 0;
 }
 
-
-PyObject * obj_Renderer_begin_render(obj_Renderer *self,PyObject *args,PyObject *kwds) {
+PyObject *obj_Renderer_begin_render(obj_Renderer *self,PyObject *args,PyObject *kwds) {
     try {
         renderer &r = self->get_base();
         
@@ -513,7 +479,7 @@ PyObject * obj_Renderer_begin_render(obj_Renderer *self,PyObject *args,PyObject 
     } PY_EXCEPT_HANDLERS(NULL)
 }
 
-PyObject * obj_Renderer_abort_render(obj_Renderer *self,PyObject *) {
+PyObject *obj_Renderer_abort_render(obj_Renderer *self,PyObject *) {
     try {
         renderer &r = self->get_base();
         
@@ -564,46 +530,17 @@ int obj_Renderer_init(obj_Renderer *self,PyObject *args,PyObject *kwds) {
     return 0;
 }
 
-PyTypeObject obj_Renderer::pytype = {
-    PyVarObject_HEAD_INIT(NULL,0)
-    "render.Renderer", /* tp_name */
-    sizeof(obj_Renderer), /* tp_basicsize */
-    0,                         /* tp_itemsize */
-    reinterpret_cast<destructor>(&obj_Renderer_dealloc), /* tp_dealloc */
-    NULL,                         /* tp_print */
-    NULL,                         /* tp_getattr */
-    NULL,                         /* tp_setattr */
-    NULL, /* tp_compare */
-    NULL, /* tp_repr */
-    NULL, /* tp_as_number */
-    NULL, /* tp_as_sequence */
-    NULL, /* tp_as_mapping */
-    NULL, /* tp_hash */
-    NULL, /* tp_call */
-    NULL, /* tp_str */
-    NULL, /* tp_getattro */
-    NULL, /* tp_setattro */
-    NULL,                         /* tp_as_buffer */
-    Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE|Py_TPFLAGS_CHECKTYPES|Py_TPFLAGS_HAVE_GC, /* tp_flags */
-    NULL, /* tp_doc */
-    reinterpret_cast<traverseproc>(&obj_Renderer_traverse), /* tp_traverse */
-    reinterpret_cast<inquiry>(&obj_Renderer_clear), /* tp_clear */
-    NULL, /* tp_richcompare */
-    offsetof(obj_Renderer,weaklist), /* tp_weaklistoffset */
-    NULL, /* tp_iter */
-    NULL, /* tp_iternext */
-    obj_Renderer_methods, /* tp_methods */
-    NULL, /* tp_members */
-    NULL, /* tp_getset */
-    NULL, /* tp_base */
-    NULL,                         /* tp_dict */
-    NULL,                         /* tp_descr_get */
-    NULL,                         /* tp_descr_set */
-    offsetof(obj_Renderer,idict), /* tp_dictoffset */
-    reinterpret_cast<initproc>(&obj_Renderer_init), /* tp_init */
-    NULL,                         /* tp_alloc */
-    NULL /* tp_new */
-};
+PyTypeObject obj_Renderer::pytype = make_type_object(
+    "render.Renderer",
+    sizeof(obj_Renderer),
+    tp_dealloc = reinterpret_cast<destructor>(&obj_Renderer_dealloc),
+    tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE|Py_TPFLAGS_CHECKTYPES|Py_TPFLAGS_HAVE_GC,
+    tp_traverse = &obj_Renderer_traverse,
+    tp_clear = &obj_Renderer_clear,
+    tp_weaklistoffset = offsetof(obj_Renderer,weaklist),
+    tp_methods = obj_Renderer_methods,
+    tp_dictoffset = offsetof(obj_Renderer,idict),
+    tp_init = &obj_Renderer_init);
 
 PyMethodDef func_table[] = {
     {NULL}
