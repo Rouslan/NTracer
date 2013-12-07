@@ -27,41 +27,68 @@ class Intersection(unittest.TestCase):
             (5,5,5),
             (1,2,3)])))
         
+        self.assertTrue(nt.AABB(
+            (-0.894424974918,-1.0,-0.850639998913),
+            (0.0,-0.447214990854,0.850639998913)).intersects(
+                nt.TrianglePrototype([
+                    (0.0,-1.0,0.0),
+                    (0.723599970341,-0.447214990854,0.525720000267),
+                    (-0.276385009289,-0.447214990854,0.850639998913)])))
+        
     def test_cube(self):
         nt = NTracer(3)
         box = nt.AABB((-1,-1,-1),(1,1,1))
         
-        self.assertFalse(box.intersects(nt.CubePrototype(
-            nt.Matrix(-0.01922399,-0.3460019,0.8615935,-0.03032121,-0.6326356,-0.5065715,0.03728577,-0.6928598,0.03227519),
+        self.assertFalse(box.intersects(nt.SolidPrototype(
+            CUBE,
+            nt.Matrix(-0.01922399,-0.3460019,0.8615935,
+                      -0.03032121,-0.6326356,-0.5065715,
+                      0.03728577,-0.6928598,0.03227519),
             nt.Vector(1.356136,1.717844,1.577731))))
 
-        self.assertFalse(box.intersects(nt.CubePrototype(
-            nt.Matrix(0.3780299,-0.3535482,0.8556266,-0.7643852,-0.6406123,0.07301452,0.5223108,-0.6816301,-0.5124177),
+        self.assertFalse(box.intersects(nt.SolidPrototype(
+            CUBE,
+            nt.Matrix(0.3780299,-0.3535482,0.8556266,
+                      -0.7643852,-0.6406123,0.07301452,
+                      0.5223108,-0.6816301,-0.5124177),
             nt.Vector(1.444041,1.433598,1.975453))))
 
-        self.assertFalse(box.intersects(nt.CubePrototype(
-            nt.Matrix(0.8241131,-0.2224413,1.540015,-1.461101,-0.7099018,0.6793453,0.5350775,-1.595884,-0.516849),
+        self.assertFalse(box.intersects(nt.SolidPrototype(
+            CUBE,
+            nt.Matrix(0.8241131,-0.2224413,1.540015,
+                      -1.461101,-0.7099018,0.6793453,
+                      0.5350775,-1.595884,-0.516849),
             nt.Vector(-0.31218,-3.436678,1.473133))))
 
-        self.assertFalse(box.intersects(nt.CubePrototype(
-            nt.Matrix(0.6002195,-1.608681,-0.3900863,-1.461104,-0.7098908,0.6793506,-0.7779449,0.0921175,-1.576897),
+        self.assertFalse(box.intersects(nt.SolidPrototype(
+            CUBE,
+            nt.Matrix(0.6002195,-1.608681,-0.3900863,
+                      -1.461104,-0.7098908,0.6793506,
+                      -0.7779449,0.0921175,-1.576897),
             nt.Vector(0.7697315,-3.758033,1.847144))))
 
-        self.assertTrue(box.intersects(nt.CubePrototype(
-            nt.Matrix(0.3780299,-0.3535482,0.8556266,-0.7643852,-0.6406123,0.07301452,0.5223108,-0.6816301,-0.5124177),
+        self.assertTrue(box.intersects(nt.SolidPrototype(
+            CUBE,
+            nt.Matrix(0.3780299,-0.3535482,0.8556266,
+                      -0.7643852,-0.6406123,0.07301452,
+                      0.5223108,-0.6816301,-0.5124177),
             nt.Vector(0.4581598,-1.56134,0.5541568))))
         
     def test_sphere(self):
         nt = NTracer(3)
         box = nt.AABB((-1,-1,-1),(1,1,1))
         
-        self.assertFalse(box.intersects(nt.Solid(
+        self.assertFalse(box.intersects(nt.SolidPrototype(
             SPHERE,
             nt.Matrix.identity(),
             nt.Vector(-1.32138,1.6959,1.729396))))
         
-        self.assertTrue(box.intersects(nt.Solid(
+        self.assertTrue(box.intersects(nt.SolidPrototype(
             SPHERE,
             nt.Matrix.identity(),
             nt.Vector(1.623511,-1.521197,-1.243952))))
+
+
+if __name__ == '__main__':
+    unittest.main()
 

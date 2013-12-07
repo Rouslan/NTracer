@@ -408,7 +408,7 @@ inline PyObject *to_pyobject(const var::repr::py_matrix_t &m) {
 }
 
 inline PyObject *to_pyobject(const var::repr::camera_t &c) {
-    return c.store.obj.get_new_ref();
+    return c.store.obj.new_ref();
 }
 
 #endif

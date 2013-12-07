@@ -403,6 +403,9 @@ namespace type_object_abbrev {
             original_t value;
             constexpr generic_func_param(original_t value = nullptr) : value(value) {}
             template<typename T> constexpr generic_func_param<unique,original_t> operator=(derived_t<T> v) { return reinterpret_cast<original_t>(v); }
+            
+            // this is needed to support lambda functions
+            constexpr generic_func_param<unique,original_t> operator=(original_t v) { return v; }
         };
     }
     

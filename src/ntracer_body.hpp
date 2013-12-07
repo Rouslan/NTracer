@@ -162,44 +162,11 @@ template<> struct wrapped_type<BoxScene<repr> > {
 };
 
 
-struct obj_MatrixProxy {
-    static PyTypeObject pytype;
-    
-    PyObject_HEAD
-    py::array_adapter<real> base;
-    PY_MEM_NEW_DELETE
-    obj_MatrixProxy(py::array_adapter<real> const &_0) : base(_0) {
-        PyObject_Init(reinterpret_cast<PyObject*>(this),&pytype);
-    }
-    obj_MatrixProxy(PyObject *_0,long unsigned int _1,real *_2) : base(_0,_1,_2) {
-        PyObject_Init(reinterpret_cast<PyObject*>(this),&pytype);
-    }
-    
-    py::array_adapter<real> &cast_base() { return base; }
-    py::array_adapter<real> &get_base() { return base; }
-};
+constexpr char matrix_proxy_name[] = MODULE_STR ".MatrixProxy";
+typedef py::obj_array_adapter<real,matrix_proxy_name,false,true> obj_MatrixProxy;
 
-template<> struct wrapped_type<py::array_adapter<real> > {
-    typedef obj_MatrixProxy type;
-};
-
-
-struct obj_CameraAxes {
-    static PyTypeObject pytype;
-    
-    PyObject_HEAD
-    py::array_adapter<n_vector> base;
-    PY_MEM_GC_NEW_DELETE
-    obj_CameraAxes(py::array_adapter<n_vector> const &b) : base(b) {
-        PyObject_Init(reinterpret_cast<PyObject*>(this),&pytype);
-    }
-    obj_CameraAxes(PyObject * _0,size_t _1,n_vector *_2) : base(_0,_1,_2) {
-        PyObject_Init(reinterpret_cast<PyObject*>(this),&pytype);
-    }
-    
-    py::array_adapter<n_vector> &cast_base() { return base; }
-    py::array_adapter<n_vector> &get_base() { return base; }
-};
+constexpr char camera_axes_name[] = MODULE_STR ".CameraAxes";
+typedef py::obj_array_adapter<n_vector,camera_axes_name,true> obj_CameraAxes;
 
 
 struct obj_CompositeScene {
@@ -236,22 +203,8 @@ template<typename T> void ensure_unlocked(const py::pyptr<T> &s) {
 }
 
 
-struct obj_FrozenVectorView {
-    static PyTypeObject pytype;
-    
-    PyObject_HEAD
-    py::array_adapter<n_vector> base;
-    PY_MEM_GC_NEW_DELETE
-    obj_FrozenVectorView(py::array_adapter<n_vector> const &b) : base(b) {
-        PyObject_Init(reinterpret_cast<PyObject*>(this),&pytype);
-    }
-    obj_FrozenVectorView(PyObject * _0,size_t _1,n_vector *_2) : base(_0,_1,_2) {
-        PyObject_Init(reinterpret_cast<PyObject*>(this),&pytype);
-    }
-    
-    py::array_adapter<n_vector> &cast_base() { return base; }
-    py::array_adapter<n_vector> &get_base() { return base; }
-};
+constexpr char frozen_vector_view_name[] = MODULE_STR ".FrozenVectorView";
+typedef py::obj_array_adapter<n_vector,frozen_vector_view_name,true,true> obj_FrozenVectorView;
 
 
 struct obj_Primitive {
@@ -355,6 +308,11 @@ struct obj_AABB {
 };
 
 
+struct obj_PrimitivePrototype {
+    static PyTypeObject pytype;
+    PyObject_HEAD
+};
+
 struct triangle_point {
     n_vector point;
     n_vector edge_normal;
@@ -362,17 +320,50 @@ struct triangle_point {
     triangle_point(const n_vector &point,const n_vector &edge_normal) : point(point), edge_normal(edge_normal) {}
 };
 
-#define OBJ_TRIANGLEPROTOTYPE_BASE repr::flexible_obj<obj_TrianglePrototype,triangle_point,repr::required_d>
-struct obj_TrianglePrototype : OBJ_TRIANGLEPROTOTYPE_BASE {
+struct obj_TrianglePrototype : repr::flexible_obj<obj_TrianglePrototype,triangle_point,repr::required_d> {
     static PyTypeObject pytype;
     
     n_vector face_normal;
+    n_vector aabb_max;
+    n_vector aabb_min;
     
     int dimension() const {
         return face_normal.dimension();
     }
+};
+
+struct obj_TrianglePointDatum {
+    static PyTypeObject pytype;
+    PyObject_HEAD
+    PY_MEM_NEW_DELETE
+
+    obj_TrianglePointDatum(const triangle_point &data) : data(data) {
+        PyObject_Init(reinterpret_cast<PyObject*>(this),&pytype);
+    }
+
+    triangle_point data;
+};
+
+PyObject *to_pyobject(const triangle_point &x) {
+    return reinterpret_cast<PyObject*>(new obj_TrianglePointDatum(x));
+}
+
+constexpr char triangle_point_data_name[] = MODULE_STR ".TrianglePointData";
+typedef py::obj_array_adapter<triangle_point,triangle_point_data_name,false,true> obj_TrianglePointData;
+
+
+struct obj_SolidPrototype {
+    static PyTypeObject pytype;
+    PyObject_HEAD
+        
+    py::pyptr<solid<repr> > p;
     
-    //template<typename F> obj_TrianglePrototype(const n_vector &face_normal,F points) : face_normal(face_normal), OBJ_TRIANGLEPROTOTYPE_BASE(points) {}
+    n_vector aabb_max;
+    n_vector aabb_min;
+    
+    int dimension() const {
+        return aabb_max.dimension();
+    }
 };
 
 
@@ -385,7 +376,7 @@ template<> n_vector from_pyobject<n_vector>(PyObject *o) {
         return {int(PyTuple_GET_SIZE(o)),[=](int i){ return from_pyobject<real>(PyTuple_GET_ITEM(o,i)); }};
     }
     if(Py_TYPE(o) == &obj_MatrixProxy::pytype) {
-        auto &mp = reinterpret_cast<obj_MatrixProxy*>(o)->base;
+        auto &mp = reinterpret_cast<obj_MatrixProxy*>(o)->data;
         return {int(mp.size),[&](int i){ return mp.items[i]; }};
     }
     return get_base<n_vector>(o);
@@ -411,8 +402,8 @@ int obj_BoxScene_clear(obj_BoxScene *self) {
 void copy_camera(const n_camera &source,n_camera &dest) {
     assert(source.dimension() == dest.dimension());
     
-    /* we only need a shallow copy since vectors are immutable in Python
-       code and BoxScene doesn't modify its camera */
+    /* we only need a shallow copy since vectors are immutable in Python code
+       and BoxScene doesn't modify its camera */
     dest.origin() = source.origin();
     for(int i=0; i<source.dimension(); ++i) dest.axes()[i] = source.axes()[i];
 }
@@ -608,15 +599,13 @@ PyTypeObject obj_CompositeScene::pytype = make_type_object(
     tp_new = &obj_CompositeScene_new);
 
 
-PyObject *obj_Primitive_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
-    PyErr_SetString(PyExc_TypeError,"the Primitive type cannot be instantiated directly");
-    return NULL;
-}
-
 PyTypeObject obj_Primitive::pytype = make_type_object(
     MODULE_STR ".Primitive",
     sizeof(obj_Primitive),
-    tp_new = &obj_Primitive_new);
+    tp_new = [](PyTypeObject*,PyObject*,PyObject*) -> PyObject* {
+        PyErr_SetString(PyExc_TypeError,"the Primitive type cannot be instantiated directly");
+        return nullptr;
+    });
 
 
 template<typename T> int kd_tree_item_traverse(PyObject *self,visitproc visit,void *arg) {
@@ -667,9 +656,9 @@ PyObject *obj_Solid_set_position(obj_Solid *self,PyObject *arg) {
         
         Py_RETURN_NONE;
     } PY_EXCEPT_HANDLERS(NULL)
-}
+}*/
 
-PyMethodDef obj_Solid_methods[] = {
+/*PyMethodDef obj_Solid_methods[] = {
     {"set_type",reinterpret_cast<PyCFunction>(&obj_Solid_set_type),METH_O,NULL},
     {"set_orientation",reinterpret_cast<PyCFunction>(&obj_Solid_set_orientation),METH_O,NULL},
     {"set_position",reinterpret_cast<PyCFunction>(&obj_Solid_set_position),METH_O,NULL},
@@ -707,8 +696,14 @@ PyTypeObject solid_common::pytype = make_type_object(
     tp_dealloc = destructor_dealloc<solid<repr> >::value,
     tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_CHECKTYPES,
     tp_getset = obj_Solid_getset,
+    tp_base = &obj_Primitive::pytype,
     tp_new = &obj_Solid_new);
 
+
+void check_origin_dir_compat(const n_vector &o,const n_vector &d) {
+    if(!compatible(o,d))
+        THROW_PYERR_STRING(TypeError,"\"origin\" and \"direction\" must have the same dimension");
+}
 
 PyObject *obj_Triangle_intersects(triangle<repr> *self,PyObject *args,PyObject *kwds) {
     try {
@@ -718,17 +713,15 @@ PyObject *obj_Triangle_intersects(triangle<repr> *self,PyObject *args,PyObject *
         auto direction = from_pyobject<n_vector>(ga(true));
         ga.finished();
         
-        if(!compatible(origin,direction)) {
-            PyErr_SetString(PyExc_TypeError,"\"origin\" and \"direction\" must have the same dimension");
-            return NULL;
-        }
+        check_origin_dir_compat(origin,direction);
         
         ray<repr> target(origin,direction);
         ray<repr> normal(origin.dimension());
         
-        if(!self->intersects(target,normal)) Py_RETURN_NONE;
+        real dist = self->intersects(target,normal);
+        if(!dist) Py_RETURN_NONE;
         
-        return py::make_tuple(normal.origin,normal.direction).get_new_ref();
+        return py::make_tuple(dist,normal.origin,normal.direction).new_ref();
     } PY_EXCEPT_HANDLERS(NULL)
 }
 
@@ -826,63 +819,49 @@ PyTypeObject triangle_common::pytype = make_type_object(
     tp_methods = obj_Triangle_methods,
     tp_members = obj_Triangle_members,
     tp_getset = obj_Triangle_getset,
+    tp_base = &obj_Primitive::pytype,
     tp_new = &obj_Triangle_new);
 
 
-Py_ssize_t obj_FrozenVectorView___sequence_len__(obj_FrozenVectorView *self) {
-    return self->base.length();
-}
-
-PyObject *obj_FrozenVectorView___sequence_getitem__(obj_FrozenVectorView *self,Py_ssize_t index) {
+PyObject *kdnode_intersects(obj_KDNode *self,PyObject *args,PyObject *kwds) {
     try {
-        return to_pyobject(self->base.sequence_getitem(index));
+        assert(self->_data->type == LEAF || self->_data->type == BRANCH);
+        
+        const char *names[] = {"origin","direction","t_near","t_far","cur_d"};
+        get_arg ga(args,kwds,names,self->_data->type == LEAF ? "KDLeaf.intersects" : "KDBranch.intersects");
+        auto origin = from_pyobject<n_vector>(ga(true));
+        auto direction = from_pyobject<n_vector>(ga(true));
+        
+        real t_near = std::numeric_limits<real>::lowest();
+        real t_far = std::numeric_limits<real>::max();
+        int cur_d = -1;
+        
+        PyObject *tmp = ga(false);
+        if(tmp) t_near = from_pyobject<real>(tmp);
+        tmp = ga(false);
+        if(tmp) t_far = from_pyobject<real>(tmp);
+        tmp = ga(false);
+        if(tmp) cur_d = from_pyobject<int>(tmp);
+        ga.finished();
+        
+        check_origin_dir_compat(origin,direction);
+        
+        ray<repr> target(origin,direction);
+        ray<repr> normal(origin.dimension());
+        
+        if(!self->_data->intersects(target,normal,t_near,t_far,cur_d)) Py_RETURN_NONE;
+        
+        return py::make_tuple(normal.origin,normal.direction).new_ref();
     } PY_EXCEPT_HANDLERS(NULL)
-}
-
-PySequenceMethods obj_FrozenVectorView_sequence_methods = {
-    reinterpret_cast<lenfunc>(&obj_FrozenVectorView___sequence_len__),
-    NULL,
-    NULL,
-    reinterpret_cast<ssizeargfunc>(&obj_FrozenVectorView___sequence_getitem__),
-    NULL,
-    NULL,
-    NULL,
-    NULL,
-    NULL,
-    NULL
-};
-
-int obj_FrozenVectorView_traverse(obj_FrozenVectorView *self,visitproc visit,void *arg) {
-    int ret = self->base.gc_traverse(visit,arg);
-    if(ret) return ret;
-
-    return 0;
-}
-
-PyObject *obj_FrozenVectorView_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
-    PyErr_SetString(PyExc_TypeError,"The FrozenVectorView type cannot be instantiated directly");
-    return NULL;
-}
-
-PyTypeObject obj_FrozenVectorView::pytype = make_type_object(
-    MODULE_STR ".FrozenVectorView",
-    sizeof(obj_FrozenVectorView),
-    tp_dealloc = destructor_dealloc<obj_FrozenVectorView>::value,
-    tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_CHECKTYPES|Py_TPFLAGS_HAVE_GC,
-    tp_as_sequence = &obj_FrozenVectorView_sequence_methods,
-    tp_traverse = &obj_FrozenVectorView_traverse,
-    tp_new = &obj_FrozenVectorView_new);
-
-
-PyObject *obj_KDNode_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
-    PyErr_SetString(PyExc_TypeError,"the KDNode type cannot be instantiated directly");
-    return NULL;
 }
 
 PyTypeObject obj_KDNode::pytype = make_type_object(
     MODULE_STR ".KDNode",
     sizeof(obj_KDNode),
-    tp_new = &obj_KDNode_new);
+    tp_new = [](PyTypeObject *type,PyObject *args,PyObject *kwds) -> PyObject* {
+        PyErr_SetString(PyExc_TypeError,"the KDNode type cannot be instantiated directly");
+        return nullptr;
+    });
 
 
 Py_ssize_t obj_KDLeaf___sequence_len__(obj_KDLeaf *self) {
@@ -908,6 +887,11 @@ PySequenceMethods obj_KDLeaf_sequence_methods = {
     NULL,
     NULL,
     NULL
+};
+
+PyMethodDef obj_KDLeaf_methods[] = {
+    {"intersects",reinterpret_cast<PyCFunction>(&kdnode_intersects),METH_VARARGS|METH_KEYWORDS,NULL},
+    {NULL}
 };
 
 PyObject *obj_KDLeaf_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
@@ -937,7 +921,7 @@ PyObject *obj_KDLeaf_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
                     throw py_error_set();
                 }
 
-                return reinterpret_cast<primitive<repr>*>(p.get_new_ref());
+                return reinterpret_cast<primitive<repr>*>(p.new_ref());
             });
             
             
@@ -969,11 +953,32 @@ PyTypeObject obj_KDLeaf::pytype = make_type_object(
     tp_dealloc = destructor_dealloc<obj_KDLeaf>::value,
     tp_as_sequence = &obj_KDLeaf_sequence_methods,
     tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_CHECKTYPES|Py_TPFLAGS_HAVE_GC,
+    tp_methods = obj_KDLeaf_methods,
     tp_traverse = &kd_tree_item_traverse<obj_KDLeaf>,
     tp_clear = &kd_tree_item_clear<obj_KDLeaf>,
     tp_getset = obj_KDLeaf_getset,
+    tp_base = &obj_KDNode::pytype,
     tp_new = &obj_KDLeaf_new);
 
+
+PyMethodDef obj_KDBranch_methods[] = {
+    {"intersects",reinterpret_cast<PyCFunction>(&kdnode_intersects),METH_VARARGS|METH_KEYWORDS,NULL},
+    {NULL}
+};
+
+obj_KDNode* acceptable_node(PyObject *obj) {
+    if(obj == Py_None) return nullptr;
+    
+    if(Py_TYPE(obj) != &obj_KDBranch::pytype && Py_TYPE(obj) != &obj_KDLeaf::pytype)
+        THROW_PYERR_STRING(TypeError,"\"left\" and \"right\" must be instances of " MODULE_STR ".KDNode");
+    
+    auto node = reinterpret_cast<obj_KDNode*>(obj);
+    
+    if(node->parent)
+        THROW_PYERR_STRING(ValueError,"\"left\" and \"right\" must not already be attached to another node/scene");
+    
+    return node;
+}
 
 PyObject *obj_KDBranch_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
     auto ptr = reinterpret_cast<obj_KDBranch*>(type->tp_alloc(type,0));
@@ -987,32 +992,22 @@ PyObject *obj_KDBranch_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
                 auto right = ga(true);
                 ga.finished();
                 
-                if((Py_TYPE(left) != &obj_KDBranch::pytype && Py_TYPE(left) != &obj_KDLeaf::pytype) ||
-                    (Py_TYPE(right) != &obj_KDBranch::pytype && Py_TYPE(right) != &obj_KDLeaf::pytype)) {
-                    PyErr_SetString(PyExc_TypeError,"\"left\" and \"right\" must be instances of " MODULE_STR ".KDNode");
-                    throw py_error_set();
-                }
+                auto lnode = acceptable_node(left);
+                auto rnode = acceptable_node(right);
                 
-                auto lnode = reinterpret_cast<obj_KDNode*>(left);
-                auto rnode = reinterpret_cast<obj_KDNode*>(right);
+                if(!left && !right)
+                    THROW_PYERR_STRING(TypeError,"\"left\" and \"right\" can't both be None");
                 
-                if(!compatible(*lnode,*rnode)) {
-                    PyErr_SetString(PyExc_TypeError,"\"left\" and \"right\" must have the same dimension");
-                    throw py_error_set();
-                }
-                
-                if(lnode->parent || rnode->parent) {
-                    PyErr_SetString(PyExc_ValueError,"\"left\" and \"right\" must not already be attached to another node/scene");
-                    throw py_error_set();
-                }
+                if(lnode && rnode && !compatible(*lnode,*rnode))
+                    THROW_PYERR_STRING(TypeError,"\"left\" and \"right\" must have the same dimension");
 
-                ptr->data() = new kd_branch<repr>(split,lnode->_data,rnode->_data);
-                ptr->dimension = lnode->dimension();
+                ptr->data() = new kd_branch<repr>(split,lnode ? lnode->_data : nullptr,rnode ? rnode->_data : nullptr);
+                ptr->dimension = (lnode ? lnode : rnode)->dimension();
                 auto new_parent = py::borrowed_ref(reinterpret_cast<PyObject*>(ptr));
-                lnode->parent = new_parent;
-                rnode->parent = new_parent;
+                if(lnode) lnode->parent = new_parent;
+                if(rnode) rnode->parent = new_parent;
             } catch(...) {
-                type->tp_free(ptr);
+                Py_DECREF(ptr);
                 throw;
             }
         } PY_EXCEPT_HANDLERS(NULL)
@@ -1045,12 +1040,14 @@ PyGetSetDef obj_KDBranch_getset[] = {
 
 PyTypeObject obj_KDBranch::pytype = make_type_object(
     MODULE_STR ".KDBranch",
-    sizeof(obj_KDLeaf),
+    sizeof(obj_KDBranch),
     tp_dealloc = destructor_dealloc<obj_KDBranch>::value,
     tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_CHECKTYPES|Py_TPFLAGS_HAVE_GC,
+    tp_methods = obj_KDBranch_methods,
     tp_traverse = &kd_tree_item_traverse<obj_KDBranch>,
     tp_clear = &kd_tree_item_clear<obj_KDBranch>,
     tp_getset = obj_KDBranch_getset,
+    tp_base = &obj_KDNode::pytype,
     tp_new = &obj_KDBranch_new);
 
 
@@ -1301,43 +1298,6 @@ PyTypeObject vector_obj_base::pytype = make_type_object(
     tp_new = &obj_Vector_new);
 
 
-Py_ssize_t obj_MatrixProxy___sequence_len__(obj_MatrixProxy *self) {
-    return self->base.length();
-}
-
-PyObject *obj_MatrixProxy___sequence_getitem__(obj_MatrixProxy *self,Py_ssize_t index) {
-    try {
-        return to_pyobject(self->base.sequence_getitem(index));
-    } PY_EXCEPT_HANDLERS(NULL)
-}
-
-PySequenceMethods obj_MatrixProxy_sequence_methods = {
-    reinterpret_cast<lenfunc>(&obj_MatrixProxy___sequence_len__),
-    NULL,
-    NULL,
-    reinterpret_cast<ssizeargfunc>(&obj_MatrixProxy___sequence_getitem__),
-    NULL,
-    NULL,
-    NULL,
-    NULL,
-    NULL,
-    NULL
-};
-
-PyObject *obj_MatrixProxy_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
-    PyErr_SetString(PyExc_TypeError,"The MatrixProxy type cannot be instantiated directly");
-    return NULL;
-}
-
-PyTypeObject obj_MatrixProxy::pytype = make_type_object(
-    MODULE_STR ".MatrixProxy",
-    sizeof(obj_MatrixProxy),
-    tp_dealloc = destructor_dealloc<obj_MatrixProxy>::value,
-    tp_as_sequence = &obj_MatrixProxy_sequence_methods,
-    tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_CHECKTYPES,
-    tp_new = &obj_MatrixProxy_new);
-
-
 void obj_Camera_dealloc(repr::camera_obj *self) {
     self->dealloc();
     
@@ -1458,58 +1418,6 @@ PyTypeObject camera_obj_base::pytype = make_type_object(
     tp_dictoffset = offsetof(repr::camera_obj,idict),
     tp_init = &obj_Camera_init,
     tp_new = &obj_Camera_new);
-
-
-Py_ssize_t obj_CameraAxes___sequence_len__(obj_CameraAxes *self) {
-    return self->base.length();
-}
-
-PyObject *obj_CameraAxes___sequence_getitem__(obj_CameraAxes *self,Py_ssize_t index) {
-    try {
-        return to_pyobject(self->base.sequence_getitem(index));
-    } PY_EXCEPT_HANDLERS(NULL)
-}
-
-int obj_CameraAxes___sequence_setitem__(obj_CameraAxes *self,Py_ssize_t index,PyObject *arg) {
-    try {
-        self->base.sequence_setitem(index,from_pyobject<n_vector>(arg));
-        return 0;
-    } PY_EXCEPT_HANDLERS(-1)
-}
-
-PySequenceMethods obj_CameraAxes_sequence_methods = {
-    reinterpret_cast<lenfunc>(&obj_CameraAxes___sequence_len__),
-    NULL,
-    NULL,
-    reinterpret_cast<ssizeargfunc>(&obj_CameraAxes___sequence_getitem__),
-    NULL,
-    reinterpret_cast<ssizeobjargproc>(&obj_CameraAxes___sequence_setitem__),
-    NULL,
-    NULL,
-    NULL,
-    NULL
-};
-
-int obj_CameraAxes_traverse(obj_CameraAxes *self,visitproc visit,void *arg) {
-    int ret = self->base.gc_traverse(visit,arg);
-    if(ret) return ret;
-
-    return 0;
-}
-
-PyObject *obj_CameraAxes_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
-    PyErr_SetString(PyExc_TypeError,"The CameraAxes type cannot be instantiated directly");
-    return NULL;
-}
-
-PyTypeObject obj_CameraAxes::pytype = make_type_object(
-    MODULE_STR ".CameraAxes",
-    sizeof(obj_CameraAxes),
-    tp_dealloc = destructor_dealloc<obj_CameraAxes>::value,
-    tp_as_sequence = &obj_CameraAxes_sequence_methods,
-    tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_CHECKTYPES|Py_TPFLAGS_HAVE_GC,
-    tp_traverse = &obj_CameraAxes_traverse,
-    tp_new = &obj_CameraAxes_new);
 
 
 PyObject *obj_Matrix___mul__(PyObject *a,PyObject *b) {
@@ -1744,8 +1652,8 @@ PyObject *aabb_split(obj_AABB *self,PyObject *args,PyObject *kwds,bool right) {
         r = new obj_AABB(self->start,self->end);
     } PY_EXCEPT_HANDLERS(NULL)
     
-    if(right) r->end[axis] = split;
-    else r->start[axis] = split;
+    if(right) r->start[axis] = split;
+    else r->end[axis] = split;
     
     return reinterpret_cast<PyObject*>(r);
 }
@@ -1773,23 +1681,15 @@ real skip_dot(const n_vector &a,const n_vector &b,int skip) {
     return tot;
 }
 
+/* All Prototype intersection tests should only return true if the intersection
+   between the AABB and the Primitive has a non-zero volume. E.g. two cubes that
+   share a face do not count as intersecting. This is important because k-d tree
+   split positions are always at Primitive boundaries and a Primitive should end
+   up on only one side of the split (hyper)plane. */
+
 bool aabb_triangle_intersects(const obj_AABB *aabb,const obj_TrianglePrototype *tp) {
-    n_vector t_max(aabb->dimension(),std::numeric_limits<real>::lowest());
     for(int i=0; i<aabb->dimension(); ++i) {
-        for(int j=0; j<aabb->dimension(); ++j) {
-            if(tp->items()[i].point[j] > t_max[j]) t_max[j] = tp->items()[i].point[j];
-        }
-    }
-    
-    n_vector t_min(aabb->dimension(),std::numeric_limits<real>::max());
-    for(int i=0; i<aabb->dimension(); ++i) {
-        for(int j=0; j<aabb->dimension(); ++j) {
-            if(tp->items()[i].point[j] < t_min[j]) t_min[j] = tp->items()[i].point[j];
-        }
-    }
-    
-    for(int i=0; i<aabb->dimension(); ++i) {
-        if(t_min[i] > aabb->end[i] || t_max[i] < aabb->start[i]) return false;
+        if(tp->aabb_min[i] >= aabb->end[i] || tp->aabb_max[i] <= aabb->start[i]) return false;
     }
     
     real n_offset = dot(tp->face_normal,tp->items()[0].point);
@@ -1812,7 +1712,7 @@ bool aabb_triangle_intersects(const obj_AABB *aabb,const obj_TrianglePrototype *
             real t_min = skip_dot(tp->items()[i ? i : 1].point,axis,j);
             if(t_min > t_max) std::swap(t_max,t_min);
             
-            po = skip_dot(-origin,axis,j);
+            po = skip_dot(origin,axis,j);
             
             b_max = 0;
             for(int k=0; k<aabb->dimension(); ++k) {
@@ -1821,19 +1721,11 @@ bool aabb_triangle_intersects(const obj_AABB *aabb,const obj_TrianglePrototype *
             b_min = po - b_max;
             b_max += po;
             
-            if(b_max < t_min || b_min > t_max) return false;
+            if(b_max <= t_min || b_min >= t_max) return false;
         }
     }
     
     return true;
-}
-
-inline auto cube_normal(const solid<repr> *c,int axis) -> decltype(c->inv_orientation[axis]) {
-    return c->inv_orientation[axis];
-}
-
-inline auto cube_component(const solid<repr> *c,int axis) -> decltype(c->orientation.column(axis)) {
-    return c->orientation.column(axis);
 }
 
 bool box_box_axis_test(const obj_AABB *aabb,const solid<repr> *c,const n_vector &axis) {
@@ -1849,25 +1741,22 @@ bool box_box_axis_test(const obj_AABB *aabb,const solid<repr> *c,const n_vector 
     return b_po+b_max < a_po-a_max || b_po-b_max > a_po+a_max;
 }
 
-bool aabb_cube_intersects(const obj_AABB *aabb,const solid<repr> *c) {
-    n_vector max(aabb->dimension(),0);
-    for(int i=0; i<aabb->dimension(); ++i) max += cube_component(c,i).apply(static_cast<real (*)(real)>(&std::abs));
-    
+bool aabb_cube_intersects(const obj_AABB *aabb,const obj_SolidPrototype *c) {
     for(int i=0; i<aabb->dimension(); ++i) {
-        if(aabb->end[i] < c->position[i] - max[i] || aabb->start[i] > c->position[i] + max[i]) return false;
+        if(aabb->end[i] <= c->aabb_min[i] || aabb->start[i] >= c->aabb_max[i]) return false;
     }
     
     for(int i=0; i<aabb->dimension(); ++i) {
-        n_vector normal = cube_normal(c,i);
+        n_vector normal = cube_normal(c->p.get(),i);
         
-        if(box_box_axis_test(aabb,c,normal)) return false;
+        if(box_box_axis_test(aabb,c->p.get(),normal)) return false;
         
         // try projecting the normal onto each orthogonal hyperplane
         for(int j=0; j<aabb->dimension(); ++j) {
             n_vector axis = normal * -normal[j];
             axis[j] += normal.square();
             
-            if(box_box_axis_test(aabb,c,axis)) return false;
+            if(box_box_axis_test(aabb,c->p.get(),axis)) return false;
         }
     }
     
@@ -1880,24 +1769,22 @@ bool aabb_sphere_intersects(const obj_AABB *aabb,const solid<repr> *s) {
     n_vector closest(aabb->dimension(),0);
     
     for(int i=0; i<aabb->dimension(); ++i) {
-        // equivalent to: s->orientation.transpose() * n_vector::axis(i,(aabb->end[i] - aabb->start[i])/2)
+        // equivalent to: s->orientation.transpose() * n_vector::axis(aabb->dimension(),i,(aabb->end[i] - aabb->start[i])/2)
         n_vector component = s->orientation[i] * ((aabb->end[i] - aabb->start[i])/2);
         closest += clamp(dot(box_p,component)/component.square()) * component;
     }
     
-    return (s->position - closest).square() <= 1;
+    return (s->position - closest).square() < 1;
 }
 
 PyObject *intersect_type_error(PyObject *o) {
-    if(PyObject_TypeCheck(o,&triangle_common::pytype)) {
+    if(Py_TYPE(o) == &triangle_common::pytype || Py_TYPE(o) == &solid_common::pytype) {
         PyErr_SetString(PyExc_TypeError,
-            "Instances of Triangle cannot be used directly. Use TrianglePrototype instead.");
-        return NULL;
+            "Instances of Triangle and Solid cannot be used directly. Use TrianglePrototype and SolidPrototype instead.");
+    } else {
+        PyErr_SetString(PyExc_TypeError,
+            "object must be an instance of " MODULE_STR ".PrimitivePrototype");
     }
-    
-    PyErr_SetString(PyExc_TypeError,
-        "object must be an instance of " MODULE_STR ".TrianglePrototype or "
-        MODULE_STR ".Solid");
     return NULL;
 }
 
@@ -1916,19 +1803,19 @@ PyObject *obj_AABB_intersects(obj_AABB *self,PyObject *obj) {
             return to_pyobject(aabb_triangle_intersects(self,tp));
         }
         
-        if(PyObject_TypeCheck(obj,&solid_common::pytype)) {
-            auto solid_obj = reinterpret_cast<solid<repr>*>(obj);
+        if(PyObject_TypeCheck(obj,&obj_SolidPrototype::pytype)) {
+            auto sp = reinterpret_cast<obj_SolidPrototype*>(obj);
             
-            if(self->dimension() != solid_obj->dimension()) {
+            if(self->dimension() != sp->dimension()) {
                 PyErr_SetString(PyExc_TypeError,dim_err);
                 return NULL;
             }
         
-            if(solid_obj->type == CUBE)
-                return to_pyobject(aabb_cube_intersects(self,solid_obj));
+            if(sp->p->type == CUBE)
+                return to_pyobject(aabb_cube_intersects(self,sp));
             
-            assert(solid_obj->type == SPHERE);
-            return to_pyobject(aabb_sphere_intersects(self,solid_obj));
+            assert(sp->p->type == SPHERE);
+            return to_pyobject(aabb_sphere_intersects(self,sp->p.get()));
         }
 
         return intersect_type_error(obj);
@@ -1996,6 +1883,15 @@ PyTypeObject obj_AABB::pytype = make_type_object(
     tp_new = &obj_AABB_new);
 
 
+PyTypeObject obj_PrimitivePrototype::pytype = make_type_object(
+    MODULE_STR ".PrimitivePrototype",
+    sizeof(obj_PrimitivePrototype),
+    tp_new = [](PyTypeObject*,PyObject*,PyObject*) -> PyObject* {
+        PyErr_SetString(PyExc_TypeError,"the PrimitivePrototype type cannot be instantiated directly");
+        return nullptr;
+    });
+
+
 PyObject *obj_TrianglePrototype_realize(obj_TrianglePrototype *self,PyObject*) {
     try {
         return reinterpret_cast<PyObject*>(triangle<repr>::create(
@@ -2025,6 +1921,16 @@ PyObject *obj_TrianglePrototype_new(PyTypeObject *type,PyObject *args,PyObject *
         ptr = reinterpret_cast<obj_TrianglePrototype*>(py::check_obj(type->tp_alloc(type,repr::required_d ? 0 : dim)));
         
         try {
+            new(&ptr->aabb_max) n_vector(dim,std::numeric_limits<real>::lowest());
+            new(&ptr->aabb_min) n_vector(dim,std::numeric_limits<real>::max());
+            
+            for(int i=0; i<dim; ++i) {
+                for(int j=0; j<dim; ++j) {
+                    if(points[i][j] > ptr->aabb_max[j]) ptr->aabb_max[j] = points[i][j];
+                    if(points[i][j] < ptr->aabb_min[j]) ptr->aabb_min[j] = points[i][j];
+                }
+            }
+
             smaller<n_matrix> tmp(dim-1);
             
             repr::smaller_init_array<n_vector> vsides(dim-1,[&](int i) -> n_vector { return points[i+1] - points[0]; });
@@ -2057,6 +1963,11 @@ PyObject *obj_TrianglePrototype_new(PyTypeObject *type,PyObject *args,PyObject *
 PyGetSetDef obj_TrianglePrototype_getset[] = {
     {const_cast<char*>("dimension"),OBJ_GETTER(obj_TrianglePrototype,self->face_normal.dimension()),NULL,NULL,NULL},
     {const_cast<char*>("face_normal"),OBJ_GETTER(obj_TrianglePrototype,self->face_normal),NULL,NULL,NULL},
+    {const_cast<char*>("point_data"),OBJ_GETTER(
+        obj_TrianglePrototype,
+        reinterpret_cast<PyObject*>(new obj_TrianglePointData(obj_self,self->dimension(),self->items()))),NULL,NULL,NULL},
+    {const_cast<char*>("aabb_max"),OBJ_GETTER(obj_TrianglePrototype,self->aabb_max),NULL,NULL,NULL},
+    {const_cast<char*>("aabb_min"),OBJ_GETTER(obj_TrianglePrototype,self->aabb_min),NULL,NULL,NULL},
     {NULL}
 };
 
@@ -2067,7 +1978,106 @@ PyTypeObject obj_TrianglePrototype::pytype = make_type_object(
     tp_dealloc = destructor_dealloc<obj_TrianglePrototype>::value,
     tp_methods = obj_TrianglePrototype_methods,
     tp_getset = obj_TrianglePrototype_getset,
+    tp_base = &obj_PrimitivePrototype::pytype,
     tp_new = &obj_TrianglePrototype_new);
+
+
+PyGetSetDef obj_TrianglePointDatum_getset[] = {
+    {const_cast<char*>("point"),OBJ_GETTER(obj_TrianglePointDatum,self->data.point),NULL,NULL,NULL},
+    {const_cast<char*>("edge_normal"),OBJ_GETTER(obj_TrianglePointDatum,self->data.edge_normal),NULL,NULL,NULL},
+    {NULL}
+};
+
+PyTypeObject obj_TrianglePointDatum::pytype = make_type_object(
+    MODULE_STR ".TrianglePointDatum",
+    sizeof(obj_TrianglePointDatum),
+    tp_dealloc = destructor_dealloc<obj_TrianglePointDatum>::value,
+    tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_CHECKTYPES,
+    tp_getset = obj_TrianglePointDatum_getset,
+    tp_new = [](PyTypeObject *type,PyObject *args,PyObject *kwds) -> PyObject* {
+        PyErr_SetString(PyExc_TypeError,"The TrianglePointDatum type cannot be instantiated directly");
+        return nullptr;
+    });
+
+
+PyObject *obj_SolidPrototype_realize(obj_SolidPrototype *self,PyObject*) {
+    return py::incref(self->p.ref());
+}
+
+PyMethodDef obj_SolidPrototype_methods[] = {
+    {"realize",reinterpret_cast<PyCFunction>(&obj_SolidPrototype_realize),METH_NOARGS,NULL},
+    {NULL}
+};
+
+PyObject *obj_SolidPrototype_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
+    auto ptr = reinterpret_cast<obj_SolidPrototype*>(type->tp_alloc(type,0));
+    if(!ptr) return NULL;
+    
+    try {
+        try {
+            const char *names[] = {"type","orientation","position"};
+            get_arg ga(args,kwds,names,"SolidPrototype.__new__");
+            auto type = from_pyobject<solid_type>(ga(true));
+            repr::matrix_obj::ref_type orientation = get_base<n_matrix>(ga(true));
+            auto position = from_pyobject<n_vector>(ga(true));
+            ga.finished();
+            
+            if(!compatible(orientation,position))
+                THROW_PYERR_STRING(TypeError,"the orientation and position must have the same dimension"); 
+            
+            new(&ptr->p) py::pyptr<solid<repr> >(py::new_ref(reinterpret_cast<PyObject*>(new solid<repr>(type,orientation,position))));
+
+            if(type == CUBE) {
+                new(&ptr->aabb_max) n_vector(position.dimension(),0);
+                for(int i=0; i<position.dimension(); ++i) ptr->aabb_max += cube_component(ptr->p.get(),i).apply(static_cast<real (*)(real)>(&std::abs));
+                new(&ptr->aabb_min) n_vector(ptr->p->position - ptr->aabb_max);
+                ptr->aabb_max += ptr->p->position;
+            } else {
+                assert(type == SPHERE);
+
+                new(&ptr->aabb_max) n_vector(position.dimension());
+                new(&ptr->aabb_min) n_vector(position.dimension());
+
+                for(int i=0; i<position.dimension(); ++i) {
+                    // equivalent to: (orientation.transpose() * n_vector::axis(position->dimension(),i)).unit()
+                    n_vector normal = orientation[i].unit();
+                    
+                    real max = dot(n_vector::axis(position.dimension(),i) - position,normal);
+                    real min = dot(n_vector::axis(position.dimension(),i,-1) - position,normal);
+                    if(min > max) std::swap(max,min);
+
+                    ptr->aabb_max[i] = max;
+                    ptr->aabb_min[i] = min;
+                }
+            }
+            
+            return reinterpret_cast<PyObject*>(ptr);
+        } catch(...) {
+            Py_DECREF(ptr);
+            throw;
+        }
+    } PY_EXCEPT_HANDLERS(NULL)
+}
+
+PyGetSetDef obj_SolidPrototype_getset[] = {
+    {const_cast<char*>("dimension"),OBJ_GETTER(obj_SolidPrototype,self->dimension()),NULL,NULL,NULL},
+    {const_cast<char*>("type"),OBJ_GETTER(obj_SolidPrototype,self->p->type),NULL,NULL,NULL},
+    {const_cast<char*>("orientation"),OBJ_GETTER(obj_SolidPrototype,self->p->orientation),NULL,NULL,NULL},
+    {const_cast<char*>("inv_orientation"),OBJ_GETTER(obj_SolidPrototype,self->p->inv_orientation),NULL,NULL,NULL},
+    {const_cast<char*>("position"),OBJ_GETTER(obj_SolidPrototype,self->p->position),NULL,NULL,NULL},
+    {const_cast<char*>("aabb_max"),OBJ_GETTER(obj_SolidPrototype,self->aabb_max),NULL,NULL,NULL},
+    {const_cast<char*>("aabb_min"),OBJ_GETTER(obj_SolidPrototype,self->aabb_min),NULL,NULL,NULL},
+    {NULL}
+};
+
+PyTypeObject obj_SolidPrototype::pytype = make_type_object(
+    MODULE_STR ".SolidPrototype",
+    sizeof(obj_SolidPrototype),
+    tp_dealloc = destructor_dealloc<obj_SolidPrototype>::value,
+    tp_methods = obj_SolidPrototype_methods,
+    tp_getset = obj_SolidPrototype_getset,
+    tp_base = &obj_PrimitivePrototype::pytype,
+    tp_new = &obj_SolidPrototype_new);
 
 
 PyObject *obj_dot(PyObject*,PyObject *args,PyObject *kwds) {
@@ -2112,99 +2122,34 @@ PyObject *obj_cross(PyObject*,PyObject *arg) {
     } PY_EXCEPT_HANDLERS(NULL)
 }
 
-PyObject *obj_axis_intersection(PyObject*,PyObject *args,PyObject *kwds) {
-    const char *range_err = "axis is out of range";
-    
-    try {
-        const char *names[] = {"axis","position","primitive"};
-        get_arg ga(args,kwds,names,"axis_intersection");
-        auto axis = from_pyobject<int>(ga(true));
-        auto position = from_pyobject<real>(ga(true));
-        auto p = ga(true);
-        ga.finished();
-        
-        if(axis < 0) THROW_PYERR_STRING(TypeError,range_err);
-        
-        int r;
-        
-        if(PyObject_TypeCheck(p,&obj_TrianglePrototype::pytype)) {
-            auto tp = reinterpret_cast<obj_TrianglePrototype*>(p);
-            
-            if(axis >= tp->dimension()) THROW_PYERR_STRING(TypeError,range_err);
-            
-            r = 1;
-            
-            for(auto &point : tp->items()) {
-                if(point.point[axis] <= position) {
-                    r = -1;
-                    for(auto &point : tp->items()) {
-                        if(point.point[axis] >= position) {
-                            r = 0;
-                            break;
-                        }
-                    }
-                    break;
-                }
-            }
-        } else if(PyObject_TypeCheck(p,&solid_common::pytype)) {
-            auto solid_obj = reinterpret_cast<solid<repr>*>(p);
-            
-            if(axis >= solid_obj->dimension()) THROW_PYERR_STRING(TypeError,range_err);
-            
-            r = 0;
-        
-            if(solid_obj->type == CUBE) {
-                real max = 0;
-                for(int i=0; i<solid_obj->dimension(); ++i) max += std::abs(cube_component(solid_obj,i)[axis]);
-                
-                if(position > solid_obj->position[axis] + max) r = 1;
-                else if(position < solid_obj->position[axis] - max) r = -1;
-            } else {
-                assert(solid_obj->type == SPHERE);
-                real plane_dist = dot(
-                    solid_obj->inv_orientation * (n_vector::axis(solid_obj->dimension(),axis,position) - solid_obj->position),
-                    solid_obj->orientation[axis].unit());
-
-                if(plane_dist < -1) r = -1;
-                else if(plane_dist > 1) r = 1;
-            }
-        } else {
-            return intersect_type_error(p);
-        }
-        
-        return to_pyobject(r);
-    } PY_EXCEPT_HANDLERS(NULL)
-}
-
 PyMethodDef func_table[] = {
     {"dot",reinterpret_cast<PyCFunction>(&obj_dot),METH_VARARGS|METH_KEYWORDS,NULL},
     {"cross",&obj_cross,METH_O,NULL},
-    {"axis_intersection",reinterpret_cast<PyCFunction>(&obj_axis_intersection),METH_VARARGS|METH_KEYWORDS,NULL},
     {NULL}
 };
 
 
-struct {
-    const char *name;
-    PyTypeObject *type_obj;
-} classes[] = {
-    {"BoxScene",&obj_BoxScene::pytype},
-    {"CompositeScene",&obj_CompositeScene::pytype},
-    {"Primitive",&obj_Primitive::pytype},
-    {"Solid",&solid<repr>::pytype},
-    {"Triangle",&triangle<repr>::pytype},
-    {"FrozenVectorView",&obj_FrozenVectorView::pytype},
-    {"KDNode",&obj_KDNode::pytype},
-    {"KDLeaf",&obj_KDLeaf::pytype},
-    {"KDBranch",&obj_KDBranch::pytype},
-    {"Vector",&repr::vector_obj::pytype},
-    {"MatrixProxy",&obj_MatrixProxy::pytype},
-    {"Camera",&repr::camera_obj::pytype},
-    {"CameraAxes",&obj_CameraAxes::pytype},
-    {"Matrix",&repr::matrix_obj::pytype},
-    {"AABB",&obj_AABB::pytype},
-    {"TrianglePrototype",&obj_TrianglePrototype::pytype}
-};
+PyTypeObject *classes[] = {
+    &obj_BoxScene::pytype,
+    &obj_CompositeScene::pytype,
+    &obj_Primitive::pytype,
+    &solid<repr>::pytype,
+    &triangle<repr>::pytype,
+    &obj_FrozenVectorView::pytype,
+    &obj_KDNode::pytype,
+    &obj_KDLeaf::pytype,
+    &obj_KDBranch::pytype,
+    &repr::vector_obj::pytype,
+    &obj_MatrixProxy::pytype,
+    &repr::camera_obj::pytype,
+    &obj_CameraAxes::pytype,
+    &repr::matrix_obj::pytype,
+    &obj_AABB::pytype,
+    &obj_PrimitivePrototype::pytype,
+    &obj_TrianglePrototype::pytype,
+    &obj_TrianglePointDatum::pytype,
+    &obj_TrianglePointData::pytype,
+    &obj_SolidPrototype::pytype};
 
 
 #if PY_MAJOR_VERSION >= 3
@@ -2242,7 +2187,7 @@ extern "C" SHARED(void) APPEND_MODULE_NAME(init)() {
 #endif
 
     for(auto &cls : classes) {
-        if(UNLIKELY(PyType_Ready(cls.type_obj) < 0)) return INIT_ERR_VAL;
+        if(UNLIKELY(PyType_Ready(cls) < 0)) return INIT_ERR_VAL;
     }
 
 #if PY_MAJOR_VERSION >= 3
@@ -2253,7 +2198,7 @@ extern "C" SHARED(void) APPEND_MODULE_NAME(init)() {
     if(UNLIKELY(!m)) return INIT_ERR_VAL;
         
     for(auto &cls : classes) {
-        add_class(m,cls.name,cls.type_obj);
+        add_class(m,cls->tp_name + sizeof(MODULE_STR),cls);
     }
 
 #if PY_MAJOR_VERSION >= 3

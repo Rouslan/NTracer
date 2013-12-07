@@ -115,12 +115,13 @@ class NTracer(object):
                 'KDLeaf',
                 'KDBranch',
                 'Primitive',
+                'PrimitivePrototype',
                 'Solid',
+                'SolidPrototype',
                 'Triangle',
                 'TrianglePrototype',
                 'dot',
-                'cross',
-                'axis_intersection']:
+                'cross']:
                 setattr(obj,n,getattr(mod,n))
             
             NTracer._cache[dimension] = obj

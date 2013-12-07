@@ -75,6 +75,17 @@ namespace py {
     template<typename T> inline T *get_base_or_none(PyObject *o) {
         return o == Py_None ? NULL : &get_base<T>(o);
     }
+    
+    inline const char *typename_base(const char *name) {
+        assert(name);
+        
+        while(true) {
+            assert(*name);
+            if(*name == '.') return name+1;
+            ++name;
+        }
+    }
+
 
 
     class object;
@@ -97,7 +108,7 @@ namespace py {
 
         _object_base(PyObject *ptr) : _ptr(ptr) {}
         _object_base(borrowed_ref r) : _ptr(incref(r._ptr)) {}
-        _object_base(new_ref r) : _ptr(r._ptr) { assert(_ptr); }
+        _object_base(py::new_ref r) : _ptr(r._ptr) { assert(_ptr); }
         _object_base(const _object_base &b) : _ptr(incref(b._ptr)) {}
 
         ~_object_base() {
@@ -114,7 +125,7 @@ namespace py {
         }
 
         PyObject *ref() const { return _ptr; }
-        PyObject *get_new_ref() const { return incref(_ptr); }
+        PyObject *new_ref() const { return incref(_ptr); }
         Py_ssize_t ref_count() const { return _ptr->ob_refcnt; }
 
         object_attr_proxy attr(const char *name) const;
@@ -148,7 +159,7 @@ namespace py {
     class object : public _object_base {
     public:
         object(borrowed_ref r) : _object_base(r) {}
-        object(new_ref r) : _object_base(r) {}
+        object(py::new_ref r) : _object_base(r) {}
         object(const _object_base &b) : _object_base(b) {}
 
         object &operator=(const _object_base &b) {
@@ -203,11 +214,11 @@ namespace py {
     inline object_attr_proxy _object_base::attr(const char *name) const { return object_attr_proxy(_ptr,name); }
 
     inline object _object_base::operator()() const {
-        return new_ref(check_obj(PyObject_CallObject(_ptr,0)));
+        return py::new_ref(check_obj(PyObject_CallObject(_ptr,0)));
     }
 
     template<typename Arg1,typename... Args> inline object _object_base::operator()(const Arg1 &arg1,const Args&... args) const {
-        return new_ref(check_obj(PyObject_CallFunctionObjArgs(_ptr,
+        return py::new_ref(check_obj(PyObject_CallFunctionObjArgs(_ptr,
             make_object(arg1).ref(),
             make_object(args).ref()...,
             0)));
@@ -401,8 +412,8 @@ namespace py {
     class tuple : public _object_base {
     public:
         tuple(borrowed_ref r) : _object_base(r) { assert(PyTuple_Check(r._ptr)); }
-        tuple(new_ref r) : _object_base(r) { assert(PyTuple_Check(r._ptr)); }
-        explicit tuple(Py_ssize_t len) : _object_base(new_ref(check_obj(PyTuple_New(len)))) {}
+        tuple(py::new_ref r) : _object_base(r) { assert(PyTuple_Check(r._ptr)); }
+        explicit tuple(Py_ssize_t len) : _object_base(py::new_ref(check_obj(PyTuple_New(len)))) {}
         tuple(const tuple &b) : _object_base(b) {}
         explicit tuple(const _object_base &b) : _object_base(object(py::borrowed_ref(reinterpret_cast<PyObject*>(&PyTuple_Type)))(b)) {
             assert(PyTuple_Check(_ptr));
@@ -412,7 +423,7 @@ namespace py {
             auto ti = &PyTuple_GET_ITEM(_ptr,0);
             
             for(; li != std::end(ol); ++li, ++ti) {
-                *ti = li->get_new_ref();
+                *ti = li->new_ref();
             }
         }
 
@@ -461,7 +472,7 @@ namespace py {
 
         list_item_proxy &operator=(object val) {
             PyObject *oldval = PyList_GET_ITEM(_ptr,index);
-            PyList_SET_ITEM(_ptr,index,val.get_new_ref());
+            PyList_SET_ITEM(_ptr,index,val.new_ref());
             Py_DECREF(oldval);
             return *this;
         }
@@ -475,8 +486,8 @@ namespace py {
     class list : public _object_base {
     public:
         list(borrowed_ref r) : _object_base(r) { assert(PyList_Check(r._ptr)); }
-        list(new_ref r) : _object_base(r) { assert(PyList_Check(r._ptr)); }
-        list() : _object_base(new_ref(check_obj(PyList_New(0)))) {}
+        list(py::new_ref r) : _object_base(r) { assert(PyList_Check(r._ptr)); }
+        list() : _object_base(py::new_ref(check_obj(PyList_New(0)))) {}
         list(const list &b) : _object_base(b) {}
         explicit list(const _object_base &b) : _object_base(object(py::borrowed_ref(reinterpret_cast<PyObject*>(&PyList_Type)))(b)) {
             assert(PyList_Check(_ptr));
@@ -545,8 +556,8 @@ namespace py {
     class dict : public _object_base {
     public:
         dict(borrowed_ref r) : _object_base(r) { assert(PyDict_Check(r._ptr)); }
-        dict(new_ref r) : _object_base(r) { assert(PyDict_Check(r._ptr)); }
-        dict() : _object_base(new_ref(check_obj(PyDict_New()))) {}
+        dict(py::new_ref r) : _object_base(r) { assert(PyDict_Check(r._ptr)); }
+        dict() : _object_base(py::new_ref(check_obj(PyDict_New()))) {}
         dict(const dict &b) : _object_base(b) {}
 
         dict &operator=(const dict &b) {
@@ -573,12 +584,12 @@ namespace py {
                 if(!PyErr_ExceptionMatches(PyExc_KeyError)) throw py_error_set();
                 PyErr_Clear();
             }
-            return new_ref(item);
+            return py::new_ref(item);
 #endif
         }
 
         dict copy(const dict &b) const {
-            return new_ref(PyDict_Copy(b._ptr));
+            return py::new_ref(PyDict_Copy(b._ptr));
         }
     };
 
@@ -592,9 +603,9 @@ namespace py {
     class bytes : public _object_base {
     public:
         bytes(borrowed_ref r) : _object_base(r) { assert(PYBYTES(Check)(r._ptr)); }
-        bytes(new_ref r) : _object_base(r) { assert(PYBYTES(Check)(r._ptr)); }
-        bytes(const char *str="") : _object_base(new_ref(check_obj(PYBYTES(FromString)(str)))) {}
-        explicit bytes(Py_ssize_t s) : _object_base(new_ref(check_obj(PYBYTES(FromStringAndSize)(NULL,s)))) {}
+        bytes(py::new_ref r) : _object_base(r) { assert(PYBYTES(Check)(r._ptr)); }
+        bytes(const char *str="") : _object_base(py::new_ref(check_obj(PYBYTES(FromString)(str)))) {}
+        explicit bytes(Py_ssize_t s) : _object_base(py::new_ref(check_obj(PYBYTES(FromStringAndSize)(NULL,s)))) {}
         bytes(const bytes &b) : _object_base(b) {}
 
         bytes &operator=(const bytes &b) {
@@ -834,7 +845,99 @@ namespace py {
         Py_ssize_t length() const { return size; }
         int gc_traverse(visitproc visit,void *arg) const { return (*visit)(origin.ref(),arg); }
     };
-
+    
+    template<typename Item,const char* FullName,bool GC,bool ReadOnly=false> struct obj_array_adapter;
+    
+    namespace impl {
+        template<typename Item,const char* FullName,bool GC,bool ReadOnly> struct array_adapter_alloc {
+            static constexpr traverseproc traverse = nullptr;
+            static constexpr long tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_CHECKTYPES;
+            
+            PY_MEM_NEW_DELETE
+        protected:
+            array_adapter_alloc() = default;
+            ~array_adapter_alloc() = default;
+        };
+        
+        template<typename Item,const char* FullName,bool ReadOnly> struct array_adapter_alloc<Item,FullName,true,ReadOnly> {
+            static int _traverse(PyObject *self,visitproc visit,void *arg) {
+                return reinterpret_cast<obj_array_adapter<Item,FullName,true,ReadOnly>*>(self)->data.gc_traverse(visit,arg);
+            }
+            static constexpr traverseproc traverse = &_traverse;
+            static constexpr long tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_CHECKTYPES|Py_TPFLAGS_HAVE_GC;
+            
+            PY_MEM_GC_NEW_DELETE
+        protected:
+            array_adapter_alloc() = default;
+            ~array_adapter_alloc() = default;
+        };
+        
+        template<typename Item,const char* FullName,bool GC,bool ReadOnly> struct array_adapter_set_item {
+            static int _value(PyObject *self,Py_ssize_t index,PyObject *value) {
+                try {
+                    reinterpret_cast<obj_array_adapter<Item,FullName,GC,ReadOnly>*>(self)->data.sequence_setitem(index,from_pyobject<Item>(value));
+                } PY_EXCEPT_HANDLERS(-1)
+                return 0;
+            }
+            static constexpr ssizeobjargproc value = &_value;
+        };
+        
+        template<typename Item,const char* FullName,bool GC> struct array_adapter_set_item<Item,FullName,GC,true> {
+            static constexpr ssizeobjargproc value = nullptr;
+        };
+    }
+    
+    template<typename Item,const char* FullName,bool GC,bool ReadOnly> struct obj_array_adapter : impl::array_adapter_alloc<Item,FullName,GC,ReadOnly> {
+        static PySequenceMethods seq_methods;
+        static PyTypeObject pytype;
+        PyObject_HEAD
+            
+        obj_array_adapter(PyObject *origin,size_t size,Item *items) : data(origin,size,items) {
+            PyObject_Init(reinterpret_cast<PyObject*>(this),&pytype);
+        }
+            
+        array_adapter<Item> data;
+    };
+    
+    template<typename Item,const char* FullName,bool GC,bool ReadOnly>
+        PySequenceMethods obj_array_adapter<Item,FullName,GC,ReadOnly>::seq_methods = {
+        
+        [](PyObject *self) {
+            return reinterpret_cast<obj_array_adapter<Item,FullName,GC,ReadOnly>*>(self)->data.length();
+        },
+        NULL,
+        NULL,
+        [](PyObject *self,Py_ssize_t index) -> PyObject* {
+            try {
+                return to_pyobject(reinterpret_cast<obj_array_adapter<Item,FullName,GC,ReadOnly>*>(self)->data.sequence_getitem(index));
+            } PY_EXCEPT_HANDLERS(nullptr)
+        },
+        NULL,
+        impl::array_adapter_set_item<Item,FullName,GC,ReadOnly>::value,
+        NULL,
+        NULL,
+        NULL,
+        NULL
+    };
+    
+    template<typename Item,const char* FullName,bool GC,bool ReadOnly>
+        PyTypeObject obj_array_adapter<Item,FullName,GC,ReadOnly>::pytype = type_object_abbrev::make_type_object(
+        
+        FullName,
+        sizeof(obj_array_adapter<Item,FullName,GC,ReadOnly>),
+        type_object_abbrev::tp_dealloc = [](PyObject *self) -> void {
+            typedef obj_array_adapter<Item,FullName,GC,ReadOnly> self_t;
+        
+            reinterpret_cast<self_t*>(self)->~self_t();
+            (*self_t::pytype.tp_free)(self);
+        },
+        type_object_abbrev::tp_flags = obj_array_adapter<Item,FullName,GC,ReadOnly>::tp_flags,
+        type_object_abbrev::tp_as_sequence = &obj_array_adapter<Item,FullName,GC,ReadOnly>::seq_methods,
+        type_object_abbrev::tp_traverse = obj_array_adapter<Item,FullName,GC,ReadOnly>::traverse,
+        type_object_abbrev::tp_new = [](PyTypeObject *type,PyObject *args,PyObject *kwds) -> PyObject* {
+            PyErr_Format(PyExc_TypeError,"The %s type cannot be instantiated directly",typename_base(FullName));
+            return nullptr;
+        });
 
 
     /*template<typename T> inline pyptr<T> newpy() {

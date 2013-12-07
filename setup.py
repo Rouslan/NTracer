@@ -177,7 +177,7 @@ else:
 
 setup(name='ntracer',
     version=version,
-    packages=['ntracer'],
+    packages=['ntracer','ntracer.tests'],
     scripts=['scripts/hypercube.py'],
     ext_package='ntracer',
     ext_modules=[

@@ -1,10 +1,16 @@
 #!/usr/bin/python
 
+from __future__ import print_function
+
+
+import sys
 import itertools
 import functools
 import argparse
 import pygame
 from ntracer import NTracer, Renderer
+from ntracer import kdtree_builder
+from ntracer import wavefront_obj
 
 
 MOVE_SENSITIVITY = 0.01
@@ -266,14 +272,44 @@ def d_symbol(d):
     return 'XYZ'[d] if d < 3 else 'D' + str(d+1)
 
 
+def excepthook(type,value,traceback):
+    if isinstance(value,Exception):
+        print(str(value),file=sys.stderr)
+    else:
+        sys.__excepthook__(type,value,traceback)
+    
+sys.excepthook = excepthook
 
-argp = argparse.ArgumentParser(description='''Navigate around a hypercube.
-Note: the term "dimension" is used here in the geometric sense. e.g.: to say a
-given space has a dimension of three, is the same as saying it is
-three-dimensional or it has three dimensions.''')
-argp.add_argument('-d','--dimension',default=3,type=int,metavar='N',help='the dimension of the hypercube and the navigable space')
+argp = argparse.ArgumentParser(description='''Navigate around a hypercube or a
+mesh from a file. By default, a 3-dimensional cube will be displayed. To
+display a hypercube, use --dimension to specify the dimensionality.
+Alternatively, an arbitrary 3D mesh can be specified with --file, which should
+specify the path to a wavefront obj file. When using a file, only the polygon
+data will displayed. Lines and curves will be ignored.''')
+argp.add_argument('-d','--dimension',default=3,type=int,metavar='N',help='the dimensionality of the hypercube and the navigable space.')
+argp.add_argument('-f','--file',metavar='PATH',help='a wavefront obj file to load and display')
+argp.add_argument('--debug',action='store_true',help="don't catch exceptions from errors")
 args = argp.parse_args()
-dimension = args.dimension
+
+if args.debug:
+    sys.excepthook = sys.__excepthook__
+
+ntracer = NTracer(args.dimension)
+
+if args.file:
+    if ntracer.dimension != 3:
+        sys.exit('a file can only be displayed with a dimensionality of 3')
+
+    try:
+        triangles = wavefront_obj.load_obj(args.file)
+    except Exception as e:
+        if args.debug:
+            raise
+        sys.exit('could not load file: ' + str(e))
+        
+    scene = ntracer.CompositeScene(kdtree_builder.build_kdtree(ntracer,triangles))
+else:
+    scene = ntracer.BoxScene()
 
 pygame.display.init()
 pygame.font.init()
@@ -296,7 +332,7 @@ def translate(d):
     return inner
 
 UI.label('Slide',(15,15))
-for i in range(dimension):
+for i in range(ntracer.dimension):
     UI.slider(d_symbol(i),(15,35+20*i),translate(i))
 
 
@@ -313,19 +349,17 @@ def rotate(d1,d2):
             started = True
     return inner
 
-UI.label('Turn',(15,50+20*dimension))
-for i,dd in enumerate(itertools.combinations(range(dimension),2)):
+UI.label('Turn',(15,50+20*ntracer.dimension))
+for i,dd in enumerate(itertools.combinations(range(ntracer.dimension),2)):
     UI.slider(
         '{0} -> {1}'.format(*map(d_symbol,dd)),
-        (15,70+20*(i+dimension)),
+        (15,70+20*(i+ntracer.dimension)),
         rotate(*dd))
 
 
-ntracer = NTracer(dimension)
 camera = ntracer.Camera()
 camera.translate(ntracer.Vector.axis(2,-5))
 r = Renderer()
-scene = ntracer.BoxScene()
 
 def begin_render():
     scene.set_camera(camera)
