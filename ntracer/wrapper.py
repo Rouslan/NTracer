@@ -74,19 +74,25 @@ class NTracer(object):
     """A helper class that simplifies the creation of multiple objects with
     the same dimension.
     
-    An instance of ``NTracer`` contains the attributes ``Vector``, ``Matrix``, 
-    ``Camera`` and ``BoxScene``, which are classes that have the same
-    interface as those of ``tracern``, except their constructors and static
-    methods don't have ``dimension`` parameters.
+    An instance contains all the same values that :py:mod:`.tracern` has,
+    except every class that has a method with a ``dimension`` parameter is
+    subclassed so that parameter is filled in automatically. Additionally, the
+    constructors for :py:class:`.tracern.Vector` and
+    :py:class:`.tracern.Matrix` are modified to accept multiple parameters as
+    an alternative to a sequence of values. e.g.:
+    :code:`NTracer(3).Vector([1,2,3])` can also be written as
+    :code:`NTracer(3).Vector(1,2,3)`.
     
     An instance of ``NTracer`` imports from a specialized (read: faster)
-    tracer*{dimension}* version if it exists, and falls back to ``tracern``
-    otherwise.
+    tracer\ *{dimension}* version if it exists, and falls back to
+    :py:mod:`.tracern` otherwise.
     
     Instances of ``NTracer`` are cached, so invoking ``NTracer`` while another
     instance with the same dimension already exists, will simply give you the
     first instance.
     
+    :param integer dimension: The value that will be automatically given to any
+        function/method/constructor that requires a ``dimension`` parameter.
     """
     
     _cache = weakref.WeakValueDictionary()

@@ -304,7 +304,7 @@ template<typename Repr> struct kd_node {
        manually */
     node_type type;
     
-    bool intersects(const ray<Repr> &target,ray<Repr> &normal,real t_near,real t_far,int cur_d) const;
+    bool intersects(const ray<Repr> &target,ray<Repr> &normal,real t_near,real t_far) const;
     
     void *operator new(size_t size) {
         return py::malloc(size);
@@ -319,42 +319,44 @@ protected:
 };
 
 template<typename Repr> struct kd_branch : kd_node<Repr> {
+    int axis;
     real split;
     std::unique_ptr<kd_node<Repr> > left; // < split
     std::unique_ptr<kd_node<Repr> > right; // > split
     
-    kd_branch(real split,kd_node<Repr> *left,kd_node<Repr> *right) : kd_node<Repr>(BRANCH), split(split), left(left), right(right) {}
-    kd_branch(real split,std::unique_ptr<kd_node<Repr> > &&left,std::unique_ptr<kd_node<Repr> > &&right) : kd_node<Repr>(BRANCH), split(split), left(left), right(right) {}
+    kd_branch(int axis,real split,kd_node<Repr> *left,kd_node<Repr> *right) :
+        kd_node<Repr>(BRANCH), axis(axis), split(split), left(left), right(right) {}
     
-    bool intersects(const ray<Repr> &target,ray<Repr> &normal,real t_near,real t_far,int cur_d) const {
+    kd_branch(int axis,real split,std::unique_ptr<kd_node<Repr> > &&left,std::unique_ptr<kd_node<Repr> > &&right) :
+        kd_node<Repr>(BRANCH), axis(axis), split(split), left(left), right(right) {}
+    
+    bool intersects(const ray<Repr> &target,ray<Repr> &normal,real t_near,real t_far) const {
         assert(target.dimension() == normal.dimension());
         
-        cur_d = (cur_d + 1) % target.dimension();
-        
-        if(target.direction[cur_d]) {
-            if(target.origin[cur_d] == split) {
-                auto node = (target.direction[cur_d] > 0 ? right : left).get();
-                return node ? node->intersects(target,normal,t_near,t_far,cur_d) : false;
+        if(target.direction[axis]) {
+            if(target.origin[axis] == split) {
+                auto node = (target.direction[axis] > 0 ? right : left).get();
+                return node ? node->intersects(target,normal,t_near,t_far) : false;
             }
             
-            real t = (split - target.origin[cur_d]) / target.direction[cur_d];
+            real t = (split - target.origin[axis]) / target.direction[axis];
             
             auto n_near = left.get();
             auto n_far = right.get();
-            if(target.origin[cur_d] > split) {
+            if(target.origin[axis] > split) {
                 n_near = right.get();
                 n_far = left.get();
             }
 
-            if(t <= 0 || t >= t_far) return n_near ? n_near->intersects(target,normal,t_near,t_far,cur_d) : false;
-            if(t <= t_near) return n_far ? n_far->intersects(target,normal,t_near,t_far,cur_d) : false;
+            if(t <= 0 || t >= t_far) return n_near ? n_near->intersects(target,normal,t_near,t_far) : false;
+            if(t <= t_near) return n_far ? n_far->intersects(target,normal,t_near,t_far) : false;
         
-            if(n_near && n_near->intersects(target,normal,t_near,t,cur_d)) return true;
-            return n_far ? n_far->intersects(target,normal,t,t_far,cur_d) : false;
+            if(n_near && n_near->intersects(target,normal,t_near,t)) return true;
+            return n_far ? n_far->intersects(target,normal,t,t_far) : false;
         }
 
-        auto node = (target.origin[cur_d] >= split ? right : left).get();
-        return node ? node->intersects(target,normal,t_near,t_far,cur_d) : false;
+        auto node = (target.origin[axis] >= split ? right : left).get();
+        return node ? node->intersects(target,normal,t_near,t_far) : false;
     }
 };
 
@@ -423,11 +425,11 @@ private:
     }
 };
 
-template<typename Repr> bool kd_node<Repr>::intersects(const ray<Repr> &target,ray<Repr> &normal,real t_near,real t_far,int cur_d) const {
+template<typename Repr> bool kd_node<Repr>::intersects(const ray<Repr> &target,ray<Repr> &normal,real t_near,real t_far) const {
     if(type == LEAF) return static_cast<const kd_leaf<Repr>*>(this)->intersects(target,normal);
     
     assert(type == BRANCH);
-    return static_cast<const kd_branch<Repr>*>(this)->intersects(target,normal,t_near,t_far,cur_d);
+    return static_cast<const kd_branch<Repr>*>(this)->intersects(target,normal,t_near,t_far);
 }
 
 
@@ -448,7 +450,7 @@ template<typename Repr> struct composite_scene : Scene {
             camera.origin(),
             (camera.forward() + camera.right() * (fovI * (x - w/2)) - camera.up() * (fovI * (y - h/2))).unit());
         ray<Repr> normal(dimension());
-        if(root->intersects(view,normal,std::numeric_limits<real>::lowest(),std::numeric_limits<real>::max(),-1)) {
+        if(root->intersects(view,normal,std::numeric_limits<real>::lowest(),std::numeric_limits<real>::max())) {
             real sine = dot(view.direction,normal.direction);
             return (sine <= 0 ? -sine : real(0)) * color(1.0f,0.5f,0.5f);
         }

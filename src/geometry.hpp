@@ -237,7 +237,7 @@ namespace impl {
         template<typename B> void fill_with(const vector_expr<B> &b) {
             rep([this,&b](int i){ (*this)[i] = b[i]; });
         }
-        template<typename F> typename std::enable_if<!std::is_arithmetic<F>::value>::type fill_with(F f) {
+        template<typename F,typename=decltype(declval<F>()(declval<int>()))> void fill_with(F f) {
             rep([=](int i){ (*this)[i] = f(i); });
         }
         

@@ -11,7 +11,9 @@ GCC >= 4.7 and Clang >= 3.1.
 NTracer is a simple ray-tracer that can work with scenes with an arbitrary
 number of dimensions.
 
-.. image:: http://rouslan.github.io/NTracer/screenshots/ntracer_6d.png
+.. figure:: rouslan.github.io/NTracer/screenshots/ntracer_6d.png
+
+    A six-dimensional hypercube at an arbitrary angle.
 
 The renderer can use an arbitrary number of threads and by default uses as many
 threads as there are processing cores. For small dimensionalities (by default,
@@ -23,6 +25,8 @@ The main goal is to aid in the visualization of higher-dimensional space. Python
 and Pygame were chosen as the library's interface to make experimenting with
 user interfaces and navigation schemes as easy as possible. The included script,
 hypercube.py, offers a working example.
+
+Documentation is available at http://rouslan.github.io/NTracer/doc.
 
 
 Dealing with Higher-Dimensional Space

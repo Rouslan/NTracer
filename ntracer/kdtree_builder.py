@@ -2,6 +2,8 @@
 # rewritten in C++ where it can be made threaded (CPython can only execute one
 # instruction at a time)
 
+from future_builtins import filter, map, zip
+
 import sys
 import itertools
 import operator
@@ -84,6 +86,19 @@ def create_leaf(nt,contain_p,overlap_p):
     return nt.KDLeaf(p.realize() for p in itertools.chain(contain_p,overlap_p))
 
 
+def best_axis(boundary):
+    width = -1
+    axis = None
+    for i,extent in enumerate(zip(boundary.start,boundary.end)):
+        new_width = extent[1] - extent[0]
+        if new_width > width:
+            width = new_width
+            axis = i
+            
+    assert axis is not None
+    return axis
+
+
 # The primitives are divided into the lists: contain_p and overlap_p.
 # Primitives in contain_p are entirely inside boundary, and are much easier to
 # partition. The rest of the primitives are in overlap_p.
@@ -94,19 +109,19 @@ def create_leaf(nt,contain_p,overlap_p):
 # split (hyper)plane, in which case it should be on the right side.
 def create_node(nt,depth,boundary,contain_p,overlap_p):
     depth += 1
-    cur_dim = depth % nt.dimension
+    axis = best_axis(boundary)
     
     if not (contain_p or overlap_p): return None
     
     if depth >= MAX_DEPTH or len(contain_p) + len(overlap_p) <= SPLIT_THRESHHOLD:
         return create_leaf(nt,contain_p,overlap_p)
     
-    split = find_split(boundary,cur_dim,contain_p,overlap_p)
+    split = find_split(boundary,axis,contain_p,overlap_p)
     if split is None:
         return create_leaf(nt,contain_p,overlap_p)
     
-    b_left = boundary.left(cur_dim,split)
-    b_right = boundary.right(cur_dim,split)
+    b_left = boundary.left(axis,split)
+    b_right = boundary.right(axis,split)
     
     l_contain_p = []
     r_contain_p = []
@@ -114,8 +129,8 @@ def create_node(nt,depth,boundary,contain_p,overlap_p):
     r_overlap_p = []
     
     for p in contain_p:
-        if p.aabb_min[cur_dim] < split:
-            if p.aabb_max[cur_dim] <= split:
+        if p.aabb_min[axis] < split:
+            if p.aabb_max[axis] <= split:
                 l_contain_p.append(p)
             else:
                 l_overlap_p.append(p)
@@ -132,6 +147,7 @@ def create_node(nt,depth,boundary,contain_p,overlap_p):
             r_overlap_p.append(p)
     
     return nt.KDBranch(
+        axis,
         split,
         create_node(nt,depth,b_left,l_contain_p,l_overlap_p),
         create_node(nt,depth,b_right,r_contain_p,r_overlap_p))

@@ -10,7 +10,11 @@ def index1(x):
     return x-1 if x >= 0 else x
 
 def load_obj(file,nt=None):
-    if nt is None: nt = wrapper.NTracer(3)
+    if nt is None:
+        nt = wrapper.NTracer(3)
+    elif nt.dimension != 3:
+        raise ValueError('Wavefront .obj files only support 3-dimensional geometry')
+        
     vertices = []
     triangles = []
     

@@ -1,1 +1,2 @@
 include *.txt
+recursive-include doc conf.py Makefile make.bat *.rst

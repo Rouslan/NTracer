@@ -408,13 +408,6 @@ void copy_camera(const n_camera &source,n_camera &dest) {
     for(int i=0; i<source.dimension(); ++i) dest.axes()[i] = source.axes()[i];
 }
 
-const char *set_camera_doc = "\
-set_camera(camera)\n\
-\n\
-Attempt to set the scene's camera to a copy of the provided value.\n\
-\n\
-If the scene has been locked by a Renderer, this function will raise an\n\
-exception instead.\n";
 PyObject *obj_BoxScene_set_camera(obj_BoxScene *self,PyObject *arg) {
     try {
         if(self->base.locked) {
@@ -433,10 +426,6 @@ PyObject *obj_BoxScene_set_camera(obj_BoxScene *self,PyObject *arg) {
     } PY_EXCEPT_HANDLERS(NULL)
 }
 
-const char *get_camera_doc = "\
-get_camera()\n\
-\n\
-Return a copy of the scene's camera\n";
 PyObject *obj_BoxScene_get_camera(obj_BoxScene *self,PyObject *) {
     try {
         const n_camera &c = self->base.camera;
@@ -453,8 +442,8 @@ PyObject *obj_BoxScene_set_fov(obj_BoxScene *self,PyObject *arg) {
 }
 
 PyMethodDef obj_BoxScene_methods[] = {
-    {"set_camera",reinterpret_cast<PyCFunction>(&obj_BoxScene_set_camera),METH_O,set_camera_doc},
-    {"get_camera",reinterpret_cast<PyCFunction>(&obj_BoxScene_get_camera),METH_NOARGS,get_camera_doc},
+    {"set_camera",reinterpret_cast<PyCFunction>(&obj_BoxScene_set_camera),METH_O,NULL},
+    {"get_camera",reinterpret_cast<PyCFunction>(&obj_BoxScene_get_camera),METH_NOARGS,NULL},
     {"set_fov",reinterpret_cast<PyCFunction>(&obj_BoxScene_set_fov),METH_O,NULL},
     {NULL}
 };
@@ -481,6 +470,11 @@ PyObject *obj_BoxScene_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
     return reinterpret_cast<PyObject*>(ptr);
 }
 
+PyGetSetDef obj_BoxScene_getset[] = {
+    {const_cast<char*>("locked"),OBJ_GETTER(obj_BoxScene,self->base.locked),NULL,NULL,NULL},
+    {NULL}
+};
+
 PyMemberDef obj_BoxScene_members[] = {
     {const_cast<char*>("fov"),member_macro<real>::value,offsetof(obj_BoxScene,base.fov),READONLY,NULL},
     {NULL}
@@ -496,6 +490,7 @@ PyTypeObject obj_BoxScene::pytype = make_type_object(
     tp_weaklistoffset = offsetof(obj_BoxScene,weaklist),
     tp_methods = obj_BoxScene_methods,
     tp_members = obj_BoxScene_members,
+    tp_getset = obj_BoxScene_getset,
     tp_dictoffset = offsetof(obj_BoxScene,idict),
     tp_new = &obj_BoxScene_new);
 
@@ -546,8 +541,8 @@ PyObject *obj_CompositeScene_set_fov(obj_CompositeScene *self,PyObject *arg) {
 }
 
 PyMethodDef obj_CompositeScene_methods[] = {
-    {"set_camera",reinterpret_cast<PyCFunction>(&obj_CompositeScene_set_camera),METH_O,set_camera_doc},
-    {"get_camera",reinterpret_cast<PyCFunction>(&obj_CompositeScene_get_camera),METH_NOARGS,get_camera_doc},
+    {"set_camera",reinterpret_cast<PyCFunction>(&obj_CompositeScene_set_camera),METH_O,NULL},
+    {"get_camera",reinterpret_cast<PyCFunction>(&obj_CompositeScene_get_camera),METH_NOARGS,NULL},
     {"set_fov",reinterpret_cast<PyCFunction>(&obj_CompositeScene_set_fov),METH_O,NULL},
     {NULL}
 };
@@ -580,6 +575,11 @@ PyObject *obj_CompositeScene_new(PyTypeObject *type,PyObject *args,PyObject *kwd
     return reinterpret_cast<PyObject*>(ptr);
 }
 
+PyGetSetDef obj_CompositeScene_getset[] = {
+    {const_cast<char*>("locked"),OBJ_GETTER(obj_CompositeScene,self->base.locked),NULL,NULL,NULL},
+    {NULL}
+};
+
 PyMemberDef obj_CompositeScene_members[] = {
     {const_cast<char*>("fov"),member_macro<real>::value,offsetof(obj_CompositeScene,base.fov),READONLY,NULL},
     {NULL}
@@ -595,6 +595,7 @@ PyTypeObject obj_CompositeScene::pytype = make_type_object(
     tp_weaklistoffset = offsetof(obj_CompositeScene,weaklist),
     tp_methods = obj_CompositeScene_methods,
     tp_members = obj_CompositeScene_members,
+    tp_getset = obj_CompositeScene_getset,
     tp_dictoffset = offsetof(obj_CompositeScene,idict),
     tp_new = &obj_CompositeScene_new);
 
@@ -759,7 +760,7 @@ PyObject *obj_Triangle_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
     const char dim_err[] = "all supplied vectors must have the same dimension";
 
     try {
-        const char *names[] = {"p1,face_normal,edge_normals"};
+        const char *names[] = {"p1","face_normal","edge_normals"};
         get_arg ga(args,kwds,names,"Triangle.__new__");
         auto p1 = from_pyobject<n_vector>(ga(true));
         auto face_normal = from_pyobject<n_vector>(ga(true));
@@ -827,21 +828,18 @@ PyObject *kdnode_intersects(obj_KDNode *self,PyObject *args,PyObject *kwds) {
     try {
         assert(self->_data->type == LEAF || self->_data->type == BRANCH);
         
-        const char *names[] = {"origin","direction","t_near","t_far","cur_d"};
+        const char *names[] = {"origin","direction","t_near","t_far"};
         get_arg ga(args,kwds,names,self->_data->type == LEAF ? "KDLeaf.intersects" : "KDBranch.intersects");
         auto origin = from_pyobject<n_vector>(ga(true));
         auto direction = from_pyobject<n_vector>(ga(true));
         
         real t_near = std::numeric_limits<real>::lowest();
         real t_far = std::numeric_limits<real>::max();
-        int cur_d = -1;
         
         PyObject *tmp = ga(false);
         if(tmp) t_near = from_pyobject<real>(tmp);
         tmp = ga(false);
         if(tmp) t_far = from_pyobject<real>(tmp);
-        tmp = ga(false);
-        if(tmp) cur_d = from_pyobject<int>(tmp);
         ga.finished();
         
         check_origin_dir_compat(origin,direction);
@@ -849,7 +847,7 @@ PyObject *kdnode_intersects(obj_KDNode *self,PyObject *args,PyObject *kwds) {
         ray<repr> target(origin,direction);
         ray<repr> normal(origin.dimension());
         
-        if(!self->_data->intersects(target,normal,t_near,t_far,cur_d)) Py_RETURN_NONE;
+        if(!self->_data->intersects(target,normal,t_near,t_far)) Py_RETURN_NONE;
         
         return py::make_tuple(normal.origin,normal.direction).new_ref();
     } PY_EXCEPT_HANDLERS(NULL)
@@ -967,7 +965,7 @@ PyMethodDef obj_KDBranch_methods[] = {
 };
 
 obj_KDNode* acceptable_node(PyObject *obj) {
-    if(obj == Py_None) return nullptr;
+    if(!obj || obj == Py_None) return nullptr;
     
     if(Py_TYPE(obj) != &obj_KDBranch::pytype && Py_TYPE(obj) != &obj_KDLeaf::pytype)
         THROW_PYERR_STRING(TypeError,"\"left\" and \"right\" must be instances of " MODULE_STR ".KDNode");
@@ -985,11 +983,12 @@ PyObject *obj_KDBranch_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
     if(ptr) {
         try {
             try {
-                const char *names[] = {"split","left","right"};
+                const char *names[] = {"axis","split","left","right"};
                 get_arg ga(args,kwds,names,"KDBranch.__new__");
+                auto axis = from_pyobject<int>(ga(true));
                 auto split = from_pyobject<real>(ga(true));
-                auto left = ga(true);
-                auto right = ga(true);
+                auto left = ga(false);
+                auto right = ga(false);
                 ga.finished();
                 
                 auto lnode = acceptable_node(left);
@@ -1001,7 +1000,7 @@ PyObject *obj_KDBranch_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
                 if(lnode && rnode && !compatible(*lnode,*rnode))
                     THROW_PYERR_STRING(TypeError,"\"left\" and \"right\" must have the same dimension");
 
-                ptr->data() = new kd_branch<repr>(split,lnode ? lnode->_data : nullptr,rnode ? rnode->_data : nullptr);
+                ptr->data() = new kd_branch<repr>(axis,split,lnode ? lnode->_data : nullptr,rnode ? rnode->_data : nullptr);
                 ptr->dimension = (lnode ? lnode : rnode)->dimension();
                 auto new_parent = py::borrowed_ref(reinterpret_cast<PyObject*>(ptr));
                 if(lnode) lnode->parent = new_parent;
@@ -1031,6 +1030,7 @@ PyObject *obj_KDBranch_get_child(obj_KDBranch *self,void *index) {
 }
 
 PyGetSetDef obj_KDBranch_getset[] = {
+    {const_cast<char*>("axis"),OBJ_GETTER(obj_KDBranch,self->data()->axis),NULL,NULL,NULL},
     {const_cast<char*>("split"),OBJ_GETTER(obj_KDBranch,self->data()->split),NULL,NULL,NULL},
     {const_cast<char*>("left"),reinterpret_cast<getter>(&obj_KDBranch_get_child),NULL,NULL,reinterpret_cast<void*>(0)},
     {const_cast<char*>("right"),reinterpret_cast<getter>(&obj_KDBranch_get_child),NULL,NULL,reinterpret_cast<void*>(1)},
@@ -1177,13 +1177,16 @@ Py_ssize_t obj_Vector___sequence_len__(repr::vector_obj *self) {
     return self->get_base().dimension();
 }
 
+void v_index_check(const n_vector &v,Py_ssize_t index) {
+    if(index < 0 || index >= v.dimension()) THROW_PYERR_STRING(IndexError,"vector index out of range");
+}
+
 PyObject *obj_Vector___sequence_getitem__(repr::vector_obj *self,Py_ssize_t index) {
-    repr::vector_obj::ref_type v = self->get_base();
-    if(index < 0 || index >= v.dimension()) {
-        PyErr_SetString(PyExc_IndexError,"vector index out of range");
-        return NULL;
-    }
-    return to_pyobject(v[index]);
+    try {
+        repr::vector_obj::ref_type v = self->get_base();
+        v_index_check(v,index);
+        return to_pyobject(v[index]);
+    } PY_EXCEPT_HANDLERS(NULL)
 }
 
 PySequenceMethods obj_Vector_sequence_methods = {
@@ -1246,12 +1249,32 @@ PyObject *obj_Vector_apply(repr::vector_obj *_self,PyObject *_func) {
     } PY_EXCEPT_HANDLERS(NULL)
 }
 
+PyObject *obj_Vector_set_c(repr::vector_obj *self,PyObject *args,PyObject *kwds) {
+    try {
+        const char *names[] = {"index","value"};
+        get_arg ga(args,kwds,names,"Vector.set_c");
+        auto index = from_pyobject<Py_ssize_t>(ga(true));
+        real value = from_pyobject<real>(ga(true));
+        ga.finished();
+        
+        repr::vector_obj::ref_type v = self->get_base();
+        
+        v_index_check(v,index);
+        
+        n_vector r = v.clone();
+        r[index] = value;
+        
+        return to_pyobject(r);
+    } PY_EXCEPT_HANDLERS(NULL)
+}
+
 PyMethodDef obj_Vector_methods[] = {
     {"square",reinterpret_cast<PyCFunction>(&obj_Vector_square),METH_NOARGS,NULL},
     {"axis",reinterpret_cast<PyCFunction>(&obj_Vector_axis),METH_VARARGS|METH_KEYWORDS|METH_STATIC,NULL},
     {"absolute",reinterpret_cast<PyCFunction>(&obj_Vector_absolute),METH_NOARGS,NULL},
     {"unit",reinterpret_cast<PyCFunction>(&obj_Vector_unit),METH_NOARGS,NULL},
     {"apply",reinterpret_cast<PyCFunction>(&obj_Vector_apply),METH_O,NULL},
+    {"set_c",reinterpret_cast<PyCFunction>(&obj_Vector_set_c),METH_VARARGS|METH_KEYWORDS,NULL},
     {NULL}
 };
 
@@ -1507,14 +1530,6 @@ PyObject *obj_Matrix_scale(PyObject*,PyObject *args) {
     } PY_EXCEPT_HANDLERS(NULL)
 }
 
-PyObject *obj_Matrix_values(repr::matrix_obj *self,PyObject *) {
-    try {
-        repr::matrix_obj::ref_type base = self->get_base();
-        return reinterpret_cast<PyObject*>(
-            new obj_MatrixProxy(reinterpret_cast<PyObject*>(self),base.dimension() * base.dimension(),base[0]));
-    } PY_EXCEPT_HANDLERS(NULL)
-}
-
 PyObject *obj_Matrix_rotation(PyObject*,PyObject *args,PyObject *kwds) {
     try {
         const char *names[] = {"a","b","theta"};
@@ -1561,7 +1576,6 @@ PyObject *obj_Matrix_transpose(repr::matrix_obj *self,PyObject*) {
 
 PyMethodDef obj_Matrix_methods[] = {
     {"scale",reinterpret_cast<PyCFunction>(&obj_Matrix_scale),METH_VARARGS|METH_STATIC,NULL},
-    {"values",reinterpret_cast<PyCFunction>(&obj_Matrix_values),METH_NOARGS,"All the matrix elements as a flat sequence"},
     {"rotation",reinterpret_cast<PyCFunction>(&obj_Matrix_rotation),METH_VARARGS|METH_KEYWORDS|METH_STATIC,NULL},
     {"identity",reinterpret_cast<PyCFunction>(&obj_Matrix_identity),METH_O|METH_STATIC,NULL},
     {"determinant",reinterpret_cast<PyCFunction>(&obj_Matrix_determinant),METH_NOARGS,NULL},
@@ -1612,7 +1626,16 @@ PyObject *obj_Matrix_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
     } PY_EXCEPT_HANDLERS(NULL)
 }
 
+PyObject *obj_Matrix_values(repr::matrix_obj *self,void*) {
+    try {
+        repr::matrix_obj::ref_type base = self->get_base();
+        return reinterpret_cast<PyObject*>(
+            new obj_MatrixProxy(reinterpret_cast<PyObject*>(self),base.dimension() * base.dimension(),base.data()));
+    } PY_EXCEPT_HANDLERS(NULL)
+}
+
 PyGetSetDef obj_Matrix_getset[] = {
+    {const_cast<char*>("values"),reinterpret_cast<getter>(&obj_Matrix_values),NULL,NULL,NULL},
     {const_cast<char*>("dimension"),OBJ_GETTER(repr::matrix_obj,self->get_base().dimension()),NULL,NULL,NULL},
     {NULL}
 };

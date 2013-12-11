@@ -210,7 +210,7 @@ inline PySurfaceObject *py_to_surface(PyObject *obj) {
 template<typename T> inline T trunc(T n,T max) { return n > max ? max : n; }
 typedef unsigned char byte;
 byte to_byte(float val) {
-    return val >= 1.0f ? 1.0f : byte(val * 255);
+    return byte(trunc(val,1.0f) * 255);
 }
 
 
@@ -405,7 +405,7 @@ renderer::~renderer() {
 
 
 PyObject *obj_Scene_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
-    PyErr_SetString(PyExc_TypeError,"the Scene type cannot be directly instantiated");
+    PyErr_SetString(PyExc_TypeError,"the Scene type cannot be instantiated directly");
     return NULL;
 }
 
@@ -446,7 +446,7 @@ PyObject *obj_Renderer_begin_render(obj_Renderer *self,PyObject *args,PyObject *
         renderer &r = self->get_base();
         
         const char *names[] = {"dest","scene"};
-        get_arg ga(args,kwds,names,"begin_render");
+        get_arg ga(args,kwds,names,"Renderer.begin_render");
         PySurfaceObject *dest = py_to_surface(ga(true));
         Scene *scene = &get_base<Scene>(ga(true));
         ga.finished();
@@ -479,7 +479,7 @@ PyObject *obj_Renderer_begin_render(obj_Renderer *self,PyObject *args,PyObject *
     } PY_EXCEPT_HANDLERS(NULL)
 }
 
-PyObject *obj_Renderer_abort_render(obj_Renderer *self,PyObject *) {
+PyObject *obj_Renderer_abort_render(obj_Renderer *self,PyObject*) {
     try {
         renderer &r = self->get_base();
         
@@ -520,7 +520,7 @@ int obj_Renderer_init(obj_Renderer *self,PyObject *args,PyObject *kwds) {
     
     try {
         const char *names[] = {"threads"};
-        get_arg ga(args,kwds,names,"__init__");
+        get_arg ga(args,kwds,names,"Renderer.__init__");
         PyObject *temp = ga(false);
         unsigned int threads = temp ? from_pyobject<unsigned int>(temp) : 0;
         ga.finished();
