@@ -1,6 +1,5 @@
 import sys
 import os.path
-import subprocess
 
 from distutils import sysconfig
 from distutils.core import setup,Command
@@ -9,11 +8,18 @@ from distutils.command.build_ext import build_ext
 from distutils.errors import DistutilsSetupError
 from distutils.dir_util import mkpath
 from distutils import log
+from distutils.dep_util import newer
 
 try:
     from distutils.command.build_py import build_py_2to3 as build_py
 except ImportError:
     from distutils.command.build_py import build_py
+
+base_dir = os.path.dirname(os.path.realpath(__file__))
+sys.path.insert(0,os.path.join(base_dir,'support'))
+
+import version
+import generate_simd
 
 
 GCC_OPTIMIZE_COMPILE_ARGS = ['-O3','-fmerge-all-constants','-funsafe-loop-optimizations','-ffast-math','-fstrict-enums','-fno-enforce-eh-specs','-fnothrow-opt','-march=native']
@@ -67,7 +73,7 @@ def parse_ranges(x):
 
 
 class CustomBuildExt(build_ext):
-    user_opyions = build_ext.user_options + [
+    user_options = build_ext.user_options + [
         ('optimize-dimensions=',None,
          'which dimensionalities will have optimized versions of the main tracer module')]
     
@@ -147,36 +153,36 @@ class CustomBuildExt(build_ext):
         if not self.add_optimization():
             self.warn("don't know how to set optimization flags for this compiler")
         
+        mkpath(self.build_temp,dry_run=self.dry_run)
         if self.optimize_dimensions:
-            mkpath(self.build_temp,dry_run=self.dry_run)
             for d in self.optimize_dimensions:
                 f = self.special_tracer_file(d)
-                if not os.path.exists(f):
+                if self.force or not os.path.exists(f):
                     log.info('creating {0} from template'.format(f))
                     if not self.dry_run:
                         with open(f,'w') as out:
                             out.write(TRACER_TEMPLATE.format(d))
-            
+        
+        simd_out = os.path.join(self.build_temp,'simd.hpp')
+        simd_in = os.path.join(base_dir,'src','simd.hpp.in')
+        if self.force or newer(simd_in,simd_out):
+            log.info('creating {0} from {1}'.format(simd_out,simd_in))
+            if not self.dry_run:
+                generate_simd.generate(
+                    os.path.join(base_dir,'src','intrinsics.json'),
+                    simd_in,
+                    simd_out)
+        
         build_ext.build_extensions(self)
 
 
 long_description = open('README.rst').read()
-long_description = long_description[0:long_description.find('\n\n')]
-
-version = 'unversioned'
-try:
-    version = subprocess.check_output(['git','describe','--long','--dirty'])
-except:
-    pass
-else:
-    # calling str here is needed for Python 3 and harmless in Python 2
-    version = str(version).strip().split('-')
-    del version[2] # get rid of the revision hash
-    version = '-'.join(version)
+long_description = long_description[0:long_description.find('\n\n\n')]
 
 
 setup(name='ntracer',
-    version=version,
+    author='Rouslan Korneychuk',
+    version=version.get_version(base_dir) or 'unversioned',
     packages=['ntracer','ntracer.tests'],
     scripts=['scripts/hypercube.py'],
     ext_package='ntracer',
