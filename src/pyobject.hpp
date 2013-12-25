@@ -712,6 +712,7 @@ namespace py {
         explicit pyptr(new_ref r) : _obj(r) {}
         explicit pyptr(borrowed_ref r) : _obj(r) {}
         explicit pyptr(object o) : _obj(o) {}
+        explicit pyptr(T *o) : _obj(new_ref(reinterpret_cast<PyObject*>(o))) {}
 
         template<typename U,typename=typename std::enable_if<std::is_convertible<U*,T*>::value>::type> pyptr(const pyptr<U> &b) : _obj(b._obj) {}
 

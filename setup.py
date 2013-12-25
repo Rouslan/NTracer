@@ -35,7 +35,7 @@ DEFAULT_OPTIMIZED_DIMENSIONS = frozenset(range(3,9))
 TRACER_TEMPLATE = """
 #include "fixed_geometry.hpp"
 
-typedef fixed::repr<{0}> repr;
+typedef fixed::item_store<{0},real> module_store;
 
 #define MODULE_NAME tracer{0}
 #include "ntracer_body.hpp"
@@ -88,11 +88,11 @@ class CustomBuildExt(build_ext):
         n = str(n)
         return Extension(
             'tracer'+n,
-            [self.special_tracer_file(n),'src/py_common.cpp'],
-            depends=['src/ntracer.hpp','src/ntracer_body.hpp',
+            [self.special_tracer_file(n),'src/py_common.cpp','src/simd.cpp'],
+            depends=['src/simd.hpp.in','src/ntracer_body.hpp',
                 'src/py_common.hpp','src/pyobject.hpp','src/geometry.hpp',
                 'src/fixed_geometry.hpp','src/tracer.hpp','src/light.hpp',
-                'src/scene.hpp','src/camera.hpp'],
+                'src/scene.hpp','src/camera.hpp','src/compatibility.hpp'],
             include_dirs=['src'],
             libraries=['SDL'])
     
@@ -109,7 +109,9 @@ class CustomBuildExt(build_ext):
     def finalize_options(self):
         build_ext.finalize_options(self)
         
-        self.optimize_dimensions = parse_ranges(self.optimize_dimensions) if self.optimize_dimensions is not None else DEFAULT_OPTIMIZED_DIMENSIONS
+        self.optimize_dimensions = (parse_ranges(self.optimize_dimensions)
+            if self.optimize_dimensions is not None
+            else DEFAULT_OPTIMIZED_DIMENSIONS)
         
         for d in self.optimize_dimensions:
             self.extensions.append(self.special_tracer_ext(d))
@@ -128,7 +130,12 @@ class CustomBuildExt(build_ext):
                     self.include_dirs.append(sp)
                     break
             else:
-                raise DistutilsSetupError('Unable to locate "SDL.h". Use --include-dirs to specify the location of the SDL header files.')
+                raise DistutilsSetupError(
+                    'Unable to locate "SDL.h". Use --include-dirs to specify the location of the SDL header files.')
+        
+        # needed for simd.hpp (derived from simd.hpp.in)
+        self.include_dirs.append(self.build_temp)
+        self.include_dirs.append('src')
 
     def add_optimization(self):
         c = self.compiler.compiler_type
@@ -190,15 +197,16 @@ setup(name='ntracer',
         Extension(
             'render',
             ['src/render.cpp','src/py_common.cpp'],
-            depends=['src/py_common.hpp','src/scene.hpp','src/pyobject.hpp'],
+            depends=['src/py_common.hpp','src/scene.hpp','src/pyobject.hpp',
+                'src/compatibility.hpp'],
             libraries=['SDL']),
         Extension(
             'tracern',
-            ['src/tracern.cpp','src/py_common.cpp'],
-            depends=['src/ntracer.hpp','src/ntracer_body.hpp',
+            ['src/tracern.cpp','src/py_common.cpp','src/simd.cpp'],
+            depends=['src/simd.hpp.in','src/ntracer_body.hpp',
                 'src/py_common.hpp','src/pyobject.hpp','src/geometry.hpp',
                 'src/var_geometry.hpp','src/tracer.hpp','src/light.hpp',
-                'src/scene.hpp','src/camera.hpp'])],
+                'src/scene.hpp','src/camera.hpp','src/compatibility.hpp'])],
     requires=['pygame'],
     description='A fast hyper-spacial ray-tracing library',
     long_description=long_description,

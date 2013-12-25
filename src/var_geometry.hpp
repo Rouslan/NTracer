@@ -6,84 +6,9 @@
 
 #include "geometry.hpp"
 #include "pyobject.hpp"
-#include "camera.hpp"
-#include "ntracer.hpp"
 
 
-namespace var {
-    template<typename T> T *new_var(Py_ssize_t size) {
-        assert(size > 0);
-        return reinterpret_cast<T*>(py::check_obj(reinterpret_cast<PyObject*>(
-            (T::pytype.tp_flags & Py_TPFLAGS_HAVE_GC ? _PyObject_GC_NewVar : _PyObject_NewVar)(&T::pytype,size))));
-    }
-    
-    template<typename T> T *internal_new_var(size_t size) {
-        assert(size);
-        T *r = reinterpret_cast<T*>(
-            operator new(T::pytype.tp_basicsize + T::pytype.tp_itemsize * size));
-        Py_TYPE(r) = NULL;
-        Py_REFCNT(r) = 1;
-        Py_SIZE(r) = size;
-        return r;
-    }
-    
-    struct external {
-        template<typename Store> static Store new_store(int d) {
-            return Store(d,new_var<typename Store::obj_t>(Store::size_needed(d)));
-        }
-        
-        template<typename Store> static Store copy_store(const Store &s) {
-            assert(s.data);
-            
-            Py_INCREF(s.data);
-            return s;
-        }
-        
-        template<typename Store> static void free_store(Store &s) {
-            /* Py_XDECREF is used instead of Py_DECREF so that the destructor
-               can be called inside the tp_dealloc function of another object
-               without worrying whether it was successfully initialized inside
-               tp_new. */
-            Py_XDECREF(s.data);
-        }
-        
-        template<typename Store> static void replace_store(Store &a,const Store &b) {
-            assert(a.data && b.data);
-            
-            typename Store::obj_t *old = a.data;
-            a.data = b.data;
-            Py_INCREF(a.data);
-            Py_DECREF(old);
-        }
-    };
-    
-    /* CPython's object system is not thread safe, so for temporary objects that
-       are used by the scene's worker threads, we do our own reference counting
-       and memory allocation */
-    struct internal {
-        template<typename Store> static Store new_store(int d) {
-            return Store(d,internal_new_var<typename Store::obj_t>(Store::size_needed(d)));
-        }
-        
-        template<typename Store> static Store copy_store(const Store &s) {
-            ++Py_REFCNT(s.data);
-            return s;
-        }
-        
-        template<typename Store> static void free_store(Store &s) {
-            assert(Py_REFCNT(s.data) > 0);
-            if(--Py_REFCNT(s.data) == 0) operator delete(s.data);
-        }
-        
-        template<typename Store> static void replace_store(Store &a,const Store &b) {
-            // we increment first, just in-case a == b
-            ++Py_REFCNT(b.data);
-            free_store(a);
-            a.data = b.data;
-        }
-    };
-    
-    
+namespace var {    
     /* an array that can be initialized with a call-back */
     template<typename T> struct init_array {
         size_t _size;
@@ -132,283 +57,74 @@ namespace var {
         }
     };
     
-    
-    template<typename T> struct vector_store;
-    template<typename T> using py_vector = vector_impl<vector_store<T>,external>;
-    template<typename T> using vector = vector_impl<vector_store<T>,internal>;
-    struct matrix_store;
-    typedef matrix_impl<matrix_store,external> py_matrix;
-    typedef matrix_impl<matrix_store,internal> matrix;
-    struct camera_store;
-
-
-    template<typename T> struct vector_obj : vector_obj_base {
-        PyObject_VAR_HEAD
-        T items[1];
+    template<typename RealItems,typename T> struct item_array {
+        T *items;
         
-        inline py_vector<T> cast_base();
-        inline py_vector<T> get_base();
-        
-        static constexpr size_t item_size = sizeof(T);
-        
-        typedef py_vector<T> ref_type;
-    };
-
-    template<typename T> struct vector_store {
-        typedef T item_t;
-        typedef vector_obj<T> obj_t;
-        
-        obj_t *data;
-            
-        explicit vector_store(obj_t *obj) : data(obj) {
-            // for internal thread-use objects, ob_type is always NULL
-            assert(!obj->ob_type || PyObject_TypeCheck(reinterpret_cast<PyObject*>(obj),&obj_t::pytype));
+        explicit item_array(int d) : size(d) {
+            allocate();
         }
         
-        vector_store(int d,obj_t *obj) : vector_store(obj) {}
-
-        item_t &operator[](int n) const { return data->items[n]; }
-
+        item_array(const item_array &b) : size(b.size) {
+            allocate();
+            memcpy(items,b.items,RealItems::get(size) * sizeof(T));
+        }
+        
+        item_array(item_array &&b) : items(b.items), size(b.size) {
+            b.items = nullptr;
+        }
+        
+        ~item_array() {
+            if(simd::v_sizes<T>::value[0] == 1) free(items);
+            else simd::aligned_free(items);
+        }
+            
+        item_array &operator=(const item_array &b) {
+            free(items);
+            size = b.size;
+            allocate();
+            memcpy(items,b.items,RealItems::get(size) * sizeof(T));
+            
+            return *this;
+        }
+        
+        item_array &operator=(item_array &&b) noexcept {
+            free(items);
+            size = b.size;
+            items = b.items;
+            b.items = nullptr;
+            return *this;
+        }
+        
         int dimension() const {
-            return Py_SIZE(data);
+            return size;
         }
         
-        static Py_ssize_t size_needed(int d) { return d; }
-    };
-    
-    template<typename T> inline py_vector<T> vector_obj<T>::cast_base() {
-        assert(ob_type);
-        return vector_store<T>(this);
-    }
-    
-    template<typename T> inline py_vector<T> vector_obj<T>::get_base() { return cast_base(); }
-    
-    
-    struct matrix_obj : matrix_obj_base {
-        PyObject_VAR_HEAD
-        int dimension;
-        real items[1];
-        
-        inline py_matrix cast_base();
-        inline py_matrix get_base();
-        
-        static const size_t item_size = sizeof(real);
-        
-        typedef py_matrix ref_type;
-    };
+    private:
+        void allocate() {
+            assert(size > 0);
 
-    struct matrix_store {
-        typedef matrix_obj obj_t;
-        typedef vector_store<real> v_store;
-        
-        struct pivot_buffer {
-            int *data;
-            pivot_buffer(int size) : data(new int[size]) {}
-            ~pivot_buffer() {
-                delete[] data;
-            }
-        };
-        
-        obj_t *data;
-
-        explicit matrix_store(obj_t *obj) : data(obj) {
-            // for internal thread-use objects, ob_type is always NULL
-            assert(!obj->ob_type || PyObject_TypeCheck(reinterpret_cast<PyObject*>(obj),&obj_t::pytype));
-        }
-        
-        matrix_store(int d,obj_t *obj) : matrix_store(obj) {
-            obj->dimension = d;
-        }
-
-        template<typename F> static void rep(int d,F f) {
-            for(int row=0; row<d; ++row) {
-                for(int col=0; col<d; ++col) f(row,col);
+            if(simd::v_sizes<T>::value[0] == 1) {
+                if(!(items = reinterpret_cast<T*>(malloc(RealItems::get(size) * sizeof(T))))) throw std::bad_alloc();
+            } else {
+                items = reinterpret_cast<T*>(simd::aligned_alloc(
+                    simd::largest_fit<T>(size) * sizeof(T),
+                    RealItems::get(size) * sizeof(T)));
             }
         }
         
-        template<class F> static void rep1(int d,F f) { ::rep(d,f); }
-
-        real *operator[](int n) const { return data->items + n*dimension(); }
-
-        int dimension() const { return data->dimension; }
-        
-        static Py_ssize_t size_needed(int d) { return d*d; }
+        int size;
     };
-    
-    inline py_matrix matrix_obj::cast_base() {
-        assert(ob_type);
-        return matrix_store(this);
-    }
-    inline py_matrix matrix_obj::get_base() { return cast_base(); }
 
-
-    struct camera_obj : camera_obj_base {
-        PyObject_VAR_HEAD
-
-        PyObject *idict;
-        PyObject *weaklist;
-        py_vector<real> origin;
-        py_vector<real> axes[1];
-        
-        inline _camera<camera_store> cast_base();
-        inline _camera<camera_store> get_base();
-        
-        static const size_t item_size = sizeof(py_vector<real>);
-        
-        typedef _camera<camera_store> ref_type;
-        
-        void dealloc() {
-            origin.~py_vector<real>();
-            for(int i=0; i<Py_SIZE(this); ++i) axes[i].~py_vector<real>();
-        }
-        
-        inline void alloc(int d);
-    };
-    
-    struct camera_store {
-        typedef py_vector<real> vector_t;
-        typedef init_array<vector_t> smaller_array;
-
-        py::object obj;
-        
-        template<typename F> camera_store(int d,const vector_t &o,F a_init,PyObject *mem=NULL) : obj(
-                mem ?
-                py::object(py::borrowed_ref(mem)) :
-                py::object(py::new_ref(reinterpret_cast<PyObject*>(new_var<camera_obj>(d))))) {
-            assert(PyObject_TypeCheck(obj.ref(),&camera_obj::pytype));
-            
-            data()->idict = data()->weaklist = NULL;
-            
-            assert(o.dimension() == d);
-            new(&data()->origin) vector_t(o);
-            
-            int i=0;
-            try {
-                for(; i<d; ++i) {
-                    vector_t tmp = a_init(i);
-                    assert(tmp.dimension() == d);
-                    new(&data()->axes[i]) vector_t(tmp);
-                }
-            } catch(...) {
-                data()->origin.~vector_t();
-                while(i) data()->axes[--i].~vector_t();
-            }
-        }
-        
-        explicit camera_store(const py::object &o) : obj(o) {
-            assert(PyObject_TypeCheck(o.ref(),&camera_obj::pytype));
-        }
-
-        camera_obj *data() const { return reinterpret_cast<camera_obj*>(obj.ref()); }
-        int dimension() const { return Py_SIZE(data()); }
-        vector_t &origin() { return data()->origin; }
-        const vector_t &origin() const { return data()->origin; }
-        vector_t *axes() { return data()->axes; }
-        const vector_t *axes() const { return data()->axes; }
-    };
-    
-    inline _camera<camera_store> camera_obj::cast_base() {
-        return camera_store(py::borrowed_ref(reinterpret_cast<PyObject*>(this)));
-    }
-    inline _camera<camera_store> camera_obj::get_base() { return cast_base(); }
-    
-    inline void camera_obj::alloc(int d) {
-        auto blank_v = [d](int i){ return py_vector<real>(d); };
-        camera_store(d,blank_v(0),blank_v,reinterpret_cast<PyObject*>(this));
-    }
-    
-    template<typename T,typename Item> struct flexible_obj {
-        static const size_t base_size = aligned(sizeof(T),alignof(Item));
-        static const size_t item_size = sizeof(Item);
-        
-        PyObject_VAR_HEAD
-            
-        template<typename U> struct item_array {
-            typedef typename std::conditional<std::is_const<U>::value,const Item,Item>::type item_t;
-            
-            item_array(U *self) : self(self) {}
-            
-            item_t *begin() const { return reinterpret_cast<item_t*>(const_cast<char*>(reinterpret_cast<const char*>(self)) + base_size); }
-            item_t *end() const { return begin() + size(); }
-            
-            item_t &front() const { return begin()[0]; }
-            item_t &back() const { return begin()[size()-1]; }
-            
-            item_t &operator[](size_t i) const { return begin()[i]; }
-            
-            size_t size() const { return Py_SIZE(self); }
-            
-            operator item_t*() const { return begin(); }
-            
-        private:
-            U *const self;
-        };
-        
-        item_array<flexible_obj<T,Item> > items() { return this; }
-        item_array<const flexible_obj<T,Item> > items() const { return this; }
-        
-        flexible_obj(const flexible_obj<T,Item>&) = delete;
-        
-        void *operator new(size_t size,size_t items) {
-            assert(size == sizeof(T));
-            void *ptr = PyObject_Malloc(base_size + sizeof(Item)*items);
-            if(!ptr) throw std::bad_alloc();
-            return ptr;
-        }
-        
-        void operator delete(void *ptr) {
-            PyObject_Free(ptr);
-        }
-        
-    protected:
-        template<typename F> flexible_obj(F item_init) {
-            size_t i=0;
-            
-            try {
-                for(; i<items().size(); ++i) new(&items()[i]) Item(item_init(i));
-            } catch(...) {
-                while(i) items()[--i].~Item();
-                throw;
-            }
-        }
-
-        ~flexible_obj() {
-            for(auto &item : items()) item.~Item();
-        }
-    };
-    
-    struct repr {
-        typedef py_vector<real> py_vector_t;
-        typedef py_matrix py_matrix_t;
-        
-        typedef vector<real> vector_t;
-        typedef matrix matrix_t;
-        
-        typedef _camera<camera_store> camera_t;
+    template<typename T> struct item_store {
+        typedef T item_t;
         
         static const int required_d = 0;
         
-        typedef var::vector_obj<real> vector_obj;
-        typedef var::matrix_obj matrix_obj;
-        typedef var::camera_obj camera_obj;
-        
-        template<typename T> using init_array = var::init_array<T>;
-        template<typename T> using smaller_init_array = var::init_array<T>;
-        
-        template<typename T,typename Item,int StaticSize> using flexible_obj = var::flexible_obj<T,Item>;
+        template<typename U> using init_array = var::init_array<U>;
+        template<typename U> using smaller_init_array = var::init_array<U>;
+
+        template<typename RealItems,typename U=T> using type = item_array<RealItems,U>;
     };
-}
-
-inline PyObject *to_pyobject(const var::repr::py_vector_t &v) {
-    return py::incref(reinterpret_cast<PyObject*>(v.store.data));
-}
-
-inline PyObject *to_pyobject(const var::repr::py_matrix_t &m) {
-    return py::incref(reinterpret_cast<PyObject*>(m.store.data));
-}
-
-inline PyObject *to_pyobject(const var::repr::camera_t &c) {
-    return c.store.obj.new_ref();
 }
 
 #endif

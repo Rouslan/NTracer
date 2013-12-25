@@ -4,46 +4,45 @@
 #include "geometry.hpp"
 
 
-template<class Store> struct _camera {
-    typedef typename Store::vector_t vector_t;
+template<class Store> struct camera {
+    vector<Store> origin;
+    matrix<Store> t_orientation;
     
-    _camera(int d) : store(d,vector_t(d,0),[d](int i){ return vector_t::axis(d,i); }) {}
-    template<typename F> _camera(int d,const vector_t &origin,F axes) : store(d,origin,axes) {}
-    _camera(int d,const vector_t &origin,const vector_t *axes) : store(d,origin,[axes](int i){ return axes[i]; }) {}
-    _camera(const Store &store) : store(store) {}
+    camera(int d) : origin(d,0), t_orientation(matrix<Store>::identity(d)) {}
+    template<typename F> camera(const vector<Store> &origin,F axes) : origin(origin), t_orientation(origin.dimension()) {
+        for(int i=0; i<dimension(); ++i) t_orientation[i] = axes(i);
+    }
+    camera(const vector<Store> &origin,const vector<Store> *axes) : camera(origin,[=](int i){ return axes[i]; }) {}
 
-    void translate(const vector_t &v) {
-        for(int i=0; i<dimension(); ++i) origin() += v[i] * axes()[i];
+    void translate(const vector<Store> &v) {
+        for(int i=0; i<dimension(); ++i) origin += v[i] * t_orientation[i];
+    }
+    
+    void transform(const matrix<Store> &m) {
+        t_orientation = t_orientation.mult_transpose(m);
     }
     
     void normalize() {
-        typename Store::smaller_array new_axes(dimension()-1,[this](int i) -> vector_t {
-            vector_t x(this->dimension(),0);
-            for(int j=0; j<i; ++j) x += dot(this->axes()[i+1],this->axes()[j]) * this->axes()[j];
-            return this->axes()[i+1] - x;
+        typename Store::template smaller_init_array<vector<Store> > new_axes(dimension()-1,[this](int i) -> vector<Store> {
+            vector<Store> x(this->dimension(),0);
+            for(int j=0; j<i; ++j) x += dot(this->t_orientation[i+1],this->t_orientation[j]) * this->t_orientation[j];
+            return this->t_orientation[i+1] - x;
         });
 
-        axes()[0].normalize();
+        t_orientation[0] = t_orientation[0] / t_orientation[0].absolute();
         for(int i=1; i<dimension(); ++i) {
-            axes()[i] = new_axes[i-1];
-            axes()[i].normalize();
+            t_orientation[i] = new_axes[i-1].unit();
         }
     }
 
-    int dimension() const { return store.dimension(); }
-    vector_t &origin() { return store.origin(); }
-    const vector_t &origin() const { return store.origin(); }
-    vector_t *axes() { return store.axes(); }
-    const vector_t *axes() const { return store.axes(); }
+    int dimension() const { return origin.dimension(); }
 
-    Store store;
-
-    vector_t &right() { return axes()[0]; }
-    const vector_t &right() const { return axes()[0]; }
-    vector_t &up() { assert(dimension() > 1); return axes()[1]; }
-    const vector_t &up() const { assert(dimension() > 1); return axes()[1]; }
-    vector_t &forward() { assert(dimension() > 2); return axes()[2]; }
-    const vector_t &forward() const { assert(dimension() > 2); return axes()[2]; }
+    auto right() -> decltype(t_orientation[0]) { return t_orientation[0]; }
+    auto right() const -> decltype(t_orientation[0]) { return t_orientation[0]; }
+    auto up() -> decltype(t_orientation[1]) { assert(dimension() > 1); return t_orientation[1]; }
+    auto up() const -> decltype(t_orientation[1]) { assert(dimension() > 1); return t_orientation[1]; }
+    auto forward() -> decltype(t_orientation[2]) { assert(dimension() > 2); return t_orientation[2]; }
+    auto forward() const -> decltype(t_orientation[2]) { assert(dimension() > 2); return t_orientation[2]; }
 };
 
 #endif

@@ -7,24 +7,8 @@
 #include <new>
 #include <limits>
 #include <utility>
-#include <type_traits>
 
-
-#ifdef __GNUC__
-    #define LIKELY(X) __builtin_expect(static_cast<bool>(X),1)
-    #define UNLIKELY(X) __builtin_expect(static_cast<bool>(X),0)
-#else
-    #define LIKELY(X) X
-    #define UNLIKELY(X) X
-#endif
-
-#if defined(_WIN32) || defined(__CYGWIN__) || defined(__BEOS__)
-    #define SHARED(RET) __declspec(dllexport) RET
-#elif defined(__GNUC__) && __GNUC__ >= 4
-    #define SHARED(RET) RET __attribute__((visibility("default")))
-#else
-    #define SHARED(RET) RET
-#endif
+#include "compatibility.hpp"
 
 
 #define PY_MEM_NEW_DELETE void *operator new(size_t s) {            \
@@ -78,11 +62,8 @@
 }
 
 
-#if defined(__GNUC__) && __GNUC__ == 4 && __GNUC_MINOR__ < 8
-namespace std {
-    template<typename T> struct is_trivially_destructible : has_trivial_destructor<T> {};
-}
-#endif
+// this value is taken from Python/pyarena.c of the CPython source
+const size_t PYOBJECT_ALIGNMENT = 8;
 
 
 extern const char *no_delete_msg;
@@ -199,9 +180,9 @@ inline PyObject *to_pyobject(double x) {
     return PyFloat_FromDouble(x);
 }
 
-/*inline PyObject *to_pyobject(const char *x) {
-    return PyString_FromString(x);
-}*/
+inline PyObject *to_pyobject(const char *x) {
+    return PYSTR(FromString)(x);
+}
 
 inline PyObject *to_pyobject(PyObject *x) {
     Py_INCREF(x);
@@ -304,7 +285,9 @@ MEMBER_MACRO(unsigned long long,T_ULONGLONG);
 
 
 
-template<typename T> struct wrapped_type;
+template<typename T> struct _wrapped_type {};
+template<typename T> using wrapped_type = typename _wrapped_type<T>::type;
+
 
 /* When invariable_storage<T>::value is true, the location of T inside of its
    wrapped type will always be the same, thus an instance of T can be accessed
@@ -316,12 +299,16 @@ template<typename T> struct invariable_storage {
     static constexpr bool value = false;
 };
 
-template<typename T> auto get_base(PyObject *o) -> decltype(reinterpret_cast<typename wrapped_type<T>::type*>(o)->get_base()) {
-    if(UNLIKELY(!PyObject_TypeCheck(o,&wrapped_type<T>::type::pytype))) {
-        PyErr_Format(PyExc_TypeError,"object is not an instance of %s",wrapped_type<T>::type::pytype.tp_name);
+template<typename T,typename=wrapped_type<typename std::remove_cv<typename std::remove_reference<T>::type>::type> > PyObject *to_pyobject(T &&x) {
+    return reinterpret_cast<PyObject*>(new wrapped_type<typename std::remove_cv<typename std::remove_reference<T>::type>::type>(std::forward<T>(x)));
+}
+
+template<typename T> auto get_base(PyObject *o) -> decltype(reinterpret_cast<wrapped_type<T>*>(o)->get_base()) {
+    if(UNLIKELY(!PyObject_TypeCheck(o,&wrapped_type<T>::pytype))) {
+        PyErr_Format(PyExc_TypeError,"object is not an instance of %s",wrapped_type<T>::pytype.tp_name);
         throw py_error_set();
     }
-    return reinterpret_cast<typename wrapped_type<T>::type*>(o)->get_base();
+    return reinterpret_cast<wrapped_type<T>*>(o)->get_base();
 }
 
 

@@ -143,11 +143,11 @@ struct obj_Scene {
     }
 };
 
-template<> struct wrapped_type<Scene> {
+template<> struct _wrapped_type<Scene> {
     typedef obj_Scene type;
 };
 template<> struct invariable_storage<Scene> {
-    enum {value = 1};
+    static constexpr bool value = true;
 };
 
 struct obj_Renderer {
@@ -190,11 +190,11 @@ struct obj_Renderer {
     }
 };
 
-template<> struct wrapped_type<renderer> {
+template<> struct _wrapped_type<renderer> {
     typedef obj_Renderer type;
 };
 template<> struct invariable_storage<renderer> {
-    enum {value = 1};
+    static constexpr bool value = true;
 };
 
 
