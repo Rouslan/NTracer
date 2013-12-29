@@ -68,6 +68,7 @@ namespace impl {
         vector_sum &operator=(const vector_sum<A,B>&) = delete;
 
         int dimension() const { return a.dimension(); }
+        int v_dimension() const { return a.v_dimension(); }
         
         template<size_t Size> v_item_t<vector_sum<A,B>,Size> vec(int n) const {
             return a.template vec<Size>(n) + b.template vec<Size>(n);
@@ -93,6 +94,8 @@ namespace impl {
         vector_diff &operator=(const vector_diff<A,B>&) = delete;
 
         int dimension() const { return a.dimension(); }
+        int v_dimension() const { return a.v_dimension(); }
+        
         template<size_t Size> v_item_t<vector_diff<A,B>,Size> vec(int n) const {
             return a.template vec<Size>(n) - b.template vec<Size>(n);
         }
@@ -116,6 +119,8 @@ namespace impl {
         vector_neg &operator=(const vector_neg<T>&) = delete;
 
         int dimension() const { return a.dimension(); }
+        int v_dimension() const { return a.v_dimension(); }
+        
         template<size_t Size> v_item_t<T,Size> vec(int n) const {
             return -a.template vec<Size>(n);
         }
@@ -141,6 +146,8 @@ namespace impl {
         vector_product &operator=(const vector_product<T>&) = delete;
         
         int dimension() const { return a.dimension(); }
+        int v_dimension() const { return a.v_dimension(); }
+        
         template<size_t Size> v_item_t<T,Size> vec(int n) const {
             return a.template vec<Size>(n) * b;
         }
@@ -165,6 +172,8 @@ namespace impl {
         vector_quotient &operator=(const vector_quotient<T>&) = delete;
         
         int dimension() const { return a.dimension(); }
+        int v_dimension() const { return a.v_dimension(); }
+        
         template<size_t Size> v_item_t<T,Size> vec(int n) const {
             return a.template vec<Size>(n) / b;
         }
@@ -190,6 +199,8 @@ namespace impl {
         vector_rquotient &operator=(const vector_rquotient<T>&) = delete;
         
         int dimension() const { return b.dimension(); }
+        int v_dimension() const { return b.v_dimension(); }
+        
         template<size_t Size> v_item_t<T,Size> vec(int n) const {
             return v_item_t<T,Size>::repeat(a) / b.template vec<Size>(n); }
         
@@ -213,6 +224,8 @@ namespace impl {
         vector_apply &operator=(const vector_apply<T,F>&) = delete;
         
         int dimension() const { return a.dimension(); }
+        int v_dimension() const { return a.v_dimension(); }
+        
         template<size_t Size> v_item_t<vector_apply<T,F>,Size> vec(int n) const {
             return a.template vec<Size>(n).apply(f);
         }
@@ -221,25 +234,29 @@ namespace impl {
         vector_apply(const T &a,F f) : a(a), f(f) {}
     };
     
-    template<typename T> struct vector_axis;
-    template<typename T,size_t Size> struct _v_item_t<vector_axis<T>,Size> {
-        typedef simd::v_type<T,Size> type;
+    template<typename Store> struct vector_axis;
+    template<typename Store,size_t Size> struct _v_item_t<vector_axis<Store>,Size> {
+        typedef simd::v_type<typename Store::item_t,Size> type;
     };
-    template<typename T> struct vector_axis : vector_expr<vector_axis<T> > {
+    template<typename Store> struct vector_axis : vector_expr<vector_axis<Store> > {
+        typedef typename Store::item_t item_t;
+        
         static const int v_score = 0;
         
         int _dimension;
         int axis;
-        T length;
+        item_t length;
         
         int dimension() const { return _dimension; }
-        template<size_t Size> simd::v_type<T,Size> vec(int n) const {
-            auto r = simd::v_type<T,Size>::zeros();
+        int v_dimension() const { return Store::v_dimension(_dimension); }
+        
+        template<size_t Size> simd::v_type<item_t,Size> vec(int n) const {
+            auto r = simd::v_type<item_t,Size>::zeros();
             if(n >= axis && n < axis+int(Size)) r[n-axis] = length;
             return r;
         }
 
-        vector_axis(int d,int axis,T length) : _dimension(d), axis(axis), length(length) {}
+        vector_axis(int d,int axis,item_t length) : _dimension(d), axis(axis), length(length) {}
     };
 
     template<typename Store> struct vector;
@@ -252,7 +269,7 @@ namespace impl {
     template<typename Store> struct vector : vector_expr<vector<Store> > {
         typedef typename Store::item_t item_t;
         
-        static const int v_score = 2;
+        static const int v_score = V_SCORE_THRESHHOLD;
 
         explicit vector(int d) : store(d) {}
     
@@ -276,7 +293,7 @@ namespace impl {
             }
         };
         template<typename B> vector<Store> &operator+=(const vector_expr<B> &b) {
-            vec_rep(dimension(),_v_add<B>{this,b});
+            vec_rep(v_dimension(),_v_add<B>{this,b});
             
             return *this;
         }
@@ -293,7 +310,7 @@ namespace impl {
             }
         };
         template<typename B> vector<Store> &operator-=(const vector_expr<B> &b) {
-            vec_rep(dimension(),_v_sub<B>{this,b});
+            vec_rep(v_dimension(),_v_sub<B>{this,b});
 
             return *this;
         }
@@ -310,7 +327,7 @@ namespace impl {
             }
         };
         vector<Store> &operator*=(item_t b) {
-            vec_rep(dimension(),_v_mul{this,b});
+            vec_rep(v_dimension(),_v_mul{this,b});
         
             return *this;
         }
@@ -327,12 +344,13 @@ namespace impl {
             }
         };
         vector<Store> &operator/=(item_t b) {
-            vec_rep(dimension(),_v_div{this,b});
+            vec_rep(v_dimension(),_v_div{this,b});
             
             return *this;
         }
         
         int dimension() const { return store.dimension(); }
+        int v_dimension() const { return Store::v_dimension(dimension()); }
         
         template<typename F> void rep(F f) const {
             impl::rep(dimension(),f);
@@ -354,7 +372,7 @@ namespace impl {
             }
         };
         template<typename B> void fill_with(const vector_expr<B> &b) {
-            vec_rep(dimension(),_v_assign<B>{this,b});
+            vec_rep(v_dimension(),_v_assign<B>{this,b});
         }
         
         template<typename F,typename=decltype(declval<F>()(declval<int>()))> void fill_with(F f) {
@@ -374,7 +392,7 @@ namespace impl {
         
         void normalize() { operator/(this->absolute()); }
         
-        static vector_axis<item_t> axis(int d,int n,item_t length = item_t(1)) {
+        static vector_axis<Store> axis(int d,int n,item_t length = item_t(1)) {
             return {d,n,length};
         }
         
@@ -418,17 +436,15 @@ namespace impl {
         }
 
         auto r = _v_mul_sum<A,B>::v_sum_t::zeros();
-        
-        
+        /* v_dimension is not used because we don't want the sum to include the
+           pad value */
         vec_rep(a.dimension(),_v_mul_sum<A,B>{r,r_small,a,b});
         return r.reduce_add() + r_small;
     }
     
     template<typename T> struct vector_expr {
         int dimension() const { return static_cast<const T*>(this)->dimension(); }
-        s_item_t<T> operator[](int n) const {
-            return static_cast<const T*>(this)->operator[](n);
-        }
+        int v_dimension() const { return static_cast<const T*>(this)->v_dimension(); }
         
         operator T &() { return *static_cast<T*>(this); }
         operator const T &() const { return *static_cast<const T*>(this); }
@@ -472,7 +488,7 @@ namespace impl {
 
             int r = 0;
             
-            vec_rep(dimension(),_v_eq<B>{r,*this,b});
+            vec_rep(v_dimension(),_v_eq<B>{r,*this,b});
             return r == 0;
         }
         
@@ -514,7 +530,7 @@ namespace impl {
     template<class Store> struct matrix_row : vector_expr<matrix_row<Store> > {
         friend struct matrix<Store>;
         
-        static const int v_score = 2;
+        static const int v_score = V_SCORE_THRESHHOLD;
         
         matrix<Store> &a;
         const int row;
@@ -575,7 +591,7 @@ namespace impl {
     template<class Store> struct const_matrix_row : vector_expr<const_matrix_row<Store> > {
         friend struct matrix<Store>;
         
-        static const int v_score = 2;
+        static const int v_score = V_SCORE_THRESHHOLD;
         
         const matrix<Store> &a;
         const int row;
@@ -699,7 +715,7 @@ template<class Store> struct matrix {
     }
     
     template<typename F> void vec_rep(F f) const {
-        impl::vec_rep(dimension(),f);
+        impl::vec_rep(Store::v_dimension(dimension()),f);
     }
     
     void multiply(matrix<Store> &RESTRICT r,const matrix<Store> &b) const {

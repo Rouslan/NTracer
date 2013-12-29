@@ -189,6 +189,8 @@ long_description = long_description[0:long_description.find('\n\n\n')]
 
 setup(name='ntracer',
     author='Rouslan Korneychuk',
+    author_email='rouslank@msn.com',
+    url='https://github.com/Rouslan/NTracer',
     version=version.get_version(base_dir) or 'unversioned',
     packages=['ntracer','ntracer.tests'],
     scripts=['scripts/hypercube.py'],

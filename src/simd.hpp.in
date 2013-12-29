@@ -164,14 +164,24 @@ namespace simd {
         template<typename T,typename Packed,typename Item> FORCE_INLINE(T) operator*(Item a,const common_real<T,Packed,Item> &b) {
             return T::repeat(a) * static_cast<const T&>(b);
         }
+        
+        template<typename T,size_t Size,size_t Granularity=1> struct mask_common {
+            static const size_t size = Size;
+            static const size_t bit_granularity = Granularity;
+            
+            bool any() const {
+                return static_cast<const T*>(this)->to_bits() != 0;
+            }
+            bool all() const {
+                return static_cast<const T*>(this)->to_bits() == (1 << (Size * Granularity)) - 1;
+            }
+        };
     }
     
     template<typename T,size_t Size> struct _v_type {};
     template<typename T,size_t Size> using v_type = typename _v_type<T,Size>::type;
     
-    struct mask_s {
-        static const int bit_granularity = 1;
-        
+    struct mask_s : impl::mask_common<mask_s,1> {
         int data;
         
         int to_bits() const {
@@ -279,9 +289,7 @@ namespace simd {
     
     
 #ifdef SUPPORT_AVX_512    
-    struct mask64_v_512 {
-        static const int bit_granularity = 1;
-        
+    struct mask64_v_512 : impl::mask_common<mask64_v_512,8> {
         __mmask8 data;
         int to_bits() const {
             return static_cast<int>(data);
@@ -290,9 +298,7 @@ namespace simd {
         explicit mask64_v_512(__mmask8 data) : data(data) {}
     };
     
-    struct mask32_v_512 {
-        static const int bit_granularity = 1;
-        
+    struct mask32_v_512 : impl::mask_common<mask32_v_512,16> {
         __mmask16 data;
         int to_bits() const {
             return static_cast<int>(data);
@@ -380,9 +386,7 @@ namespace simd {
     
     
 #ifdef SUPPORT_AVX
-    struct mask64_v_256 {
-        static const int bit_granularity = 1;
-        
+    struct mask64_v_256 : impl::mask_common<mask64_v_256,4> {
         __m256d data;
         FORCE_INLINE(int) to_bits() const {
             return _mm256_movemask_pd(data);
@@ -393,9 +397,7 @@ namespace simd {
         explicit make64_v_256(__m256i data) : data(reinterpret_cast<__m256d>(data)) {}
     #endif
     };
-    struct mask32_v_256 {
-        static const int bit_granularity = 1;
-        
+    struct mask32_v_256 : impl::mask_common<mask32_v_256,8> {
         __m256 data;
         FORCE_INLINE(int) to_bits() const {
             return _mm256_movemask_ps(data);
@@ -409,9 +411,7 @@ namespace simd {
 #endif
     
 #ifdef SUPPORT_AVX2
-    struct mask16_v_256 {
-        static const int bit_granularity = 2;
-        
+    struct mask16_v_256 : impl::mask_common<mask16_v_256,16,2> {
         __m256i data;
         FORCE_INLINE(int) to_bits() const {
             return _mm256_movemask_epi8(data);
@@ -419,9 +419,7 @@ namespace simd {
         
         explicit mask16_v_256(__m256i data) : data(data) {}
     };
-    struct mask8_v_256 {
-        static const int bit_granularity = 1;
-        
+    struct mask8_v_256 : impl::mask_common<mask8_v_256,32> {
         __m256i data;
         FORCE_INLINE(int) to_bits() const {
             return _mm256_movemask_epi8(data);
@@ -549,9 +547,7 @@ namespace simd {
     
     
 #ifdef SUPPORT_SSE
-    struct mask32_v_128 {
-        static const int bit_granularity = 1;
-        
+    struct mask32_v_128 : impl::mask_common<mask32_v_128,4> {
         __m128 data;
         FORCE_INLINE(int) to_bits() const {
             return _mm_movemask_ps(data);
@@ -565,9 +561,7 @@ namespace simd {
 #endif
     
 #ifdef SUPPORT_SSE2
-    struct mask64_v_128 {
-        static const int bit_granularity = 1;
-        
+    struct mask64_v_128 : impl::mask_common<mask64_v_128,2> {
         __m128d data;
         FORCE_INLINE(int) to_bits() const {
             return _mm_movemask_pd(data);
@@ -576,9 +570,7 @@ namespace simd {
         explicit mask64_v_128(__m128d data) : data(data) {}
         explicit mask64_v_128(__m128i data) : data(reinterpret_cast<__m128d>(data)) {}
     };
-    struct mask16_v_128 {
-        static const int bit_granularity = 2;
-        
+    struct mask16_v_128 : impl::mask_common<mask16_v_128,8,2> {
         __m128i data;
         FORCE_INLINE(int) to_bits() const {
             return _mm_movemask_epi8(data);
@@ -586,9 +578,7 @@ namespace simd {
         
         explicit mask16_v_128(__m128i data) : data(data) {}
     };
-    struct mask8_v_128 {
-        static const int bit_granularity = 1;
-        
+    struct mask8_v_128 : impl::mask_common<mask8_v_128,16> {
         __m128i data;
         FORCE_INLINE(int) to_bits() const {
             return _mm_movemask_epi8(data);
@@ -805,14 +795,27 @@ namespace simd {
             1,0};
     };
     
-    namespace impl {
+    namespace impl {        
         // hide the second argument
+        
         template<typename T> constexpr size_t largest_fit(size_t size,size_t i) {
             return size >= v_sizes<T>::value[i] ? v_sizes<T>::value[i] : largest_fit<T>(size,i+1);
+        }
+
+        template<typename T> constexpr size_t padded_size(size_t size,size_t i) {
+            typedef v_sizes<T> s;
+            
+            return size >= s::value[i] ? 
+                (size / s::value[i] * s::value[i]) + (size % s::value[i] == s::value[i+1] ? s::value[i+1] : s::value[i]) :
+                padded_size<T>(size,i+1);
         }
     }
     template<typename T> constexpr size_t largest_fit(size_t size) {
         return impl::largest_fit<T>(size,0);
+    }
+    
+    template<typename T> constexpr size_t padded_size(size_t size) {
+        return size > 1 ? impl::padded_size<T>(size,0) : size;
     }
     
     
@@ -846,18 +849,6 @@ namespace simd {
 #endif
     }
     
-    // overrides new and delete with aligned_alloc if needed
-    template<typename T,bool need_align=(alignof(T) > alignof(std::max_align_t))> struct aligned_new {};
-    
-    template<typename T> struct aligned_new<T,true> {
-        void *operator new(size_t size) {
-            return simd::aligned_alloc(alignof(T),size);
-        }
-        
-        void operator delete(void *ptr) {
-            aligned_free(ptr);
-        }
-    };
     
     template<typename T> struct aligned_allocator {
         static_assert(sizeof(T) % alignof(T) == 0,"The object's size needs to be a multiple of its alignment");

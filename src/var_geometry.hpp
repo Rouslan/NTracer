@@ -118,6 +118,10 @@ namespace var {
     template<typename T> struct item_store {
         typedef T item_t;
         
+        static int v_dimension(int d) {
+            return d;
+        }
+        
         static const int required_d = 0;
         
         template<typename U> using init_array = var::init_array<U>;

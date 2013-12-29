@@ -56,18 +56,22 @@ namespace fixed {
         }
     };
 
-    template<int N,typename RealItems,typename T> struct alignas(simd::largest_fit<T>(N) * sizeof(T)) item_array {
+    template<int N,typename RealItems,typename T> struct alignas(simd::largest_fit<T>(simd::padded_size<T>(N)) * sizeof(T)) item_array {
         explicit item_array(int d) {
             assert(d == N);
         }
         
         int dimension() const { return N; }
         
-        T items[RealItems::get(N)];
+        T items[RealItems::get(N) + simd::padded_size<T>(N) - N];
     };
     
     template<int N,typename T> struct item_store {
         typedef T item_t;
+        
+        static int v_dimension(int d) {
+            return simd::padded_size<T>(d);
+        }
         
         static const int required_d = N;
         
