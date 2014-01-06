@@ -271,6 +271,27 @@ unsigned int cpu_cores() {
 #endif
 }
 
+void draw_pixel(const Scene *scene,byte *&dest,const SDL_Surface *surface,int x,int y) {
+    color c = scene->calculate_color(x,y,surface->w,surface->h);
+
+    Uint32 pval = SDL_MapRGB(surface->format,to_byte(c.R),to_byte(c.G),to_byte(c.B));
+    switch(surface->format->BytesPerPixel) {
+    case 4:
+        *reinterpret_cast<Uint32*>(dest) = pval;
+        break;
+    case 3:
+        dest[2] = (pval >> 16) & 0xff;
+    case 2:
+        dest[1] = (pval >> 8) & 0xff;
+    case 1:
+        dest[0] = pval & 0xff;
+        break;
+    default:
+        assert(false);
+    }
+    dest += surface->format->BytesPerPixel;
+}
+
 int worker(obj_Renderer *self) {
     renderer &r = self->base;
     
@@ -304,24 +325,7 @@ int worker(obj_Renderer *self) {
             for(int x = 0; x < r.destination->w; ++x) {
                 if(UNLIKELY(r.state != renderer::NORMAL)) goto finish;
 
-                color c = r.scene->calculate_color(x,y,r.destination->w,r.destination->h);
-
-                Uint32 pval = SDL_MapRGB(r.destination->format,to_byte(c.R),to_byte(c.G),to_byte(c.B));
-                switch(r.destination->format->BytesPerPixel) {
-                case 4:
-                    *reinterpret_cast<Uint32*>(pixels) = pval;
-                    break;
-                case 3:
-                    pixels[2] = (pval >> 16) & 0xff;
-                case 2:
-                    pixels[1] = (pval >> 8) & 0xff;
-                case 1:
-                    pixels[0] = pval & 0xff;
-                    break;
-                default:
-                    assert(false);
-                }
-                pixels += r.destination->format->BytesPerPixel;
+                draw_pixel(r.scene,pixels,r.destination,x,y);
             }
 
             if(SDL_MUSTLOCK(r.destination)) SDL_LockSurface(r.destination);
@@ -396,10 +400,13 @@ renderer::~renderer() {
     assert(!busy_threads);
     
     {
+        //py::AllowThreads _;
         scoped_lock lock(mut);
         state = QUIT;
-    }
+        //barrier.signal_all();
+     }
     barrier.signal_all();
+    
     for(unsigned int i=0; i<threads; ++i) SDL_WaitThread(workers[i],NULL);
 }
 
@@ -501,9 +508,38 @@ PyObject *obj_Renderer_abort_render(obj_Renderer *self,PyObject*) {
     } PY_EXCEPT_HANDLERS(NULL)
 }
 
+PyObject *obj_Renderer_render_sync(PyObject*,PyObject *args,PyObject *kwds) {
+    try {
+        const char *names[] = {"dest","scene"};
+        get_arg ga(args,kwds,names,"Renderer.render_sync");
+        PySurfaceObject *dest = py_to_surface(ga(true));
+        Scene *scene = &get_base<Scene>(ga(true));
+        ga.finished();
+        
+        SDL_Surface *surface = PySurface_AsSurface(dest);
+        
+        {
+            py::AllowThreads _;
+            
+            if(SDL_MUSTLOCK(surface)) SDL_LockSurface(surface);
+            for(int y=0; y<surface->h; ++y) {
+                auto line = reinterpret_cast<byte*>(surface->pixels) + y*surface->pitch;
+                
+                for(int x=0; x<surface->w; ++x) {
+                    draw_pixel(scene,line,surface,x,y);
+                }
+            }
+            if(SDL_MUSTLOCK(surface)) SDL_UnlockSurface(surface);
+        }
+        
+        Py_RETURN_NONE;
+    } PY_EXCEPT_HANDLERS(NULL)
+}
+
 PyMethodDef obj_Renderer_methods[] = {
     {"begin_render",reinterpret_cast<PyCFunction>(&obj_Renderer_begin_render),METH_VARARGS|METH_KEYWORDS,NULL},
     {"abort_render",reinterpret_cast<PyCFunction>(&obj_Renderer_abort_render),METH_NOARGS,NULL},
+    {"render_sync",reinterpret_cast<PyCFunction>(&obj_Renderer_render_sync),METH_STATIC|METH_VARARGS|METH_KEYWORDS,NULL},
     {NULL}
 };
 

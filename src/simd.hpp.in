@@ -78,6 +78,13 @@
 #endif
 
 
+#define V_INIT_CODE(T,P,S) T() = default; \
+    FORCE_INLINE T(P _data) { this->data.p = _data; } \
+    FORCE_INLINE T(const T &b) { this->data.p = b.data.p; } \
+    explicit T(scalar<S> b) { this->from_item(b.data); } \
+    FORCE_INLINE T &operator=(T b) { this->data.p = b.data.p; return *this; }
+
+
 namespace simd {
     namespace impl {
         template<typename T,typename Packed,typename Item> struct common {
@@ -93,8 +100,9 @@ namespace simd {
                 return data.s[i];
             }
             
-            FORCE_INLINE(T) operator-() const {
-                return T::repeat(Item(1) << (sizeof(Item)*8 - 1)) ^ *static_cast<const T*>(this);
+            FORCE_INLINE T operator-() const {
+                //return T::repeat(Item(1) << (sizeof(Item)*8 - 1)) ^ *static_cast<const T*>(this);
+                return T::zeros() - *static_cast<const T*>(this);
             }
             
             template<typename F> T apply(F f) const {
@@ -127,23 +135,23 @@ namespace simd {
         };
         
         template<typename T,typename Packed,typename Item> struct common_real : common<T,Packed,Item> {
-            FORCE_INLINE(T) operator*(Item b) const {
+            FORCE_INLINE T operator*(Item b) const {
                 return *static_cast<const T*>(this) * T::repeat(b);
             }
-            FORCE_INLINE(T&) operator*=(Item b) {
+            FORCE_INLINE T& operator*=(Item b) {
                 return *static_cast<T*>(this) *= T::repeat(b);
             }
             
-            FORCE_INLINE(T) operator/(Item b) const {
+            FORCE_INLINE T operator/(Item b) const {
                 return *static_cast<const T*>(this) / T::repeat(b);
             }
-            FORCE_INLINE(T&) operator/=(Item b) {
+            FORCE_INLINE T& operator/=(Item b) {
                 return *static_cast<T*>(this) /= T::repeat(b);
             }
             
-            FORCE_INLINE(T) operator-() const {
+            /*FORCE_INLINE T operator-() const {
                 return T::repeat(-0.0) ^ *static_cast<const T*>(this);
-            }
+            }*/
             
             // fall-back implementations for missing SIMD functions
             T add_sub(T b) const {
@@ -161,7 +169,7 @@ namespace simd {
             T floor() const { return this->apply(static_cast<Item (*)(Item)>(&std::floor)); }
         };
         
-        template<typename T,typename Packed,typename Item> FORCE_INLINE(T) operator*(Item a,const common_real<T,Packed,Item> &b) {
+        template<typename T,typename Packed,typename Item> FORCE_INLINE T operator*(Item a,const common_real<T,Packed,Item> &b) {
             return T::repeat(a) * static_cast<const T&>(b);
         }
         
@@ -321,10 +329,7 @@ namespace simd {
         typedef impl::common_real<double_v_512,__m512d,double> base_t;
         typedef mask64_v_512 mask;
         
-        double_v_512() = default;
-        double_v_512(__m512d _data) { this->data.p = _data; }
-        
-        explicit double_v_512(scalar<double> b) { this->from_item(b.data); }
+        V_INIT_CODE(double_v_512,__m512d,double)
         
         // [[[double-512]]]
         
@@ -338,10 +343,7 @@ namespace simd {
         typedef impl::common_real<float_v_512,__m512,float> base_t;
         typedef mask32_v_512 mask;
         
-        float_v_512() = default;
-        float_v_512(__m512 _data) { this->data.p = _data; }
-        
-        explicit float_v_512(scalar<float> b) { this->from_item(b.data); }
+        V_INIT_CODE(float_v_512,__m512,float)
         
         // [[[float-512]]]
         
@@ -355,10 +357,7 @@ namespace simd {
         typedef impl::common<int64_v_512,__m512i,int64_t> base_t;
         typedef mask64_v_512 mask;
         
-        int64_v_512() = default();
-        int64_v_512(__m512i _data) { this->data.p = _data; }
-        
-        explicit int64_v_512(scalar<int64_t> b) { this->from_item(b.data); }
+        V_INIT_CODE(int64_v_512,__m512i,int64_t)
         
         // [[[int64_t-512]]]
         
@@ -368,10 +367,7 @@ namespace simd {
         typedef impl::common<int32_v_512,__m512i,int32_t> base_t;
         typedef mask32_v_512 mask;
         
-        int32_v_512() = default;
-        int32_v_512(__m512i _data) { this->data.p = _data; }
-        
-        explicit int32_v_512(scalar<int32_t> b) { this->from_item(b.data); }
+        V_INIT_CODE(int32_v_512,__m512i,int32_t)
         
         // [[[int32_t-512]]]
         
@@ -388,7 +384,7 @@ namespace simd {
 #ifdef SUPPORT_AVX
     struct mask64_v_256 : impl::mask_common<mask64_v_256,4> {
         __m256d data;
-        FORCE_INLINE(int) to_bits() const {
+        FORCE_INLINE int to_bits() const {
             return _mm256_movemask_pd(data);
         }
         
@@ -399,7 +395,7 @@ namespace simd {
     };
     struct mask32_v_256 : impl::mask_common<mask32_v_256,8> {
         __m256 data;
-        FORCE_INLINE(int) to_bits() const {
+        FORCE_INLINE int to_bits() const {
             return _mm256_movemask_ps(data);
         }
         
@@ -413,7 +409,7 @@ namespace simd {
 #ifdef SUPPORT_AVX2
     struct mask16_v_256 : impl::mask_common<mask16_v_256,16,2> {
         __m256i data;
-        FORCE_INLINE(int) to_bits() const {
+        FORCE_INLINE int to_bits() const {
             return _mm256_movemask_epi8(data);
         }
         
@@ -421,7 +417,7 @@ namespace simd {
     };
     struct mask8_v_256 : impl::mask_common<mask8_v_256,32> {
         __m256i data;
-        FORCE_INLINE(int) to_bits() const {
+        FORCE_INLINE int to_bits() const {
             return _mm256_movemask_epi8(data);
         }
         
@@ -437,10 +433,7 @@ namespace simd {
         typedef impl::common<int64_v_256,__m256i,int64_t> base_t;
         typedef mask64_v_256 mask;
         
-        int64_v_256() = default;
-        int64_v_256(__m256i _data) { this->data.p = _data; }
-        
-        explicit int64_v_256(scalar<int64_t> b) { this->from_item(b.data); }
+        V_INIT_CODE(int64_v_256,__m256i,int64_t)
         
         // [[[int64_t-256]]]
         
@@ -450,10 +443,7 @@ namespace simd {
         typedef impl::common<int32_v_256,__m256i,int32_t> base_t;
         typedef mask32_v_256 mask;
         
-        int32_v_256() = default;
-        int32_v_256(__m256i _data) { this->data.p = _data; }
-        
-        explicit int32_v_256(scalar<int32_t> b) { this->from_item(b.data); }
+        V_INIT_CODE(int32_v_256,__m256i,int32_t)
         
         // [[[int32_t-256]]]
         
@@ -463,10 +453,7 @@ namespace simd {
         typedef impl::common<int16_v_256,__m256i,int16_t> base_t;
         typedef mask16_v_256 mask;
         
-        int16_v_256() = default;
-        int16_v_256(__m256i _data) { this->data.p = _data; }
-        
-        explicit int16_v_256(scalar<int16_t> b) { this->from_item(b.data); }
+        V_INIT_CODE(int16_v_256,__m256i,int16_t)
         
         // [[[int16_t-256]]]
         
@@ -476,10 +463,7 @@ namespace simd {
         typedef impl::common<int8_v_256,__m256i,int8_t> base_t;
         typedef mask8_v_256 mask;
         
-        int8_v_256() = default;
-        int8_v_256(__m256i _data) { this->data.p = _data; }
-        
-        explicit int8_v_256(scalar<int8_t> b) { this->from_item(b.data); }
+        V_INIT_CODE(int8_v_256,__m256i,int8_t)
         
         // [[[int8_t-256]]]
         
@@ -505,10 +489,7 @@ namespace simd {
         typedef impl::common_real<double_v_256,__m256d,double> base_t;
         typedef mask64_v_256 mask;
         
-        double_v_256() = default;
-        double_v_256(__m256d _data) { this->data.p = _data; }
-        
-        explicit double_v_256(scalar<double> b) { this->from_item(b.data); }
+        V_INIT_CODE(double_v_256,__m256d,double)
         
         // [[[double-256]]]
         
@@ -522,10 +503,7 @@ namespace simd {
         typedef impl::common_real<float_v_256,__m256,float> base_t;
         typedef mask32_v_256 mask;
         
-        float_v_256() = default;
-        float_v_256(__m256 _data) { this->data.p = _data; }
-        
-        explicit float_v_256(scalar<float> b) { this->from_item(b.data); }
+        V_INIT_CODE(float_v_256,__m256,float)
         
         // [[[float-256]]]
         
@@ -549,7 +527,7 @@ namespace simd {
 #ifdef SUPPORT_SSE
     struct mask32_v_128 : impl::mask_common<mask32_v_128,4> {
         __m128 data;
-        FORCE_INLINE(int) to_bits() const {
+        FORCE_INLINE int to_bits() const {
             return _mm_movemask_ps(data);
         }
         
@@ -563,7 +541,7 @@ namespace simd {
 #ifdef SUPPORT_SSE2
     struct mask64_v_128 : impl::mask_common<mask64_v_128,2> {
         __m128d data;
-        FORCE_INLINE(int) to_bits() const {
+        FORCE_INLINE int to_bits() const {
             return _mm_movemask_pd(data);
         }
         
@@ -572,7 +550,7 @@ namespace simd {
     };
     struct mask16_v_128 : impl::mask_common<mask16_v_128,8,2> {
         __m128i data;
-        FORCE_INLINE(int) to_bits() const {
+        FORCE_INLINE int to_bits() const {
             return _mm_movemask_epi8(data);
         }
         
@@ -580,7 +558,7 @@ namespace simd {
     };
     struct mask8_v_128 : impl::mask_common<mask8_v_128,16> {
         __m128i data;
-        FORCE_INLINE(int) to_bits() const {
+        FORCE_INLINE int to_bits() const {
             return _mm_movemask_epi8(data);
         }
         
@@ -591,10 +569,7 @@ namespace simd {
         typedef impl::common_real<double_v_128,__m128d,double> base_t;
         typedef mask64_v_128 mask;
         
-        double_v_128() = default;
-        double_v_128(__m128d _data) { this->data.p = _data; }
-        
-        explicit double_v_128(scalar<double> b) { this->from_item(b.data); }
+        V_INIT_CODE(double_v_128,__m128d,double)
         
         // [[[double-128]]]
         
@@ -608,10 +583,7 @@ namespace simd {
         typedef impl::common<int64_v_128,__m128i,int64_t> base_t;
         typedef mask64_v_128 mask;
         
-        int64_v_128() = default;
-        int64_v_128(__m128i _data) { this->data.p = _data; }
-        
-        explicit int64_v_128(scalar<int64_t> b) { this->from_item(b.data); }
+        V_INIT_CODE(int64_v_128,__m128i,int64_t)
         
         // [[[int64_t-128]]]
         
@@ -621,10 +593,7 @@ namespace simd {
         typedef impl::common<int32_v_128,__m128i,int32_t> base_t;
         typedef mask32_v_128 mask;
         
-        int32_v_128() = default;
-        int32_v_128(__m128i _data) { this->data.p = _data; }
-        
-        explicit int32_v_128(scalar<int32_t> b) { this->from_item(b.data); }
+        V_INIT_CODE(int32_v_128,__m128i,int32_t)
         
         // [[[int32_t-128]]]
         
@@ -634,10 +603,7 @@ namespace simd {
         typedef impl::common<int16_v_128,__m128i,int16_t> base_t;
         typedef mask16_v_128 mask;
         
-        int16_v_128() = default;
-        int16_v_128(__m128i _data) { this->data.p = _data; }
-        
-        explicit int16_v_128(scalar<int16_t> b) { this->from_item(b.data); }
+        V_INIT_CODE(int16_v_128,__m128i,int16_t)
         
         // [[[int16_t-128]]]
         
@@ -647,10 +613,7 @@ namespace simd {
         typedef impl::common<int8_v_128,__m128i,int8_t> base_t;
         typedef mask8_v_128 mask;
         
-        int8_v_128() = default;
-        int8_v_128(__m128i _data) { this->data.p = _data; }
-        
-        explicit int8_v_128(scalar<int8_t> b) { this->from_item(b.data); }
+        V_INIT_CODE(int8_v_128,__m128i,int8_t)
         
         // [[[int8_t-128]]]
         
@@ -686,10 +649,7 @@ namespace simd {
         typedef impl::common_real<float_v_128,__m128,float> base_t;
         typedef mask32_v_128 mask;
         
-        float_v_128() = default;
-        float_v_128(__m128 _data) { this->data.p = _data; }
-        
-        explicit float_v_128(scalar<float> b) { this->from_item(b.data); }
+        V_INIT_CODE(float_v_128,__m128,float)
         
         // [[[float-128]]]
         
@@ -805,7 +765,8 @@ namespace simd {
         template<typename T> constexpr size_t padded_size(size_t size,size_t i) {
             typedef v_sizes<T> s;
             
-            return size >= s::value[i] ? 
+            //return size >= s::value[i+1] ?
+            return size >= s::value[i] ?
                 (size / s::value[i] * s::value[i]) + (size % s::value[i] == s::value[i+1] ? s::value[i+1] : s::value[i]) :
                 padded_size<T>(size,i+1);
         }

@@ -1,9 +1,7 @@
 #ifndef fixed_geometry_hpp
 #define fixed_geometry_hpp
 
-#include <Python.h>
 
-#include "py_common.hpp"
 #include "geometry.hpp"
 
 
@@ -57,13 +55,16 @@ namespace fixed {
     };
 
     template<int N,typename RealItems,typename T> struct alignas(simd::largest_fit<T>(simd::padded_size<T>(N)) * sizeof(T)) item_array {
+        static const int _real_size = RealItems::get(N) + simd::padded_size<T>(N) - N;
+        
         explicit item_array(int d) {
             assert(d == N);
+            for(int i=RealItems::get(N); i<_real_size; ++i) items[i] = 1;
         }
         
         int dimension() const { return N; }
         
-        T items[RealItems::get(N) + simd::padded_size<T>(N) - N];
+        T items[_real_size];
     };
     
     template<int N,typename T> struct item_store {

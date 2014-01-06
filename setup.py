@@ -22,7 +22,18 @@ import version
 import generate_simd
 
 
-GCC_OPTIMIZE_COMPILE_ARGS = ['-O3','-fmerge-all-constants','-funsafe-loop-optimizations','-ffast-math','-fstrict-enums','-fno-enforce-eh-specs','-fnothrow-opt','-march=native']
+GCC_OPTIMIZE_COMPILE_ARGS = [
+    '-O3',
+    '-fmerge-all-constants',
+    '-funsafe-loop-optimizations',
+    '-ffast-math',
+    '-fstrict-enums',
+    '-fno-enforce-eh-specs',
+    '-fnothrow-opt',
+    '-march=native',
+#    '-DPROFILE_CODE',
+    '--param','large-function-growth=500',
+    '--param','inline-unit-growth=1000']
 GCC_EXTRA_COMPILE_ARGS = ['-std=c++11','-fvisibility=hidden','-Wno-format','-Wno-invalid-offsetof']
 
 # At the time of this writing, no version of MSVC has enough C++11 support to
@@ -33,6 +44,7 @@ DEFAULT_OPTIMIZED_DIMENSIONS = frozenset(range(3,9))
 
 
 TRACER_TEMPLATE = """
+#include <Python.h>
 #include "fixed_geometry.hpp"
 
 typedef fixed::item_store<{0},real> module_store;
@@ -92,7 +104,8 @@ class CustomBuildExt(build_ext):
             depends=['src/simd.hpp.in','src/ntracer_body.hpp',
                 'src/py_common.hpp','src/pyobject.hpp','src/geometry.hpp',
                 'src/fixed_geometry.hpp','src/tracer.hpp','src/light.hpp',
-                'src/scene.hpp','src/camera.hpp','src/compatibility.hpp'],
+                'src/scene.hpp','src/camera.hpp','src/compatibility.hpp',
+                'src/v_array.hpp','src/instrumentation.hpp'],
             include_dirs=['src'],
             libraries=['SDL'])
     
@@ -140,17 +153,16 @@ class CustomBuildExt(build_ext):
     def add_optimization(self):
         c = self.compiler.compiler_type
         if c == 'msvc':
-            if not self.debug:
-                for e in self.extensions:
-                    e.extra_compile_args = MSVC_OPTIMIZE_COMPILE_ARGS
+            for e in self.extensions:
+                e.extra_compile_args = MSVC_OPTIMIZE_COMPILE_ARGS
             return True
         if c == 'unix' or c == 'cygwin':
             cc = os.path.basename(sysconfig.get_config_var('CXX'))
             if 'gcc' in cc or 'g++' in cc or 'clang' in cc:
                 for e in self.extensions:
                     e.extra_compile_args = GCC_EXTRA_COMPILE_ARGS[:]
+                    e.extra_compile_args += GCC_OPTIMIZE_COMPILE_ARGS
                     if not self.debug:
-                        e.extra_compile_args += GCC_OPTIMIZE_COMPILE_ARGS
                         e.extra_link_args = ['-s']
                 return True
             
@@ -208,7 +220,8 @@ setup(name='ntracer',
             depends=['src/simd.hpp.in','src/ntracer_body.hpp',
                 'src/py_common.hpp','src/pyobject.hpp','src/geometry.hpp',
                 'src/var_geometry.hpp','src/tracer.hpp','src/light.hpp',
-                'src/scene.hpp','src/camera.hpp','src/compatibility.hpp'])],
+                'src/scene.hpp','src/camera.hpp','src/compatibility.hpp',
+                'src/v_array.hpp','src/instrumentation.hpp'])],
     requires=['pygame'],
     description='A fast hyper-spacial ray-tracing library',
     long_description=long_description,

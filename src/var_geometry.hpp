@@ -1,11 +1,9 @@
 #ifndef var_geometry_hpp
 #define var_geometry_hpp
 
-#include <Python.h>
 #include <algorithm>
 
 #include "geometry.hpp"
-#include "pyobject.hpp"
 
 
 namespace var {    

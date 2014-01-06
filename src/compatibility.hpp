@@ -28,9 +28,9 @@ namespace std {
   #define RESTRICT __restrict__
 
   #ifdef __GNUC_GNU_INLINE__
-    #define FORCE_INLINE(RET) inline RET __attribute__((gnu_inline,always_inline))
+    #define FORCE_INLINE inline __attribute__((gnu_inline,always_inline))
   #else
-    #define FORCE_INLINE(RET) inline RET __attribute__((always_inline))
+    #define FORCE_INLINE inline __attribute__((always_inline))
   #endif
 #else
   #define LIKELY(X) X
@@ -39,9 +39,9 @@ namespace std {
   #define RESTRICT
 
   #if defined(_MSC_VER)
-    #define FORCE_INLINE(RET) __forceinline RET
+    #define FORCE_INLINE __forceinline
   #else
-    #define FORCE_INLINE(RET) inline RET
+    #define FORCE_INLINE inline
   #endif
 #endif
 

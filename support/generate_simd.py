@@ -33,58 +33,58 @@ for t in [
     ('double',64,'d',FLOAT)]:
     types[t[0]] = CType(*t)
 
-binary_op = """        FORCE_INLINE({wrap_type}) operator{extra}({wrap_type} b) const {{
+binary_op = """        FORCE_INLINE {wrap_type} operator{extra}({wrap_type} b) const {{
             return {intr}(this->data.p,b.data.p);
         }}
-        FORCE_INLINE({wrap_type}&) operator{extra}=({wrap_type} b) {{
+        FORCE_INLINE {wrap_type} &operator{extra}=({wrap_type} b) {{
             this->data.p = {intr}(this->data.p,b.data.p);
             return *this;
         }}
 """
-cmp_op = """        FORCE_INLINE(mask) operator{extra}({wrap_type} b) const {{
+cmp_op = """        FORCE_INLINE mask operator{extra}({wrap_type} b) const {{
             return mask({intr}(this->data.p,b.data.p));
         }}
 """
-unary_meth = """        FORCE_INLINE({wrap_type}) {extra}() const {{
+unary_meth = """        FORCE_INLINE {wrap_type} {extra}() const {{
             return {intr}(this->data.p);
         }}
 """
-reduce_meth = """        FORCE_INLINE({item_type}) {extra}() const {{
+reduce_meth = """        FORCE_INLINE {item_type} {extra}() const {{
             return {intr}(this->data.p);
         }}
 """
-load_meth = """        static FORCE_INLINE({wrap_type}) {extra}(const {item_type} *source) {{
+load_meth = """        static FORCE_INLINE {wrap_type} {extra}(const {item_type} *source) {{
             return {intr}(reinterpret_cast<{iargs[0][type]}>(source));
         }}
 """
 
-store_meth = """        FORCE_INLINE(void) {extra}({item_type} *dest) const {{
+store_meth = """        FORCE_INLINE void {extra}({item_type} *dest) const {{
             {intr}(reinterpret_cast<{iargs[0][type]}>(dest),this->data.p);
         }}
 """
 
-set1_meth = """        static FORCE_INLINE({wrap_type}) {extra}({item_type} x) {{
+set1_meth = """        static FORCE_INLINE {wrap_type} {extra}({item_type} x) {{
             return {intr}(x);
         }}
 """
 
-setzero_meth = """        static FORCE_INLINE({wrap_type}) {extra}() {{
+setzero_meth = """        static FORCE_INLINE {wrap_type} {extra}() {{
             return {intr}();
         }}
 """
 
-cast_meth = """        explicit FORCE_INLINE() {wrap_type}({wrap_type_src} b) {{
+cast_meth = """        explicit FORCE_INLINE {wrap_type}({wrap_type_src} b) {{
             this->data.p = {intr}(b.data.p);
         }}
 """
 cast_meth_dec = """        explicit {wrap_type}({wrap_type_src} b);
 """
-cast_meth_def = """    FORCE_INLINE() {wrap_type}::{wrap_type}({wrap_type_src} b) {{
+cast_meth_def = """    FORCE_INLINE {wrap_type}::{wrap_type}({wrap_type_src} b) {{
         this->data.p = {intr}(b.data.p);
     }}
 """
 
-binary_func = """    FORCE_INLINE({wrap_type}) {extra}({wrap_type} a,{wrap_type} b) {{
+binary_func = """    FORCE_INLINE {wrap_type} {extra}({wrap_type} a,{wrap_type} b) {{
         return {intr}(a.data.p,b.data.p);
     }}
 """

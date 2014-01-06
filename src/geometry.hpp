@@ -2,261 +2,65 @@
 #define geometry_hpp
 
 #include <cmath>
-#include <utility>
 #include <stdexcept>
 
-#include "simd.hpp"
+#include "v_array.hpp"
 
-
-using std::declval;
 
 typedef float real;
 
 
 namespace impl {
-    /* This is part of a very simple heuristic for determining if something is
-       worth vectorizing. A score greater than or equal to this value means yes.
-     */
-    const int V_SCORE_THRESHHOLD = 2;
-    
     template<typename T> struct vector_expr;
     
-    template<typename,size_t> struct _v_item_t {};
-    template<typename T,size_t Size> using v_item_t = typename _v_item_t<T,Size>::type;
-    template<typename T> using s_item_t = typename _v_item_t<T,1>::type::item_t;
-    
-    
-    template<typename F> inline void rep(int n,F f) {
-        for(int i=0; i<n; ++i) f(i);
-    }
-    
-    template<typename F> using v_sizes = simd::v_sizes<s_item_t<F> >;
-    
-    template<typename F,size_t SI,bool more=(F::v_score >= V_SCORE_THRESHHOLD) && (simd::v_sizes<typename F::item_t>::value[SI] > 1)> struct _vec_rep {
-        static inline void go(size_t n,size_t i,F f) {
-            static const size_t size = simd::v_sizes<typename F::item_t>::value[SI];
-            for(; i<(n - (size - 1)); i+= size) f.template operator()<size>(i);
-            
-            _vec_rep<F,SI+1>::go(n,i,f);
+    template<typename VExpr> struct vector_expr_adapter : vector_expr<vector_expr_adapter<VExpr> > {
+        static const int v_score = VExpr::v_score;
+        static constexpr bool temporary = VExpr::temporary;
+        
+        VExpr expr;
+        
+        template<typename... Args> FORCE_INLINE vector_expr_adapter(Args&&... args) : expr(std::forward<Args>(args)...) {}
+        
+        size_t _size() const { return expr.size(); }
+        size_t _v_size() const { return expr.v_size(); }
+        template<size_t Size> v_item_t<VExpr,Size> &vec(size_t n) {
+            return expr.template vec<Size>(n);
+        }
+        template<size_t Size> v_item_t<VExpr,Size> vec(size_t n) const {
+            return expr.template vec<Size>(n);
         }
     };
-    
-    template<typename F,size_t I> struct _vec_rep<F,I,false> {
-        static inline void go(size_t n,size_t i,F f) {
-            for(; i<n; ++i) f.template operator()<1>(i);
-        }
-    };
-    
-    template<typename F> inline void vec_rep(size_t n,F f) {
-        _vec_rep<F,0>::go(n,0,f);
-    }
-    
-    
-    template<typename A,typename B> struct vector_sum;
-    template<typename A,typename B,size_t Size> struct _v_item_t<vector_sum<A,B>,Size> {
-        typedef decltype(declval<v_item_t<A,Size> >() + declval<v_item_t<B,Size> >()) type;
-    };
-    template<typename A,typename B> struct vector_sum : vector_expr<vector_sum<A,B> > {
-        template<typename U> friend struct vector_expr;
-        
-        static const int v_score = A::v_score + B::v_score;
-        
-        const A &a;
-        const B &b;
-        
-        vector_sum(const vector_sum<A,B>&) = delete;
-        vector_sum &operator=(const vector_sum<A,B>&) = delete;
-
-        int dimension() const { return a.dimension(); }
-        int v_dimension() const { return a.v_dimension(); }
-        
-        template<size_t Size> v_item_t<vector_sum<A,B>,Size> vec(int n) const {
-            return a.template vec<Size>(n) + b.template vec<Size>(n);
-        }
-        
-    private:
-        vector_sum(const A &a,const B &b) : a(a), b(b) {}
-    };
-    
-    template<typename A,typename B> struct vector_diff;
-    template<typename A,typename B,size_t Size> struct _v_item_t<vector_diff<A,B>,Size> {
-        typedef decltype(declval<v_item_t<A,Size> >() - declval<v_item_t<B,Size> >()) type;
-    };
-    template<typename A,typename B> struct vector_diff : vector_expr<vector_diff<A,B> > {
-        template<typename U> friend struct vector_expr;
-        
-        static const int v_score = A::v_score + B::v_score;
-        
-        const A &a;
-        const B &b;
-        
-        vector_diff(const vector_diff<A,B>&) = delete;
-        vector_diff &operator=(const vector_diff<A,B>&) = delete;
-
-        int dimension() const { return a.dimension(); }
-        int v_dimension() const { return a.v_dimension(); }
-        
-        template<size_t Size> v_item_t<vector_diff<A,B>,Size> vec(int n) const {
-            return a.template vec<Size>(n) - b.template vec<Size>(n);
-        }
-        
-    private:
-        vector_diff(const A &a,const B &b) : a(a), b(b) {}
-    };
-    
-    template<typename T> struct vector_neg;
-    template<typename T,size_t Size> struct _v_item_t<vector_neg<T>,Size> {
+    template<typename T,size_t Size> struct _v_item_t<vector_expr_adapter<T>,Size> {
         typedef v_item_t<T,Size> type;
     };
-    template<typename T> struct vector_neg : vector_expr<vector_neg<T> > {
-        template<typename U> friend struct vector_expr;
-        
-        static const int v_score = T::v_score;
-        
-        const T &a;
-
-        vector_neg(const vector_neg<T>&) = delete;
-        vector_neg &operator=(const vector_neg<T>&) = delete;
-
-        int dimension() const { return a.dimension(); }
-        int v_dimension() const { return a.v_dimension(); }
-        
-        template<size_t Size> v_item_t<T,Size> vec(int n) const {
-            return -a.template vec<Size>(n);
-        }
-        
-    private:
-        vector_neg(const T &a) : a(a) {}
-    };
     
-    template<typename T> struct vector_product;
-    template<typename T,size_t Size> struct _v_item_t<vector_product<T>,Size> {
-        typedef v_item_t<T,Size> type;
-    };
-    template<typename T> struct vector_product : vector_expr<vector_product<T> > {
-        template<typename U> friend struct vector_expr;
-        template<typename U> friend vector_product<U> operator*(s_item_t<U> a,const vector_expr<U> &b);
-        
-        static const int v_score = T::v_score + 1;
-        
-        const T &a;
-        s_item_t<T> b;
-        
-        vector_product(const vector_product<T>&) = delete;
-        vector_product &operator=(const vector_product<T>&) = delete;
-        
-        int dimension() const { return a.dimension(); }
-        int v_dimension() const { return a.v_dimension(); }
-        
-        template<size_t Size> v_item_t<T,Size> vec(int n) const {
-            return a.template vec<Size>(n) * b;
-        }
-        
-    private:
-        vector_product(const T &a,s_item_t<T> b) : a(a), b(b) {}
-    };
-    
-    template<typename T> struct vector_quotient;
-    template<typename T,size_t Size> struct _v_item_t<vector_quotient<T>,Size> {
-        typedef v_item_t<T,Size> type;
-    };
-    template<typename T> struct vector_quotient : vector_expr<vector_quotient<T> > {
-        template<typename U> friend struct vector_expr;
-        
-        static const int v_score = T::v_score + 1;
-        
-        const T &a;
-        s_item_t<T> b;
-        
-        vector_quotient(const vector_quotient<T>&) = delete;
-        vector_quotient &operator=(const vector_quotient<T>&) = delete;
-        
-        int dimension() const { return a.dimension(); }
-        int v_dimension() const { return a.v_dimension(); }
-        
-        template<size_t Size> v_item_t<T,Size> vec(int n) const {
-            return a.template vec<Size>(n) / b;
-        }
-        
-    private:
-        vector_quotient(const T &a,s_item_t<T> b) : a(a), b(b) {}
-    };
-    
-    template<typename T> struct vector_rquotient;
-    template<typename T,size_t Size> struct _v_item_t<vector_rquotient<T>,Size> {
-        typedef v_item_t<T,Size> type;
-    };
-    template<typename T> struct vector_rquotient : vector_expr<vector_rquotient<T> > {
-        template<typename U> friend struct vector_expr;
-        template<typename U> friend vector_product<U> operator/(s_item_t<U> a,const vector_expr<U> &b);
-        
-        static const int v_score = T::v_score + 1;
-        
-        s_item_t<T> a;
-        const T &b;
+    template<typename Op,typename... T> using vector_op_expr = vector_expr_adapter<v_op_expr<Op,T...> >;
 
-        vector_rquotient(const vector_rquotient<T>&) = delete;
-        vector_rquotient &operator=(const vector_rquotient<T>&) = delete;
-        
-        int dimension() const { return b.dimension(); }
-        int v_dimension() const { return b.v_dimension(); }
-        
-        template<size_t Size> v_item_t<T,Size> vec(int n) const {
-            return v_item_t<T,Size>::repeat(a) / b.template vec<Size>(n); }
-        
-    private:
-        vector_rquotient(s_item_t<T> a,const T &b) : a(a), b(b) {}
-    };
     
-    template<typename T,typename F> struct vector_apply;
-    template<typename T,typename F,size_t Size> struct _v_item_t<vector_apply<T,F>,Size> {
-        typedef simd::v_type<typename std::result_of<F(s_item_t<T>)>::type,Size> type;
-    };
-    template<typename T,typename F> struct vector_apply : vector_expr<vector_apply<T,F> > {
-        template<typename U> friend struct vector_expr;
-        
-        static const int v_score = T::v_score - 1;
-
-        const T &a;
-        F f;
-
-        vector_apply(const vector_apply<T,F>&) = delete;
-        vector_apply &operator=(const vector_apply<T,F>&) = delete;
-        
-        int dimension() const { return a.dimension(); }
-        int v_dimension() const { return a.v_dimension(); }
-        
-        template<size_t Size> v_item_t<vector_apply<T,F>,Size> vec(int n) const {
-            return a.template vec<Size>(n).apply(f);
-        }
-        
-    private:
-        vector_apply(const T &a,F f) : a(a), f(f) {}
-    };
-    
-    template<typename Store> struct vector_axis;
-    template<typename Store,size_t Size> struct _v_item_t<vector_axis<Store>,Size> {
+    template<typename Store> struct v_axis;
+    template<typename Store,size_t Size> struct _v_item_t<v_axis<Store>,Size> {
         typedef simd::v_type<typename Store::item_t,Size> type;
     };
-    template<typename Store> struct vector_axis : vector_expr<vector_axis<Store> > {
+    template<typename Store> struct v_axis : vector_expr<v_axis<Store> > {
         typedef typename Store::item_t item_t;
+        static constexpr bool temporary = true;
         
         static const int v_score = 0;
         
         int _dimension;
-        int axis;
+        size_t axis;
         item_t length;
         
-        int dimension() const { return _dimension; }
-        int v_dimension() const { return Store::v_dimension(_dimension); }
+        size_t _size() const { return _dimension; }
+        size_t _v_size() const { return Store::v_dimension(_dimension); }
         
-        template<size_t Size> simd::v_type<item_t,Size> vec(int n) const {
+        template<size_t Size> simd::v_type<item_t,Size> vec(size_t n) const {
             auto r = simd::v_type<item_t,Size>::zeros();
-            if(n >= axis && n < axis+int(Size)) r[n-axis] = length;
+            if(n+Size > axis && n <= axis) r[axis-n] = length;
             return r;
         }
 
-        vector_axis(int d,int axis,item_t length) : _dimension(d), axis(axis), length(length) {}
+        v_axis(int d,int axis,item_t length) : _dimension(d), axis(axis), length(length) {}
     };
 
     template<typename Store> struct vector;
@@ -266,253 +70,112 @@ namespace impl {
     struct vector_item_count {
         static constexpr int get(int d) { return d; }
     };
-    template<typename Store> struct vector : vector_expr<vector<Store> > {
+    template<typename Store> struct vector : vector_expr_adapter<v_array<Store,typename Store::item_t> > {
+        typedef vector_expr_adapter<v_array<Store,typename Store::item_t> > base_t;
         typedef typename Store::item_t item_t;
-        
-        static const int v_score = V_SCORE_THRESHHOLD;
 
-        explicit vector(int d) : store(d) {}
-    
-        template<typename F> vector(int d,F f) : store(d) {
-            fill_with(f);
-        }
-        
-        template<typename B> vector(const vector_expr<B> &b) : store(b.dimension()) {
-            fill_with(b);
-        }
-        
-        template<typename B> struct _v_add {
-            typedef typename Store::item_t item_t;
-            static const int v_score = B::v_score;
-            
-            vector<Store> *self;
-            const B &b;
-            
-            template<size_t Size> void operator()(int n) const {
-                self->template vec<Size>(n) += b.template vec<Size>(n);
-            }
-        };
-        template<typename B> vector<Store> &operator+=(const vector_expr<B> &b) {
-            vec_rep(v_dimension(),_v_add<B>{this,b});
-            
+        explicit vector(int d) : base_t(d) {}
+        template<typename F> vector(int d,F f) : base_t(d,f) {}    
+        template<typename B> FORCE_INLINE vector(const vector_expr<B> &b) : base_t(b) {}
+
+        template<typename B> FORCE_INLINE vector<Store> &operator+=(const vector_expr<B> &b) {
+            this->expr += b;
             return *this;
         }
-        
-        template<typename B> struct _v_sub {
-            typedef typename Store::item_t item_t;
-            static const int v_score = B::v_score;
-            
-            vector<Store> *self;
-            const B &b;
-            
-            template<size_t Size> void operator()(int n) const {
-                self->template vec<Size>(n) -= b.template vec<Size>(n);
-            }
-        };
-        template<typename B> vector<Store> &operator-=(const vector_expr<B> &b) {
-            vec_rep(v_dimension(),_v_sub<B>{this,b});
-
+        template<typename B> FORCE_INLINE vector<Store> &operator-=(const vector_expr<B> &b) {
+            this->expr -= b;
             return *this;
         }
-        
-        struct _v_mul {
-            typedef typename Store::item_t item_t;
-            static const int v_score = 2;
-            
-            vector<Store> *self;
-            item_t b;
-            
-            template<size_t Size> void operator()(int n) const {
-                self->template vec<Size>(n) *= b;
-            }
-        };
         vector<Store> &operator*=(item_t b) {
-            vec_rep(v_dimension(),_v_mul{this,b});
-        
+            this->expr *= v_repeat<item_t>(dimension(),b);
             return *this;
         }
-        
-        struct _v_div {
-            typedef typename Store::item_t item_t;
-            static const int v_score = 2;
-            
-            vector<Store> *self;
-            item_t b;
-            
-            template<size_t Size> void operator()(int n) const {
-                self->template vec<Size>(n) /= b;
-            }
-        };
         vector<Store> &operator/=(item_t b) {
-            vec_rep(v_dimension(),_v_div{this,b});
-            
+            this->expr *= v_repeat<item_t>(dimension(),1/b);
             return *this;
         }
         
-        int dimension() const { return store.dimension(); }
-        int v_dimension() const { return Store::v_dimension(dimension()); }
+        int dimension() const { return this->expr.size(); }
         
-        template<typename F> void rep(F f) const {
-            impl::rep(dimension(),f);
-        }
+        template<typename T> void fill_with(T x) { this->expr.fill_with(x); }
+
+        item_t &operator[](size_t n) { return this->expr[n]; }
+        item_t operator[](size_t n) const { return this->expr[n]; }
         
-        void fill_with(item_t v) {
-            rep([=](int i){ (*this)[i] = v; });
-        }
+        void normalize() { operator/=(this->absolute()); }
         
-        template<typename B> struct _v_assign {
-            typedef typename Store::item_t item_t;
-            static const int v_score = B::v_score;
-            
-            vector<Store> *self;
-            const B &b;
-            
-            template<size_t Size> void operator()(int n) const {
-                self->template vec<Size>(n) = b.template vec<Size>(n);
-            }
-        };
-        template<typename B> void fill_with(const vector_expr<B> &b) {
-            vec_rep(v_dimension(),_v_assign<B>{this,b});
-        }
-        
-        template<typename F,typename=decltype(declval<F>()(declval<int>()))> void fill_with(F f) {
-            rep([=](int i){ (*this)[i] = f(i); });
-        }
-        
-        item_t &operator[](int n) { return store.items[n]; }
-        item_t operator[](int n) const { return store.items[n]; }
-        
-        template<size_t Size> simd::v_type<item_t,Size> &vec(int n) {
-            return *reinterpret_cast<simd::v_type<item_t,Size>*>(store.items + n);
-        }
-        
-        template<size_t Size> simd::v_type<item_t,Size> vec(int n) const {
-            return *reinterpret_cast<const simd::v_type<item_t,Size>*>(store.items + n);
-        }
-        
-        void normalize() { operator/(this->absolute()); }
-        
-        static vector_axis<Store> axis(int d,int n,item_t length = item_t(1)) {
+        static vector_expr_adapter<v_axis<Store> > axis(int d,int n,item_t length = 1) {
             return {d,n,length};
         }
-        
-        typename Store::template type<vector_item_count> store;
     };
-
-    template<typename A,typename B> struct _v_mul_sum {
-        typedef decltype(declval<v_item_t<A,v_sizes<A>::value[0]> >() * declval<v_item_t<B,v_sizes<B>::value[0]> >()) v_sum_t;
-        typedef typename v_sum_t::item_t item_t;
-        
-        static const int v_score = A::v_score + B::v_score - 1;
-        
-        v_sum_t &r;
-        item_t &r_small;
-        const A &a;
-        const B &b;
-        
-        template<size_t Size> void operator()(int n) const {
-            if(Size == 1) {
-                r_small += (a.template vec<1>(n) * b.template vec<1>(n))[0];
-            } else {
-                /* If the AVX instruction set is used, this relies on all vector
-                   operations using the AVX versions, where the upper bits are
-                   set to zero. */
-                r += v_sum_t(a.template vec<Size>(n) * b.template vec<Size>(n));
-            }
-        }
-        
-        static constexpr size_t smallest_vec(int i=0) {
-            typedef simd::v_sizes<item_t> sizes;
-            return sizes::value[i] == 1 || sizes::value[i+1] == 1 ? sizes::value[i] : smallest_vec(i+1);
-        }
-    };
-    template<typename A,typename B> static typename _v_mul_sum<A,B>::item_t dot(const vector_expr<A> &a,const vector_expr<B> &b) {
-        assert(a.dimension() == b.dimension());
-        
-        typename _v_mul_sum<A,B>::item_t r_small = 0;
-        if(_v_mul_sum<A,B>::v_score < V_SCORE_THRESHHOLD || size_t(a.dimension()) < _v_mul_sum<A,B>::smallest_vec()) {
-            for(int i=0; i<a.dimension(); ++i) r_small += (static_cast<const A&>(a).template vec<1>(i) * static_cast<const B&>(b).template vec<1>(i))[0];
-            return r_small;
-        }
-
-        auto r = _v_mul_sum<A,B>::v_sum_t::zeros();
-        /* v_dimension is not used because we don't want the sum to include the
-           pad value */
-        vec_rep(a.dimension(),_v_mul_sum<A,B>{r,r_small,a,b});
-        return r.reduce_add() + r_small;
-    }
     
-    template<typename T> struct vector_expr {
-        int dimension() const { return static_cast<const T*>(this)->dimension(); }
-        int v_dimension() const { return static_cast<const T*>(this)->v_dimension(); }
+    
+    template<typename T> using vector_multiply = vector_op_expr<op_multiply,T,v_repeat<s_item_t<T> > >;
+    template<typename T> using vector_divide = vector_op_expr<op_divide,T,v_repeat<s_item_t<T> > >;
+    template<typename T> using vector_rdivide = vector_op_expr<op_divide,v_repeat<s_item_t<T> >,T>;
+    
+    template<typename T> vector_multiply<T> operator*(s_item_t<T> a,const vector_expr<T> &b);
+    template<typename T> vector_rdivide<T> operator/(s_item_t<T> a,const vector_expr<T> &b);
+    
+    template<typename T> struct vector_expr : private v_expr<T> {
+        friend struct v_expr<T>;
+        template<typename VExpr> friend struct vector_expr_adapter;
+        template<typename Store> friend struct vector;
+        friend vector_multiply<T> operator*<T>(s_item_t<T> a,const vector_expr<T> &b);
+        friend vector_rdivide<T> operator/<T>(s_item_t<T> a,const vector_expr<T> &b);
+        template<typename A,typename B> friend s_item_t<v_op_expr<op_multiply,A,B> > dot(const vector_expr<A> &a,const vector_expr<B> &b);
         
         operator T &() { return *static_cast<T*>(this); }
         operator const T &() const { return *static_cast<const T*>(this); }
         
-        template<typename B> vector_sum<T,B> operator+(const vector_expr<B> &b) const {
-            assert(dimension() == b.dimension());
+        template<typename B> vector_op_expr<op_add,T,B> operator+(const vector_expr<B> &b) const {
             return {*this,b};
         }
         
-        template<typename B> vector_diff<T,B> operator-(const vector_expr<B> &b) const {
-            assert(dimension() == b.dimension());
+        template<typename B> vector_op_expr<op_subtract,T,B> operator-(const vector_expr<B> &b) const {
             return {*this,b};
         }
         
-        vector_neg<T> operator-() const {
+        vector_op_expr<op_negate,T> operator-() const {
             return {*this};
         }
         
-        vector_product<T> operator*(s_item_t<T> b) const {
-            return {*this,b};
+        vector_multiply<T> operator*(s_item_t<T> b) const {
+            return {*this,v_repeat<s_item_t<T> >{this->size(),b}};
         }
         
-        vector_quotient<T> operator/(s_item_t<T> b) const {
-            return {*this,b};
+        vector_multiply<T> operator/(s_item_t<T> b) const {
+            return {*this,v_repeat<s_item_t<T> >{this->size(),1/b}};
         }
-        
-        template<typename B> struct _v_eq {
-            typedef s_item_t<T> item_t;
-            static const int v_score = T::v_score + B::v_score;
-            
-            int &r;
-            const T &a;
-            const B &b;
-            
-            template<size_t Size> void operator()(int n) const {
-                r |= (a.template vec<Size>(n) != b.template vec<Size>(n)).to_bits();
-            }
-        };
-        template<typename B> bool operator==(const vector_expr<B> &b) const {
-            assert(dimension() == b.dimension());
 
-            int r = 0;
-            
-            vec_rep(v_dimension(),_v_eq<B>{r,*this,b});
-            return r == 0;
+        template<typename B> bool operator==(const vector_expr<B> &b) const {
+            return (*static_cast<const v_expr<T>*>(this) == b).all();
         }
         
         template<typename B> bool operator!=(const vector_expr<B> &b) const {
-            return !operator==(b);
+            return (*static_cast<const v_expr<T>*>(this) != b).any();
         }
         
         s_item_t<T> square() const { return dot(*this,*this); }
         s_item_t<T> absolute() const { return std::sqrt(square()); }
-        vector_quotient<T> unit() const {
-            return {*this,absolute()};
+        vector_multiply<T> unit() const {
+            return operator/(absolute());
         }
         
-        template<typename F> vector_apply<T,F> apply(F f) const {
+        template<typename F> vector_expr_adapter<v_apply<T,F> > apply(F f) const {
             return {*this,f};
         }
     };
     
-    template<typename T> vector_product<T> operator*(s_item_t<T> a,const vector_expr<T> &b) {
-        return {b,a};
+    template<typename T> vector_multiply<T> operator*(s_item_t<T> a,const vector_expr<T> &b) {
+        return {b,v_repeat<s_item_t<T> >{b.size(),a}};
+    }
+    template<typename T> vector_rdivide<T> operator/(s_item_t<T> a,const vector_expr<T> &b) {
+        return {v_repeat<s_item_t<T> >{b.size(),a},b};
     }
     
-    template<typename T> vector_rquotient<T> operator/(s_item_t<T> a,const vector_expr<T> &b) {
-        return {a,b};
+    template<typename A,typename B> s_item_t<v_op_expr<op_multiply,A,B> > dot(const vector_expr<A> &a,const vector_expr<B> &b) {
+        return (static_cast<const v_expr<A>&>(a) * b).reduce_add();
     }
 }
 
@@ -523,116 +186,114 @@ using impl::vector;
 template<class Store> struct matrix;
 
 namespace impl {
-    template<class Store> struct matrix_row;
-    template<class Store,size_t Size> struct _v_item_t<matrix_row<Store>,Size> {
+    template<typename Store> struct matrix_row;
+    template<typename Store,size_t Size> struct _v_item_t<matrix_row<Store>,Size> {
         typedef simd::v_type<typename Store::item_t,Size> type;
     };
-    template<class Store> struct matrix_row : vector_expr<matrix_row<Store> > {
-        friend struct matrix<Store>;
-        
+    template<typename Store> struct matrix_row : vector_expr<matrix_row<Store> > {
         static const int v_score = V_SCORE_THRESHHOLD;
+        static constexpr bool temporary = true;
         
         matrix<Store> &a;
-        const int row;
+        const size_t row;
 
         matrix_row<Store> &operator=(const matrix_row<Store>&) = delete;
         
         template<typename B> struct _v_assign {
             typedef typename Store::item_t item_t;
-            static const int v_score = B::v_score;
+            static const int v_score = B::v_score - 1;
             
             matrix<Store> &a;
-            const int row;
+            const size_t row;
             const B &b;
             
-            template<size_t Size> void operator()(int n) {
+            template<size_t Size> void operator()(size_t n) {
                 /* the Size > 1 check is not necessary, but it should subject
                    the first branch to dead-code elimination when Size is 1 */
                 if(Size > 1 && a.dimension() % Size == 0) {
                     *reinterpret_cast<simd::v_type<typename Store::item_t,Size>*>(a.data() + row*a.dimension() + n) = b.template vec<Size>(n);
                 } else {
-                    b.template vec<Size>(n).storeu(a.data() + row*a.dimension() + n);
+                    auto data = b.template vec<Size>(n);
+                    for(size_t i=0; i<(Size < size_t(a.dimension()) ? Size : size_t(a.dimension())); ++i) a.get(row,n+i) = data[i];
                 }
             }
         };
-        template<typename B> matrix_row &operator=(const vector_expr<B> &b) {
-            a.vec_rep(_v_assign<B>{a,row,b});
+        template<typename B> FORCE_INLINE matrix_row<Store> &operator=(const vector_expr<B> &b) {
+            v_rep(a.dimension(),_v_assign<B>{a,row,b});
             
             return *this;
         }
         
-        int dimension() const { return a.dimension(); }
+        size_t _size() const { return a.dimension(); }
+        size_t _v_size() const { return Store::v_dimension(a.dimension()); }
         
-        typename Store::item_t &operator[](int n) const {
-            assert(n >= 0 && n < dimension());
+        typename Store::item_t &operator[](size_t n) const {
+            assert(n >= 0 && n < a.dimension());
             return a.get(row,n);
         }
         
-        template<size_t Size> simd::v_type<typename Store::item_t,Size> vec(int n) const {
+        template<size_t Size> simd::v_type<typename Store::item_t,Size> vec(size_t n) const {
             /* the Size > 1 check is not necessary, but it should subject the
                first branch to dead-code elimination when Size is 1 */
-            if(Size > 1 && dimension() % Size == 0) {
-                return *reinterpret_cast<const simd::v_type<typename Store::item_t,Size>*>(a.data() + row*dimension() + n);
+            if(Size > 1 && a.dimension() % Size == 0) {
+                return *reinterpret_cast<const simd::v_type<typename Store::item_t,Size>*>(a.data() + row*a.dimension() + n);
             } else {
-                return simd::v_type<typename Store::item_t,Size>::loadu(a.data() + row*dimension() + n);
+                return simd::v_type<typename Store::item_t,Size>::loadu(a.data() + row*a.dimension() + n);
             }
         }
         
-        operator typename Store::item_t*() const { return a.store.items + row * dimension(); }
-        
-    private:
-        matrix_row(matrix<Store> &a,int row) : a(a), row(row) {}
+        operator typename Store::item_t*() const { return a.store.items + row * a.dimension(); }
+
+        matrix_row(matrix<Store> &a,size_t row) : a(a), row(row) {}
     };
     
-    template<class Store> struct const_matrix_row;
-    template<class Store,size_t Size> struct _v_item_t<const_matrix_row<Store>,Size> {
+    template<typename Store> struct const_matrix_row;
+    template<typename Store,size_t Size> struct _v_item_t<const_matrix_row<Store>,Size> {
         typedef simd::v_type<typename Store::item_t,Size> type;
     };
-    template<class Store> struct const_matrix_row : vector_expr<const_matrix_row<Store> > {
-        friend struct matrix<Store>;
-        
+    template<typename Store> struct const_matrix_row : vector_expr<const_matrix_row<Store> > {
         static const int v_score = V_SCORE_THRESHHOLD;
+        static constexpr bool temporary = true;
         
         const matrix<Store> &a;
-        const int row;
+        const size_t row;
 
         const_matrix_row<Store> &operator=(const const_matrix_row<Store>&) = delete;
         
-        int dimension() const { return a.dimension(); }
+        size_t _size() const { return a.dimension(); }
+        size_t _v_size() const { return Store::v_dimension(a.dimension()); }
         
-        typename Store::item_t operator[](int n) const {
-            assert(n >= 0 && n < dimension());
+        typename Store::item_t operator[](size_t n) const {
+            assert(n >= 0 && n < a.dimension());
             return a.get(row,n);
         }
         
-        template<size_t Size> simd::v_type<typename Store::item_t,Size> vec(int n) const {
+        template<size_t Size> simd::v_type<typename Store::item_t,Size> vec(size_t n) const {
             /* the Size > 1 check is not necessary, but it should subject the
                first branch to dead-code elimination when Size is 1 */
-            if(Size > 1 && dimension() % Size == 0) {
+            if(Size > 1 && a.dimension() % Size == 0) {
                 assert(n == 0);
-                return *reinterpret_cast<const simd::v_type<typename Store::item_t,Size>*>(a.data() + row*dimension() + n);
+                return *reinterpret_cast<const simd::v_type<typename Store::item_t,Size>*>(a.data() + row*a.dimension() + n);
             } else {
-                return simd::v_type<typename Store::item_t,Size>::loadu(a.data() + row*dimension() + n);
+                return simd::v_type<typename Store::item_t,Size>::loadu(a.data() + row*a.dimension() + n);
             }
         }
         
-        operator const typename Store::item_t*() const { return a.store.items + row * dimension(); }
-        
-    private:
-        const_matrix_row(const matrix<Store> &a,int row) : a(a), row(row) {}
+        operator const typename Store::item_t*() const { return a.store.items + row * a.dimension(); }
+
+        const_matrix_row(const matrix<Store> &a,size_t row) : a(a), row(row) {}
     };
     
-    template<class Store> struct matrix_column;
-    template<class Store,size_t Size> struct _v_item_t<matrix_column<Store>,Size> {
+    template<typename Store> struct matrix_column;
+    template<typename Store,size_t Size> struct _v_item_t<matrix_column<Store>,Size> {
         typedef simd::v_type<typename Store::item_t,Size> type;
     };
-    template<class Store> struct matrix_column : vector_expr<matrix_column<Store> > {
-        friend struct matrix<Store>;
-        
+    template<typename Store> struct matrix_column : vector_expr<matrix_column<Store> > {
         static const int v_score = 0;
+        static constexpr bool temporary = true;
         
         matrix<Store> &a;
-        const int col;
+        const size_t col;
 
         matrix_column<Store> &operator=(const matrix_column<Store>&) = delete;
         
@@ -640,62 +301,63 @@ namespace impl {
             typedef typename Store::item_t item_t;
             static const int v_score = B::v_score - 1;
             
-            matrix_column<Store> *self;
+            matrix_column<Store> &self;
             const B &b;
             
-            template<size_t Size> void operator()(int n) const {
+            template<size_t Size> void operator()(size_t n) const {
                 auto items = b.template vec<Size>(n);
-                for(size_t i=0; i<Size; ++i) self->a.get(n+i,self->col) = items[i];
+                for(size_t i=0; i<Size; ++i) self.a.get(n+i,self.col) = items[i];
             }
         };
         template<typename B> matrix_column &operator=(const vector_expr<B> &b) {
-            a.vec_rep(_v_assign<B>{this,b});
+            a.v_rep(_v_assign<B>{*this,b});
         }
         
-        int dimension() const { return a.dimension(); }
-        typename Store::item_t &operator[](int n) const {
-            assert(n >= 0 && n < dimension());
+        size_t _size() const { return a.dimension(); }
+        size_t _v_size() const { return Store::v_dimension(a.dimension()); }
+        
+        typename Store::item_t &operator[](size_t n) const {
+            assert(n >= 0 && n < a.dimension());
             return a.get(n,col);
         }
         
-        template<size_t Size> simd::v_type<typename Store::item_t,Size> &vec(int n) const {
+        template<size_t Size> simd::v_type<typename Store::item_t,Size> &vec(size_t n) const {
             simd::v_type<typename Store::item_t,Size> r;
             for(size_t i=0; i<Size; ++i) r[i] = a.get(n+1,col);
             return r;
         }
-        
-    private:
-        matrix_column(matrix<Store> &a,int col) : a(a), col(col) {}
+
+        matrix_column(matrix<Store> &a,size_t col) : a(a), col(col) {}
     };
     
-    template<class Store> struct const_matrix_column;
-    template<class Store,size_t Size> struct _v_item_t<const_matrix_column<Store>,Size> {
+    template<typename Store> struct const_matrix_column;
+    template<typename Store,size_t Size> struct _v_item_t<const_matrix_column<Store>,Size> {
         typedef simd::v_type<typename Store::item_t,Size> type;
     };
-    template<class Store> struct const_matrix_column : vector_expr<const_matrix_column<Store> > {
-        friend struct matrix<Store>;
-        
+    template<typename Store> struct const_matrix_column : vector_expr<const_matrix_column<Store> > {
         static const int v_score = 0;
+        static constexpr bool temporary = true;
         
         const matrix<Store> &a;
-        const int col;
+        const size_t col;
 
         const_matrix_column<Store> &operator=(const const_matrix_column<Store>&) = delete;
         
-        int dimension() const { return a.dimension(); }
-        typename Store::item_t operator[](int n) const {
-            assert(n >= 0 && n < dimension());
+        size_t _size() const { return a.dimension(); }
+        size_t _v_size() const { return Store::v_dimension(a.dimension()); }
+        
+        typename Store::item_t operator[](size_t n) const {
+            assert(n >= 0 && n < a.dimension());
             return a.get(n,col);
         }
         
-        template<size_t Size> simd::v_type<typename Store::item_t,Size> vec(int n) const {
+        template<size_t Size> simd::v_type<typename Store::item_t,Size> vec(size_t n) const {
             simd::v_type<typename Store::item_t,Size> r;
             for(size_t i=0; i<Size; ++i) r[i] = a.get(n+i,col);
             return r;
         }
-        
-    private:
-        const_matrix_column(const matrix<Store> &a,int col) : a(a), col(col) {}
+
+        const_matrix_column(const matrix<Store> &a,size_t col) : a(a), col(col) {}
     };
     
     struct matrix_item_count {
@@ -714,8 +376,8 @@ template<class Store> struct matrix {
         }
     }
     
-    template<typename F> void vec_rep(F f) const {
-        impl::vec_rep(Store::v_dimension(dimension()),f);
+    template<typename F> FORCE_INLINE void v_rep(F f) const {
+        impl::v_rep(Store::v_dimension(dimension()),f);
     }
     
     void multiply(matrix<Store> &RESTRICT r,const matrix<Store> &b) const {
@@ -784,7 +446,7 @@ template<class Store> struct matrix {
        If the return value is -1, the matrix is singular and the contents of
        "lu" will be undefined.
     */
-    int decompose(matrix<Store> &RESTRICT lu,int *pivots) const {
+    int decompose(matrix<Store> &RESTRICT lu,size_t *pivots) const {
         assert(dimension() == lu.dimension());
         
         int swapped = 0;
@@ -825,7 +487,7 @@ template<class Store> struct matrix {
     item_t determinant_(matrix<Store> &RESTRICT tmp) const {
         assert(dimension() == tmp.dimension());
         
-        typename Store::template type<impl::vector_item_count,int> pivot(dimension());
+        typename Store::template type<impl::vector_item_count,size_t> pivot(dimension());
         int swapped = decompose(tmp,pivot.items);
         if(swapped < 0) return 0;
         
@@ -837,7 +499,7 @@ template<class Store> struct matrix {
     void inverse_(matrix<Store> &RESTRICT inv,matrix<Store> &RESTRICT tmp) const {
         assert(dimension() == r.dimension() && dimension() == tmp.dimension());
 
-        typename Store::template type<impl::vector_item_count,int> pivot(dimension());
+        typename Store::template type<impl::vector_item_count,size_t> pivot(dimension());
         int swapped = decompose(tmp,pivot.items);
         if(swapped < 0) throw std::domain_error("matrix is singular (uninvertible)");
 
@@ -966,8 +628,8 @@ template<class Store> struct matrix {
         return r;
     }
     
-    impl::matrix_row<Store> operator[](int n) { return {*this,n}; }
-    impl::const_matrix_row<Store> operator[](int n) const { return {*this,n}; }
+    impl::matrix_row<Store> operator[](size_t n) { return {*this,n}; }
+    impl::const_matrix_row<Store> operator[](size_t n) const { return {*this,n}; }
     
     item_t *data() { return store.items; }
     const item_t *data() const { return store.items; }
@@ -979,8 +641,8 @@ template<class Store> struct matrix {
         return store.items[r*dimension() + c];
     }
     
-    impl::matrix_column<Store> column(int n) { return {*this,n}; }
-    impl::const_matrix_column<Store> column(int n) const { return {*this,n}; }
+    impl::matrix_column<Store> column(size_t n) { return {*this,n}; }
+    impl::const_matrix_column<Store> column(size_t n) const { return {*this,n}; }
 
     int dimension() const { return store.dimension(); }
 

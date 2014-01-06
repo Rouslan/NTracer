@@ -7,6 +7,8 @@
 #include "light.hpp"
 #include "scene.hpp"
 #include "camera.hpp"
+#include "pyobject.hpp"
+#include "instrumentation.hpp"
 
 
 template<typename Store> class ray {
@@ -58,6 +60,7 @@ public:
 
 template<typename Store> real hypercube_intersects(const ray<Store> &target,ray<Store> &normal) {
     assert(target.dimension() == normal.dimension());
+    INSTRUMENTATION_TIMER;
     
     for(int i=0; i<target.dimension(); ++i) {
         if(target.direction[i]) {
@@ -84,6 +87,8 @@ template<typename Store> real hypercube_intersects(const ray<Store> &target,ray<
 }
 
 template<typename Store> real hypersphere_intersects(const ray<Store> &target,ray<Store> &normal) {
+    INSTRUMENTATION_TIMER;
+    
     real a = target.direction.square();
     real b = 2 * dot(target.direction,target.origin);
     real c = target.origin.square() - 1;
@@ -281,8 +286,8 @@ template<typename Store> struct triangle : triangle_obj_common, primitive<Store>
         vector<Store> pside = p1 - P;
         
         real tot_area = 0;
-        for(auto &edge : this->items()) {
-            real area = dot(edge,pside);
+        for(int i=0; i<dimension()-1; ++i) {
+            real area = dot(this->items()[i],pside);
             if(area < 0 || area > 1) return 0;
             tot_area += area;
         }
@@ -334,7 +339,10 @@ private:
 };
 
 template<typename Store> real primitive<Store>::intersects(const ray<Store> &target,ray<Store> &normal) const {
-    if(Py_TYPE(this) == &triangle_obj_common::pytype) return static_cast<const triangle<Store>*>(this)->intersects(target,normal);
+    if(Py_TYPE(this) == &triangle_obj_common::pytype) {
+        INSTRUMENTATION_TIMER;
+        return static_cast<const triangle<Store>*>(this)->intersects(target,normal);
+    }
     
     assert(Py_TYPE(this) == &solid_obj_common::pytype);
     return static_cast<const solid<Store>*>(this)->intersects(target,normal);
@@ -536,6 +544,8 @@ template<typename Store> struct aabb {
        (hyper)plane. */
 
     bool intersects(const triangle_prototype<Store> &tp) const {
+        INSTRUMENTATION_TIMER;
+        
         for(int i=0; i<dimension(); ++i) {
             if(tp.aabb_min[i] >= end[i] || tp.aabb_max[i] <= start[i]) return false;
         }
