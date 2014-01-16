@@ -106,7 +106,7 @@ namespace impl {
         }
     };
 
-#define BINARY_OP(NAME,OP) struct NAME { \
+#define BINARY_EQ_OP(NAME,OP) struct NAME { \
         template<typename A,typename B> static auto op(A a,B b) -> decltype(a OP b) { \
             return a OP b; \
         } \
@@ -114,35 +114,53 @@ namespace impl {
             return a OP##= b; \
         } \
     }
-#define BINARY_CMP_OP(NAME,OP) struct NAME { \
+#define BINARY_OP(NAME,OP) struct NAME { \
         template<typename A,typename B> static auto op(A a,B b) -> decltype(a OP b) { \
             return a OP b; \
         } \
     }
+#define BINARY_FUNC(NAME,F) struct NAME { \
+        template<typename A,typename B> static auto op(A a,B b) -> decltype(F(a,b)) { \
+            return F(a,b); \
+        } \
+    }
 #define UNARY_OP(NAME,OP) struct NAME { \
-        template<typename T> static auto op(T a) -> decltype(a.OP()) { \
-            return a.OP(); \
+        template<typename T> static auto op(T a) -> decltype(OP a) { \
+            return OP a; \
+        } \
+    }
+#define UNARY_FUNC(NAME,F) struct NAME { \
+        template<typename T> static auto op(T a) -> decltype(a.F()) { \
+            return a.F(); \
         } \
     }
     
-    BINARY_OP(op_subtract,-);
-    BINARY_OP(op_multiply,*);
-    BINARY_OP(op_divide,/);
-    BINARY_OP(op_and,&);
-    BINARY_OP(op_or,|);
-    BINARY_OP(op_xor,^);
-    BINARY_CMP_OP(op_eq,==);
-    BINARY_CMP_OP(op_neq,!=);
-    BINARY_CMP_OP(op_gt,>);
-    BINARY_CMP_OP(op_ge,>=);
-    BINARY_CMP_OP(op_lt,<);
-    BINARY_CMP_OP(op_le,<=);
-    UNARY_OP(op_negate,operator-);
-    UNARY_OP(op_abs,abs);
+    BINARY_EQ_OP(op_subtract,-);
+    BINARY_EQ_OP(op_multiply,*);
+    BINARY_EQ_OP(op_divide,/);
+    BINARY_EQ_OP(op_and,&);
+    BINARY_EQ_OP(op_or,|);
+    BINARY_EQ_OP(op_xor,^);
+    BINARY_OP(op_eq,==);
+    BINARY_OP(op_neq,!=);
+    BINARY_OP(op_gt,>);
+    BINARY_OP(op_ge,>=);
+    BINARY_OP(op_lt,<);
+    BINARY_OP(op_le,<=);
+    BINARY_OP(op_l_and,&&);
+    BINARY_OP(op_l_or,||);
+    UNARY_OP(op_l_not,!);
+    UNARY_OP(op_negate,-);
+    UNARY_FUNC(op_abs,abs);
+    BINARY_FUNC(op_l_andn,simd::l_andn);
+    BINARY_FUNC(op_l_xor,simd::l_xor);
+    BINARY_FUNC(op_l_xnor,simd::l_xnor);
     
+#undef BINARY_EQ_OP
 #undef BINARY_OP
-#undef BINARY_CMP_OP
+#undef BINARY_FUNC
 #undef UNARY_OP
+#undef UNARY_FUNC
     
     struct op_max {
         template<typename T> static T op(T a,T b) {
@@ -167,6 +185,15 @@ namespace impl {
             return T::repeat(std::numeric_limits<typename T::item_t>::max());
         }
     };
+    
+
+    template<typename T> struct inverse {};
+    template<> struct inverse<op_eq> { typedef op_neq type; };
+    template<> struct inverse<op_neq> { typedef op_eq type; };
+    template<> struct inverse<op_gt> { typedef op_le type; };
+    template<> struct inverse<op_ge> { typedef op_lt type; };
+    template<> struct inverse<op_lt> { typedef op_ge type; };
+    template<> struct inverse<op_le> { typedef op_gt type; };
 
 
     template<typename...> struct score_sum;
@@ -404,36 +431,124 @@ namespace impl {
         return Op::op(Op::reduce(r),r_small);
     }
     
-    template<typename Op,typename A,typename B,typename=typename std::enable_if<std::is_same<s_item_t<A>,s_item_t<B> >::value>::type> struct v_comparison {
-        const A &a;
-        const B &b;
-        
-        size_t size() const { return a._size(); }
-        
-        struct _v_any {
-            typedef s_item_t<A> item_t;
-            static const int v_score = A::v_score + B::v_score + 1;
-            
-            const v_comparison &self;
-            
-            template<size_t Size> FORCE_INLINE bool operator()(size_t n) const {
-                return Op::op(self.a.template vec<Size>(n),self.b.template vec<Size>(n)).any();
-            }
-        };
-        bool any() const { return v_rep_until(size(),_v_any{*this}); }
-        
-        struct _v_not_all {
-            typedef s_item_t<A> item_t;
-            static const int v_score = A::v_score + B::v_score + 1;
-            
-            const v_comparison &self;
-            
-            template<size_t Size> FORCE_INLINE bool operator()(size_t n) const {
-                return !Op::op(self.a.template vec<Size>(n),self.b.template vec<Size>(n)).all();
-            }
-        };
-        bool all() const { return !v_rep_until(size(),_v_not_all{*this}); }
+    
+    template<typename T> struct v_bool_expr;
+    
+    template<typename Op,typename A,typename B,typename X=typename std::enable_if<std::is_same<s_item_t<A>,s_item_t<B> >::value>::type> struct v_comparison;
+    template<typename Op,typename A,typename B,typename X,size_t Size> struct _v_item_t<v_comparison<Op,A,B,X>,Size> {
+        typedef v_item_t<A,Size> type;
     };
+    template<typename Op,typename A,typename B,typename X> struct v_comparison : v_bool_expr<v_comparison<Op,A,B,X> > {
+        static const int v_score = A::v_score + B::v_score + 1;
+        
+        v_expr_store<A> a;
+        v_expr_store<B> b;
+        
+        size_t _size() const { return a._size(); }
+        
+        template<size_t Size> FORCE_INLINE typename v_item_t<A,Size>::mask vec(size_t n) const {
+            return Op::op(a.template vec<Size>(n),b.template vec<Size>(n));
+        }
+        
+        v_comparison<typename inverse<Op>::type,A,B> operator!() const {
+            return {a,b};
+        }
+        
+        v_comparison(v_expr_store<A> a,v_expr_store<B> b) : a(a), b(b) {}
+    };
+    
+    template<typename Op,typename A,typename B> struct v_l_expr;
+    template<typename Op,typename A,typename B,size_t Size> struct _v_item_t<v_l_expr<Op,A,B>,Size> {
+        typedef v_item_t<A,Size> type;
+    };
+    template<typename Op,typename A,typename B> struct v_l_expr : v_bool_expr<v_l_expr<Op,A,B> > {
+        static const int v_score = A::v_score + B::v_score + 1;
+        
+        A a;
+        B b;
+        
+        size_t _size() const { return a._size(); }
+        
+        template<size_t Size> FORCE_INLINE typename v_item_t<A,Size>::mask vec(size_t n) const {
+            return Op::op(a.template vec<Size>(n),b.template vec<Size>(n));
+        }
+    };
+    
+    template<typename T> struct v_l_not;
+    template<typename T,size_t Size> struct _v_item_t<v_l_not<T>,Size> {
+        typedef v_item_t<T,Size> type;
+    };
+    template<typename T> struct v_l_not : v_bool_expr<v_l_not<T> > {
+        static const int v_score = T::v_score + 1;
+        
+        T a;
+        
+        size_t _size() const { return a._size(); }
+        
+        template<size_t Size> FORCE_INLINE typename v_item_t<T,Size>::mask vec(size_t n) const {
+            return !a.template vec<Size>(n);
+        }
+        
+        T operator!() const {
+            return a;
+        }
+    };
+    
+    template<typename T> struct v_bool_expr {
+        size_t size() const {
+            return static_cast<const T*>(this)->_size();
+        }
+        operator T&() { return *static_cast<T*>(this); }
+        operator const T&() const { return *static_cast<const T*>(this); }
+        
+        bool any() const;
+        bool all() const;
+        
+        template<typename B> v_l_expr<op_l_and,T,B> operator&&(const v_bool_expr<B> &b) const {
+            return {*this,b};
+        }
+        
+        template<typename B> v_l_expr<op_l_andn,T,B> operator&&(const v_l_not<B> &b) const {
+            return {*this,static_cast<const B&>(b).a};
+        }
+        
+        template<typename B> v_l_expr<op_l_or,T,B> operator||(const v_bool_expr<B> &b) const {
+            return {*this,b};
+        }
+        
+        v_l_not<T> operator!() const {
+            return {*this};
+        }
+    };
+
+    template<typename T> struct _v_any {
+        typedef s_item_t<T> item_t;
+        static const int v_score = T::v_score;
+        
+        const T &self;
+        
+        template<size_t Size> FORCE_INLINE bool operator()(size_t n) const {
+            return self.template vec<Size>(n).any();
+        }
+    };
+    template<typename T> inline bool v_bool_expr<T>::any() const {
+        return v_rep_until(size(),impl::_v_any<T>{*this});
+    }
+
+    template<typename T> struct _v_not_all {
+        typedef s_item_t<T> item_t;
+        static const int v_score = T::v_score;
+        
+        const T &self;
+        
+        template<size_t Size> FORCE_INLINE bool operator()(size_t n) const {
+            return !self.template vec<Size>(n).all();
+        }
+    };
+    template<typename T> inline bool v_bool_expr<T>::all() const {
+        return !v_rep_until(size(),impl::_v_not_all<T>{*this});
+    }
+    
     
     template<typename T> struct v_expr {
         operator T &() { return *static_cast<T*>(this); }

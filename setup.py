@@ -27,6 +27,7 @@ GCC_OPTIMIZE_COMPILE_ARGS = [
     '-fmerge-all-constants',
     '-funsafe-loop-optimizations',
     '-ffast-math',
+    '-fsched2-use-superblocks',
     '-fstrict-enums',
     '-fno-enforce-eh-specs',
     '-fnothrow-opt',

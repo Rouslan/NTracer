@@ -379,7 +379,7 @@ namespace type_object_abbrev {
         template<size_t unique,typename T,T Default> struct simple_param {
             T value;
             constexpr simple_param(T value = Default) : value(value) {}
-            constexpr simple_param<unique,T,Default> operator=(T v) { return v; }
+            constexpr simple_param<unique,T,Default> operator=(T v) const { return v; }
         };
         
         template<size_t unique,typename T> struct generic_func_param {};
@@ -389,10 +389,10 @@ namespace type_object_abbrev {
             
             original_t value;
             constexpr generic_func_param(original_t value = nullptr) : value(value) {}
-            template<typename T> constexpr generic_func_param<unique,original_t> operator=(derived_t<T> v) { return reinterpret_cast<original_t>(v); }
+            template<typename T> constexpr generic_func_param<unique,original_t> operator=(derived_t<T> v) const { return reinterpret_cast<original_t>(v); }
             
             // this is needed to support lambda functions
-            constexpr generic_func_param<unique,original_t> operator=(original_t v) { return v; }
+            constexpr generic_func_param<unique,original_t> operator=(original_t v) const { return v; }
         };
     }
     

@@ -225,7 +225,7 @@ struct obj_CameraAxes {
     
     PyObject_HEAD
     py::pyptr<wrapped_type<n_camera> > base;
-    PY_MEM_GC_NEW_DELETE
+    PY_MEM_NEW_DELETE
 
     obj_CameraAxes(wrapped_type<n_camera> *base) : base(py::borrowed_ref(reinterpret_cast<PyObject*>(base))) {
         PyObject_Init(reinterpret_cast<PyObject*>(this),&pytype);
@@ -393,6 +393,7 @@ template<bool Var,bool InPlace> struct tproto_base : triangle_prototype_obj_base
         + offsetof(this_t,base);
     static const size_t item_size = 0;
 };
+
 template<bool Var> struct tproto_base<Var,false> : triangle_prototype_obj_base {
     PyObject_HEAD
     std::unique_ptr<n_triangle_prototype> base;
@@ -406,9 +407,11 @@ template<bool Var> struct tproto_base<Var,false> : triangle_prototype_obj_base {
         return *base;
     }
     
-    static const size_t base_size = sizeof(tproto_base<Var,false>);
+    static const size_t base_size;
     static const size_t item_size = 0;
 };
+template<bool Var> const size_t tproto_base<Var,false>::base_size = sizeof(tproto_base<Var,false>);
+
 template<> struct tproto_base<true,true> : triangle_prototype_obj_base {
     PyObject_VAR_HEAD
     n_triangle_prototype base;
@@ -604,19 +607,25 @@ PyObject *obj_CompositeScene_new(PyTypeObject *type,PyObject *args,PyObject *kwd
     if(ptr) {
         try {
             try {
-                const char *names[] = {"data"};
+                const char *names[] = {"aabb_min","aabb_max","data"};
                 get_arg ga(args,kwds,names,"CompositeScene.__new__");
-                PyObject *data = ga(true);
-                ga.finished();
                 
-                if(Py_TYPE(data) != &obj_KDBranch::pytype && Py_TYPE(data) != &obj_KDLeaf::pytype) {
-                    PyErr_SetString(PyExc_TypeError,"\"data\" must be an instance of " MODULE_STR ".KDNode");
-                    throw py_error_set();
-                }
+                auto aabb_min = from_pyobject<n_vector>(ga(true));
+                auto aabb_max = from_pyobject<n_vector>(ga(true));
+                
+                PyObject *data = ga(true);
+                
+                if(Py_TYPE(data) != &obj_KDBranch::pytype && Py_TYPE(data) != &obj_KDLeaf::pytype)
+                    THROW_PYERR_STRING(TypeError,"\"data\" must be an instance of " MODULE_STR ".KDNode");
+                
+                ga.finished();
                 
                 auto d_node = reinterpret_cast<obj_KDNode*>(data);
                 
-                new(&ptr->base) composite_scene<module_store>(d_node->dimension(),d_node->_data);
+                if(aabb_min.dimension() != aabb_max.dimension() || aabb_min.dimension() != d_node->dimension())
+                    THROW_PYERR_STRING(TypeError,"\"aabb_min\", \"aabb_max\" and \"data\" must all have the same dimesion");
+                
+                new(&ptr->base) composite_scene<module_store>(aabb_min,aabb_max,d_node->_data);
                 d_node->parent = py::borrowed_ref(reinterpret_cast<PyObject*>(ptr));
             } catch(...) {
                 type->tp_free(ptr);
@@ -653,7 +662,7 @@ PyTypeObject obj_CompositeScene::pytype = make_type_object(
 
 
 void check_index(const n_camera &c,Py_ssize_t index) {
-    if(index < 0 || index > c.dimension()) THROW_PYERR_STRING(IndexError,"index out of range");
+    if(index < 0 || index >= c.dimension()) THROW_PYERR_STRING(IndexError,"index out of range");
 }
 
 PySequenceMethods obj_CameraAxes_sequence_methods = {
@@ -1113,6 +1122,8 @@ PyObject *obj_KDBranch_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
 }
 
 PyObject *new_obj_node(PyObject *parent,kd_node<module_store> *node,int dimension) {
+    if(!node) Py_RETURN_NONE;
+    
     if(node->type == LEAF) return reinterpret_cast<PyObject*>(new obj_KDLeaf(py::borrowed_ref(parent),static_cast<kd_leaf<module_store>*>(node)));
     
     assert(node->type == BRANCH);
@@ -1785,10 +1796,23 @@ PyObject *obj_AABB_intersects(wrapped_type<n_aabb> *self,PyObject *obj) {
     } PY_EXCEPT_HANDLERS(NULL)
 }
 
+PyObject *obj_AABB_intersects_flat(wrapped_type<n_aabb> *self,PyObject *args,PyObject *kwds) {
+    try {
+        const char *names[] = {"primitive","skip"};
+        get_arg ga(args,kwds,names,"AABB.intersects_flat");
+        auto &p = get_base<n_triangle_prototype>(ga(true));
+        int skip = from_pyobject<int>(ga(true));
+        ga.finished();
+        
+        return to_pyobject(self->get_base().intersects_flat(p,skip));
+    } PY_EXCEPT_HANDLERS(NULL)
+}
+
 PyMethodDef obj_AABB_methods[] = {
     {"left",reinterpret_cast<PyCFunction>(&obj_AABB_left),METH_VARARGS|METH_KEYWORDS,NULL},
     {"right",reinterpret_cast<PyCFunction>(&obj_AABB_right),METH_VARARGS|METH_KEYWORDS,NULL},
     {"intersects",reinterpret_cast<PyCFunction>(&obj_AABB_intersects),METH_O,NULL},
+    {"intersects_flat",reinterpret_cast<PyCFunction>(&obj_AABB_intersects_flat),METH_VARARGS|METH_KEYWORDS,NULL},
     {NULL}
 };
 

@@ -6,14 +6,13 @@ The following code will load a 3D mesh and display it.
 .. code:: python
 
     import pygame
-    from ntracer import NTracer, Renderer, build_kdtree
+    from ntracer import NTracer, Renderer, build_composite_scene
     from ntracer import wavefront_obj
 
     ntracer = NTracer(3)
 
     data = wavefront_obj.load_obj('monkey.obj')
-    data = build_kdtree(ntracer,data)
-    scene = ntracer.CompositeScene(data)
+    scene = build_composite_scene(data)
 
     camera = ntracer.Camera()
     camera.translate(ntracer.Vector.axis(2,-5))
@@ -49,7 +48,7 @@ First we import what we need.
     
 Next we create an :py:class:`.NTracer` object. This is a helper class for
 creating multiple objects with the same dimension. It provides the same
-interface as the :py:module:`tracern` module except all methods and functions
+interface as the :py:mod:`.tracern` module except all methods and functions
 that have a dimension parameter are wrapped so that the number passed to
 NTracer's constructor is automatically used for that parameter.
 
@@ -65,11 +64,9 @@ geometry.
 
 .. code:: python
 
-    data = build_kdtree(ntracer,data)
-    scene = ntracer.CompositeScene(data)
+    data = build_composite_scene(ntracer,data)
     
-:py:func:`.build_kdtree` turns this list into a k-d tree and we create a
-:py:class:`Scene` object from it.
+We create a :py:class:`.Scene` object from it.
     
 .. code:: python
 
@@ -127,5 +124,5 @@ Finally, we have a basic event loop with two additions. When the renderer is
 finished, it sends an event of type USEREVENT. The event will have a ``source``
 attribute containing the associated renderer. Having only one renderer, we don't
 use it here. We flip the display buffer to make our image appear.
-:py:func:`.abort_render` is called to stop drawing early.
+:py:meth:`.abort_render` is called to stop drawing early.
 

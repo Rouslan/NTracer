@@ -102,16 +102,37 @@ can't add a tuple and a :py:class:`Vector` together).
     :param vector end: The highest point of the box. It defaults to a vector
         where every element is set to the highest finite value it can represent.
 
-    .. py:method:: intersects(proto) -> boolean
+    .. py:method:: intersects(primitive) -> boolean
 
         Returns True if the box intersects the given object.
 
         The object is only considered intersecting if some part of it is
         *inside* the box. Merely touching the box does not count.
 
-        :param proto: The object to test intersection with. It must be an
+        :param primitive: The object to test intersection with. It must be an
             instance of :py:class:`PrimitivePrototype`, not
             :py:class:`Primitive`.
+            
+    .. py:method:: intersects_flat(primitive,skip) -> boolean
+    
+        Returns True if the box intersects the given simplex, ignoring one axis.
+        
+        This method is identical to :py:meth:`intersects` except it only accepts
+        instances of :py:class:`TrianglePrototype` and it disregards the axis
+        ``skip``. This is equivalent to testing against a simplex that has been
+        extruded infinitely far in the positive and negative directions along
+        that axis. The simplex **must** be flat along that axis (i.e.
+        :code:`primitive.aabb_min[skip] == primitive.aabb_max[skip]` must be
+        true) for the return value to be correct.
+        
+        This method is needed when a simplex is completely embedded in a split
+        hyperplane and thus would fail the normal intersection test with any
+        bounding box that the hyperplane divides.
+        
+        :param primitive: A simplex to test intersection with. It must be an
+            instance of :py:class:`TrianglePrototype`, not
+            :py:class:`Triangle`.
+        :param number skip: The axis to disregard when testing.
 
     .. py:method:: left(axis,split) -> AABB
 
@@ -224,8 +245,15 @@ can't add a tuple and a :py:class:`Vector` together).
     .. py:method:: translate(offset)
 
         Move the camera using the local coordinate space.
+        
+        Given camera ``c``, this is equivalent to :code:`for i in
+        range(c.dimension): c.origin += c.axes[i] * offset[i]`.
 
         :param vector offset:
+        
+    .. py:method:: transform(m)
+    
+        Rotate the camera using matrix ``m``.
 
     .. py:attribute:: axes
 
@@ -259,12 +287,17 @@ can't add a tuple and a :py:class:`Vector` together).
         :code:`self.__setitem__(i,v)` <==> :code:`self[i]=v`
 
 
-.. py:class:: CompositeScene(data)
+.. py:class:: CompositeScene(aabb_min,aabb_max,data)
 
     Bases: :py:class:`.render.Scene`
 
     A scene that displays the contents of a k-d tree.
+    
+    You normally don't need to create this object directly, but instead call
+    :py:func:`.kdtree_builder.build_composite_scene`.
 
+    :param vector aabb_min:
+    :param vector aabb_max:
     :param KDNode data:
 
     .. py:method:: get_camera() -> Camera
@@ -411,6 +444,8 @@ can't add a tuple and a :py:class:`Vector` together).
     .. py:method:: __getitem__(index)
 
         :code:`self.__getitem__(i)` <==> :code:`self[i]`
+        
+        The elements of ``Matrix`` are its rows.
 
     .. py:method:: __len__()
 
@@ -854,6 +889,8 @@ can't add a tuple and a :py:class:`Vector` together).
 .. py:module:: ntracer.kdtree_builder
 
 .. autofunction:: build_kdtree
+
+.. autofunction:: build_composite_scene
 
 
 

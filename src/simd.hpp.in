@@ -87,6 +87,8 @@
 
 namespace simd {
     namespace impl {
+        template<typename T> struct negation_mask;
+        
         template<typename T,typename Packed,typename Item> struct common {
             typedef Item item_t;
             
@@ -101,7 +103,7 @@ namespace simd {
             }
             
             FORCE_INLINE T operator-() const {
-                //return T::repeat(Item(1) << (sizeof(Item)*8 - 1)) ^ *static_cast<const T*>(this);
+                //return *reinterpret_cast<const T*>(negation_mask<Item>::value) ^ *static_cast<const T*>(this);
                 return T::zeros() - *static_cast<const T*>(this);
             }
             
@@ -149,10 +151,6 @@ namespace simd {
                 return *static_cast<T*>(this) /= T::repeat(b);
             }
             
-            /*FORCE_INLINE T operator-() const {
-                return T::repeat(-0.0) ^ *static_cast<const T*>(this);
-            }*/
-            
             // fall-back implementations for missing SIMD functions
             T add_sub(T b) const {
                 static_assert(common<T,Packed,Item>::size % 2 == 0,"this algorithm assumes there is an even number of elements");
@@ -190,13 +188,32 @@ namespace simd {
     template<typename T,size_t Size> using v_type = typename _v_type<T,Size>::type;
     
     struct mask_s : impl::mask_common<mask_s,1> {
-        int data;
+        bool data;
         
         int to_bits() const {
-            return data;
+            return data ? 1 : 0;
         }
-        explicit mask_s(bool cond) : data(cond ? 1 : 0) {}
+        explicit mask_s(bool cond) : data(cond) {}
+        
+        mask_s operator&&(mask_s b) const {
+            return mask_s(data && b.data);
+        }
+        mask_s operator||(mask_s b) const {
+            return mask_s(data || b.data);
+        }
+        mask_s operator!() const {
+            return mask_s(!data);
+        }
     };
+    inline mask_s l_andn(mask_s a,mask_s b) {
+        return mask_s(a.data && !b.data);
+    }
+    inline mask_s l_xor(mask_s a,mask_s b) {
+        return mask_s(a.data != b.data);
+    }
+    inline mask_s l_xnor(mask_s a,mask_s b) {
+        return mask_s(a.data == b.data);
+    }
 
     namespace impl {
         template<typename T,typename This> struct scalar {
@@ -303,7 +320,7 @@ namespace simd {
             return static_cast<int>(data);
         }
         
-        explicit mask64_v_512(__mmask8 data) : data(data) {}
+        explicit FORCE_INLINE mask64_v_512(__mmask8 data) : data(data) {}
     };
     
     struct mask32_v_512 : impl::mask_common<mask32_v_512,16> {
@@ -312,8 +329,27 @@ namespace simd {
             return static_cast<int>(data);
         }
         
-        explicit mask32_v_512(__mmask16 data) : data(data) {}
+        explicit FORCE_INLINE mask32_v_512(__mmask16 data) : data(data) {}
+        
+        FORCE_INLINE mask_s operator&&(mask32_v_512 b) const {
+            return _mm512_kand(data,b.data);
+        }
+        FORCE_INLINE mask_s operator||(mask32_v_512 b) const {
+            return _mm512_kor(data,b.data);
+        }
+        FORCE_INLINE mask_s operator!() const {
+            return _mm512_knot(data);
+        }
     };
+    FORCE_INLINE mask_s l_andn(mask32_v_512 a,mask32_v_512 b) {
+        return _mm512_kandn(a.data,b.data);
+    }
+    FORCE_INLINE mask_s l_xor(mask32_v_512 a,mask32_v_512 b) {
+        return _mm512_kxor(a.data,b.data);
+    }
+    FORCE_INLINE mask_s l_xnor(mask32_v_512 a,mask32_v_512 b) {
+        return _mm512_kxnor(a.data,b.data);
+    }
     
     struct double_v_256;
     struct float_v_256;
@@ -755,7 +791,33 @@ namespace simd {
             1,0};
     };
     
-    namespace impl {        
+    namespace impl {
+        //template<typename T> struct negation_mask_item {
+        //    struct type {
+        //        T value;
+        //        constexpr type() : value(T(1) << (sizeof(T)*8 - 1)) {}
+        //    };
+        //};
+        //template<> struct negation_mask_item<float> {
+        //    struct type {
+        //        float value;
+        //        constexpr type() : value(-0.0f) {}
+        //    };
+        //};
+        //template<> struct negation_mask_item<double> {
+        //    struct type {
+        //        double value;
+        //        constexpr type() : value(-0.0) {}
+        //    };
+        //};
+        
+        //template<typename T> struct negation_mask {
+        //    /* we have to use alignof because when using GCC 4.7, alignas is
+        //       just a macro wrapping __attribute__ ((aligned (X))) */
+        //    alignas(alignof(v_type<T,v_sizes<T>::value[0]>)) static constexpr typename negation_mask_item<T>::type value[v_sizes<T>::value[0]] = {};
+        //};
+        
+        
         // hide the second argument
         
         template<typename T> constexpr size_t largest_fit(size_t size,size_t i) {

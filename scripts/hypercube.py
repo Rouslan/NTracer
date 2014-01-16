@@ -8,8 +8,7 @@ import itertools
 import functools
 import argparse
 import pygame
-from ntracer import NTracer, Renderer
-from ntracer import kdtree_builder
+from ntracer import NTracer, Renderer, build_composite_scene
 from ntracer import wavefront_obj
 
 
@@ -307,7 +306,7 @@ if args.file:
             raise
         sys.exit('could not load file: ' + str(e))
         
-    scene = ntracer.CompositeScene(kdtree_builder.build_kdtree(ntracer,triangles))
+    scene = build_composite_scene(ntracer,triangles)
 else:
     scene = ntracer.BoxScene()
 
@@ -340,8 +339,7 @@ def rotate(d1,d2):
     def inner(t):
         global started
         m = ntracer.Matrix.rotation(camera.axes[d1],camera.axes[d2],t * ROTATE_SENSITIVITY)
-        for i in range(len(camera.axes)):
-            camera.axes[i] = m * camera.axes[i]
+        camera.transform(m)
         camera.normalize()
 
         if not started:

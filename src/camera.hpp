@@ -37,12 +37,12 @@ template<class Store> struct camera {
 
     int dimension() const { return origin.dimension(); }
 
-    auto right() -> decltype(t_orientation[0]) { return t_orientation[0]; }
-    auto right() const -> decltype(t_orientation[0]) { return t_orientation[0]; }
-    auto up() -> decltype(t_orientation[1]) { assert(dimension() > 1); return t_orientation[1]; }
-    auto up() const -> decltype(t_orientation[1]) { assert(dimension() > 1); return t_orientation[1]; }
-    auto forward() -> decltype(t_orientation[2]) { assert(dimension() > 2); return t_orientation[2]; }
-    auto forward() const -> decltype(t_orientation[2]) { assert(dimension() > 2); return t_orientation[2]; }
+    impl::matrix_row<Store> right() { return t_orientation[0]; }
+    impl::const_matrix_row<Store> right() const { return t_orientation[0]; }
+    impl::matrix_row<Store> up() { assert(dimension() > 1); return t_orientation[1]; }
+    impl::const_matrix_row<Store> up() const { assert(dimension() > 1); return t_orientation[1]; }
+    impl::matrix_row<Store> forward() { assert(dimension() > 2); return t_orientation[2]; }
+    impl::const_matrix_row<Store> forward() const { assert(dimension() > 2); return t_orientation[2]; }
 };
 
 #endif

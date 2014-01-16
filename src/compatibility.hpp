@@ -10,11 +10,22 @@
   #if __GNUC__ == 4
     #if __GNUC_MINOR__ < 9
 namespace std {
+      #if defined(__clang__)
+    union max_align_t {
+        void *a;
+        long long b;
+        double c;
+        long double d;
+    };
+      #else
     typedef ::max_align_t max_align_t;
+      #endif
 }
     #endif
     #if __GNUC_MINOR__ < 8
-      #define alignas(X) __attribute__ ((aligned (X)))
+      #if !defined(__clang__)
+        #define alignas(X) __attribute__ ((aligned (X)))
+      #endif
 
 namespace std {
     template<typename T> struct is_trivially_destructible : has_trivial_destructor<T> {};
@@ -27,7 +38,7 @@ namespace std {
 
   #define RESTRICT __restrict__
 
-  #ifdef __GNUC_GNU_INLINE__
+  #if defined(__GNUC_GNU_INLINE__) && !defined(__clang__)
     #define FORCE_INLINE inline __attribute__((gnu_inline,always_inline))
   #else
     #define FORCE_INLINE inline __attribute__((always_inline))

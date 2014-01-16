@@ -46,14 +46,14 @@ const int FRAME_READY = SDL_USEREVENT;
 
 class already_running_error : public std::exception {
 public:
-    const char *what() throw() {
+    const char *what() const throw() {
         return "The renderer is already running";
     }
 };
 
 class sdl_error : public std::exception {
 public:
-    const char *what() throw() {
+    const char *what() const throw() {
         return SDL_GetError();
     }
 };
