@@ -7,7 +7,7 @@
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     
-    <title>ntracer Package &mdash; NTracer v0.2-1 documentation</title>
+    <title>ntracer Package &mdash; NTracer 0.2 documentation</title>
     
     <link rel="stylesheet" href="../_static/nature.css" type="text/css" />
     <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
@@ -15,7 +15,7 @@
     <script type="text/javascript">
       var DOCUMENTATION_OPTIONS = {
         URL_ROOT:    '../',
-        VERSION:     'v0.2-1',
+        VERSION:     '0.2',
         COLLAPSE_INDEX: false,
         FILE_SUFFIX: '',
         HAS_SOURCE:  true
@@ -24,8 +24,8 @@
     <script type="text/javascript" src="../_static/jquery.js"></script>
     <script type="text/javascript" src="../_static/underscore.js"></script>
     <script type="text/javascript" src="../_static/doctools.js"></script>
-    <link rel="top" title="NTracer v0.2-1 documentation" href="../" />
-    <link rel="prev" title="Welcome to NTracer’s documentation!" href="../" /> 
+    <link rel="top" title="NTracer 0.2 documentation" href="../" />
+    <link rel="prev" title="Basic Usage" href="../example/" /> 
   </head>
   <body>
     <div class="related">
@@ -38,9 +38,9 @@
           <a href="../py-modindex/" title="Python Module Index"
              >modules</a> |</li>
         <li class="right" >
-          <a href="../" title="Welcome to NTracer’s documentation!"
+          <a href="../example/" title="Basic Usage"
              accesskey="P">previous</a> |</li>
-        <li><a href="../">NTracer v0.2-1 documentation</a> &raquo;</li> 
+        <li><a href="../">NTracer 0.2 documentation</a> &raquo;</li> 
       </ul>
     </div>  
 
@@ -54,8 +54,8 @@
 <div class="section" id="module-ntracer.__init__">
 <span id="init-module"></span><h2><tt class="xref py py-mod docutils literal"><span class="pre">__init__</span></tt> Module<a class="headerlink" href="#module-ntracer.__init__" title="Permalink to this headline">¶</a></h2>
 <p>The names <a class="reference internal" href="#ntracer.render.Renderer" title="ntracer.render.Renderer"><tt class="xref py py-class docutils literal"><span class="pre">render.Renderer</span></tt></a>, <a class="reference internal" href="#ntracer.wrapper.NTracer" title="ntracer.wrapper.NTracer"><tt class="xref py py-class docutils literal"><span class="pre">wrapper.NTracer</span></tt></a>,
-<a class="reference internal" href="#ntracer.wrapper.CUBE" title="ntracer.wrapper.CUBE"><tt class="xref py py-data docutils literal"><span class="pre">wrapper.CUBE</span></tt></a> and <a class="reference internal" href="#ntracer.wrapper.SPHERE" title="ntracer.wrapper.SPHERE"><tt class="xref py py-data docutils literal"><span class="pre">wrapper.SPHERE</span></tt></a> are imported here for
-convenience.</p>
+<a class="reference internal" href="#ntracer.wrapper.CUBE" title="ntracer.wrapper.CUBE"><tt class="xref py py-data docutils literal"><span class="pre">wrapper.CUBE</span></tt></a>, <a class="reference internal" href="#ntracer.wrapper.SPHERE" title="ntracer.wrapper.SPHERE"><tt class="xref py py-data docutils literal"><span class="pre">wrapper.SPHERE</span></tt></a> and
+<a class="reference internal" href="#ntracer.kdtree_builder.build_composite_scene" title="ntracer.kdtree_builder.build_composite_scene"><tt class="xref py py-func docutils literal"><span class="pre">kdtree_builder.build_composite_scene()</span></tt></a> are imported here for convenience.</p>
 </div>
 <div class="section" id="module-ntracer.render">
 <span id="render-module"></span><h2><tt class="xref py py-mod docutils literal"><span class="pre">render</span></tt> Module<a class="headerlink" href="#module-ntracer.render" title="Permalink to this headline">¶</a></h2>
@@ -67,6 +67,8 @@ convenience.</p>
 The scene is drawn onto a <a class="reference external" href="http://www.pygame.org/docs/ref/surface.html#pygame.Surface">pygame.Surface</a> object and
 upon completion, sends a <tt class="docutils literal"><span class="pre">pygame.USEREVENT</span></tt> message with a <tt class="docutils literal"><span class="pre">source</span></tt>
 attribute set to the instance of the renderer.</p>
+<p>Note, the renderer does not honor clipping areas or subsurface boundaries
+and will always draw onto the entire surface.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
@@ -90,8 +92,6 @@ and the scene has been unlocked.</p>
 <dd><p>Begin rendering <tt class="docutils literal"><span class="pre">scene</span></tt> onto <tt class="docutils literal"><span class="pre">dest</span></tt>.</p>
 <p>If the renderer is already running, an exception is thrown instead. Upon
 starting, the scene will be locked for writing.</p>
-<p>Note, the renderer does not honor clipping areas or subsurface
-boundaries and will always draw onto the entire surface.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
@@ -152,7 +152,7 @@ where every element is set to the highest finite value it can represent.</li>
 </table>
 <dl class="method">
 <dt id="ntracer.tracern.AABB.intersects">
-<tt class="descname">intersects</tt><big>(</big><em>proto</em><big>)</big> &rarr; boolean<a class="headerlink" href="#ntracer.tracern.AABB.intersects" title="Permalink to this definition">¶</a></dt>
+<tt class="descname">intersects</tt><big>(</big><em>primitive</em><big>)</big> &rarr; boolean<a class="headerlink" href="#ntracer.tracern.AABB.intersects" title="Permalink to this definition">¶</a></dt>
 <dd><p>Returns True if the box intersects the given object.</p>
 <p>The object is only considered intersecting if some part of it is
 <em>inside</em> the box. Merely touching the box does not count.</p>
@@ -160,9 +160,39 @@ where every element is set to the highest finite value it can represent.</li>
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>proto</strong> &#8211; The object to test intersection with. It must be an
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>primitive</strong> &#8211; The object to test intersection with. It must be an
 instance of <a class="reference internal" href="#ntracer.tracern.PrimitivePrototype" title="ntracer.tracern.PrimitivePrototype"><tt class="xref py py-class docutils literal"><span class="pre">PrimitivePrototype</span></tt></a>, not
 <a class="reference internal" href="#ntracer.tracern.Primitive" title="ntracer.tracern.Primitive"><tt class="xref py py-class docutils literal"><span class="pre">Primitive</span></tt></a>.</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="ntracer.tracern.AABB.intersects_flat">
+<tt class="descname">intersects_flat</tt><big>(</big><em>primitive</em>, <em>skip</em><big>)</big> &rarr; boolean<a class="headerlink" href="#ntracer.tracern.AABB.intersects_flat" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns True if the box intersects the given simplex, ignoring one axis.</p>
+<p>This method is identical to <a class="reference internal" href="#ntracer.tracern.AABB.intersects" title="ntracer.tracern.AABB.intersects"><tt class="xref py py-meth docutils literal"><span class="pre">intersects()</span></tt></a> except it only accepts
+instances of <a class="reference internal" href="#ntracer.tracern.TrianglePrototype" title="ntracer.tracern.TrianglePrototype"><tt class="xref py py-class docutils literal"><span class="pre">TrianglePrototype</span></tt></a> and it disregards the axis
+<tt class="docutils literal"><span class="pre">skip</span></tt>. This is equivalent to testing against a simplex that has been
+extruded infinitely far in the positive and negative directions along
+that axis. The simplex <strong>must</strong> be flat along that axis (i.e.
+<tt class="code docutils literal"><span class="pre">primitive.aabb_min[skip]</span> <span class="pre">==</span> <span class="pre">primitive.aabb_max[skip]</span></tt> must be
+true) for the return value to be correct.</p>
+<p>This method is needed when a simplex is completely embedded in a split
+hyperplane and thus would fail the normal intersection test with any
+bounding box that the hyperplane divides.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>primitive</strong> &#8211; A simplex to test intersection with. It must be an
+instance of <a class="reference internal" href="#ntracer.tracern.TrianglePrototype" title="ntracer.tracern.TrianglePrototype"><tt class="xref py py-class docutils literal"><span class="pre">TrianglePrototype</span></tt></a>, not
+<a class="reference internal" href="#ntracer.tracern.Triangle" title="ntracer.tracern.Triangle"><tt class="xref py py-class docutils literal"><span class="pre">Triangle</span></tt></a>.</li>
+<li><strong>skip</strong> (<em>number</em>) &#8211; The axis to disregard when testing.</li>
+</ul>
+</td>
 </tr>
 </tbody>
 </table>
@@ -329,6 +359,8 @@ effect is undefined).</p>
 <dt id="ntracer.tracern.Camera.translate">
 <tt class="descname">translate</tt><big>(</big><em>offset</em><big>)</big><a class="headerlink" href="#ntracer.tracern.Camera.translate" title="Permalink to this definition">¶</a></dt>
 <dd><p>Move the camera using the local coordinate space.</p>
+<p>Given camera <tt class="docutils literal"><span class="pre">c</span></tt>, this is equivalent to <tt class="code docutils literal"><span class="pre">for</span> <span class="pre">i</span> <span class="pre">in</span>
+<span class="pre">range(c.dimension):</span> <span class="pre">c.origin</span> <span class="pre">+=</span> <span class="pre">c.axes[i]</span> <span class="pre">*</span> <span class="pre">offset[i]</span></tt>.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
@@ -337,6 +369,12 @@ effect is undefined).</p>
 </tr>
 </tbody>
 </table>
+</dd></dl>
+
+<dl class="method">
+<dt id="ntracer.tracern.Camera.transform">
+<tt class="descname">transform</tt><big>(</big><em>m</em><big>)</big><a class="headerlink" href="#ntracer.tracern.Camera.transform" title="Permalink to this definition">¶</a></dt>
+<dd><p>Rotate the camera using matrix <tt class="docutils literal"><span class="pre">m</span></tt>.</p>
 </dd></dl>
 
 <dl class="attribute">
@@ -386,14 +424,21 @@ effect is undefined).</p>
 
 <dl class="class">
 <dt id="ntracer.tracern.CompositeScene">
-<em class="property">class </em><tt class="descname">CompositeScene</tt><big>(</big><em>data</em><big>)</big><a class="headerlink" href="#ntracer.tracern.CompositeScene" title="Permalink to this definition">¶</a></dt>
+<em class="property">class </em><tt class="descname">CompositeScene</tt><big>(</big><em>aabb_min</em>, <em>aabb_max</em>, <em>data</em><big>)</big><a class="headerlink" href="#ntracer.tracern.CompositeScene" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference internal" href="#ntracer.render.Scene" title="ntracer.render.Scene"><tt class="xref py py-class docutils literal"><span class="pre">render.Scene</span></tt></a></p>
 <p>A scene that displays the contents of a k-d tree.</p>
+<p>You normally don&#8217;t need to create this object directly, but instead call
+<a class="reference internal" href="#ntracer.kdtree_builder.build_composite_scene" title="ntracer.kdtree_builder.build_composite_scene"><tt class="xref py py-func docutils literal"><span class="pre">kdtree_builder.build_composite_scene()</span></tt></a>.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>data</strong> (<em>KDNode</em>) &#8211; </td>
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>aabb_min</strong> (<em>vector</em>) &#8211; </li>
+<li><strong>aabb_max</strong> (<em>vector</em>) &#8211; </li>
+<li><strong>data</strong> (<em>KDNode</em>) &#8211; </li>
+</ul>
+</td>
 </tr>
 </tbody>
 </table>
@@ -611,6 +656,7 @@ numbers or a sequence of <tt class="docutils literal"><span class="pre">dimensio
 <dt id="ntracer.tracern.Matrix.__getitem__">
 <tt class="descname">__getitem__</tt><big>(</big><em>index</em><big>)</big><a class="headerlink" href="#ntracer.tracern.Matrix.__getitem__" title="Permalink to this definition">¶</a></dt>
 <dd><p><tt class="code docutils literal"><span class="pre">self.__getitem__(i)</span></tt> &lt;==&gt; <tt class="code docutils literal"><span class="pre">self[i]</span></tt></p>
+<p>The elements of <tt class="docutils literal"><span class="pre">Matrix</span></tt> are its rows.</p>
 </dd></dl>
 
 <dl class="method">
@@ -1235,6 +1281,11 @@ vectors must be one less than their dimensionality.</td>
 <tt class="descname">build_kdtree</tt><big>(</big><em>nt</em>, <em>primitives</em><big>)</big><a class="headerlink" href="#ntracer.kdtree_builder.build_kdtree" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
+<dl class="function">
+<dt id="ntracer.kdtree_builder.build_composite_scene">
+<tt class="descname">build_composite_scene</tt><big>(</big><em>nt</em>, <em>primitives</em><big>)</big><a class="headerlink" href="#ntracer.kdtree_builder.build_composite_scene" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
 </div>
 <div class="section" id="module-ntracer.wrapper">
 <span id="wrapper-module"></span><h2><tt class="xref py py-mod docutils literal"><span class="pre">wrapper</span></tt> Module<a class="headerlink" href="#module-ntracer.wrapper" title="Permalink to this headline">¶</a></h2>
@@ -1334,8 +1385,8 @@ interchangeable with each other.</p>
 </ul>
 
   <h4>Previous topic</h4>
-  <p class="topless"><a href="../"
-                        title="previous chapter">Welcome to NTracer&#8217;s documentation!</a></p>
+  <p class="topless"><a href="../example/"
+                        title="previous chapter">Basic Usage</a></p>
 <div id="searchbox" style="display: none">
   <h3>Quick search</h3>
     <form class="search" action="../search/" method="get">
@@ -1363,9 +1414,9 @@ interchangeable with each other.</p>
           <a href="../py-modindex/" title="Python Module Index"
              >modules</a> |</li>
         <li class="right" >
-          <a href="../" title="Welcome to NTracer’s documentation!"
+          <a href="../example/" title="Basic Usage"
              >previous</a> |</li>
-        <li><a href="../">NTracer v0.2-1 documentation</a> &raquo;</li> 
+        <li><a href="../">NTracer 0.2 documentation</a> &raquo;</li> 
       </ul>
     </div>
     <div class="footer">
