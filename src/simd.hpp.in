@@ -322,6 +322,7 @@ namespace simd {
         
         explicit FORCE_INLINE mask64_v_512(__mmask8 data) : data(data) {}
     };
+    // [[[mask-64-512]]]
     
     struct mask32_v_512 : impl::mask_common<mask32_v_512,16> {
         __mmask16 data;
@@ -330,26 +331,8 @@ namespace simd {
         }
         
         explicit FORCE_INLINE mask32_v_512(__mmask16 data) : data(data) {}
-        
-        FORCE_INLINE mask_s operator&&(mask32_v_512 b) const {
-            return _mm512_kand(data,b.data);
-        }
-        FORCE_INLINE mask_s operator||(mask32_v_512 b) const {
-            return _mm512_kor(data,b.data);
-        }
-        FORCE_INLINE mask_s operator!() const {
-            return _mm512_knot(data);
-        }
     };
-    FORCE_INLINE mask_s l_andn(mask32_v_512 a,mask32_v_512 b) {
-        return _mm512_kandn(a.data,b.data);
-    }
-    FORCE_INLINE mask_s l_xor(mask32_v_512 a,mask32_v_512 b) {
-        return _mm512_kxor(a.data,b.data);
-    }
-    FORCE_INLINE mask_s l_xnor(mask32_v_512 a,mask32_v_512 b) {
-        return _mm512_kxnor(a.data,b.data);
-    }
+    // [[[mask-32-512]]]
     
     struct double_v_256;
     struct float_v_256;
@@ -415,8 +398,8 @@ namespace simd {
     template<> struct _v_type<int64_t,8> struct _v_type { typedef int64_v_512 type; };
     template<> struct _v_type<int32_t,16> struct _v_type { typedef int32_v_512 type; };
 #endif
-    
-    
+
+
 #ifdef SUPPORT_AVX
     struct mask64_v_256 : impl::mask_common<mask64_v_256,4> {
         __m256d data;
@@ -429,6 +412,8 @@ namespace simd {
         explicit make64_v_256(__m256i data) : data(reinterpret_cast<__m256d>(data)) {}
     #endif
     };
+    // [[[mask-64-256]]]
+
     struct mask32_v_256 : impl::mask_common<mask32_v_256,8> {
         __m256 data;
         FORCE_INLINE int to_bits() const {
@@ -440,8 +425,10 @@ namespace simd {
         explicit make32_v_256(__m256i data) : data(reinterpret_cast<__m256>(data)) {}
     #endif
     };
+    // [[[mask-32-256]]]
 #endif
-    
+
+
 #ifdef SUPPORT_AVX2
     struct mask16_v_256 : impl::mask_common<mask16_v_256,16,2> {
         __m256i data;
@@ -451,6 +438,8 @@ namespace simd {
         
         explicit mask16_v_256(__m256i data) : data(data) {}
     };
+    // [[[mask-16-256]]]
+
     struct mask8_v_256 : impl::mask_common<mask8_v_256,32> {
         __m256i data;
         FORCE_INLINE int to_bits() const {
@@ -459,6 +448,7 @@ namespace simd {
         
         explicit mask8_v_256(__m256i data) : data(data) {}
     };
+    // [[[mask-8-256]]]
 
     struct int64_v_128;
     struct int32_v_128;
@@ -558,8 +548,8 @@ namespace simd {
     template<> struct _v_type<double,4> struct _v_type { typedef double_v_256 type; };
     template<> struct _v_type<float,8> struct _v_type { typedef float_v_256 type; };
 #endif
-    
-    
+
+
 #ifdef SUPPORT_SSE
     struct mask32_v_128 : impl::mask_common<mask32_v_128,4> {
         __m128 data;
@@ -572,6 +562,7 @@ namespace simd {
         explicit mask32_v_128(__m128i data) : data(reinterpret_cast<__m128>(data)) {}
     #endif
     };
+    // [[[mask-32-128]]]
 #endif
     
 #ifdef SUPPORT_SSE2
@@ -584,6 +575,8 @@ namespace simd {
         explicit mask64_v_128(__m128d data) : data(data) {}
         explicit mask64_v_128(__m128i data) : data(reinterpret_cast<__m128d>(data)) {}
     };
+    // [[[mask-64-128]]]
+
     struct mask16_v_128 : impl::mask_common<mask16_v_128,8,2> {
         __m128i data;
         FORCE_INLINE int to_bits() const {
@@ -592,6 +585,8 @@ namespace simd {
         
         explicit mask16_v_128(__m128i data) : data(data) {}
     };
+    // [[[mask-16-128]]]
+
     struct mask8_v_128 : impl::mask_common<mask8_v_128,16> {
         __m128i data;
         FORCE_INLINE int to_bits() const {
@@ -600,6 +595,7 @@ namespace simd {
         
         explicit mask8_v_128(__m128i data) : data(data) {}
     };
+    // [[[mask-8-128]]]
     
     struct double_v_128 : impl::common_real<double_v_128,__m128d,double> {
         typedef impl::common_real<double_v_128,__m128d,double> base_t;
@@ -679,7 +675,8 @@ namespace simd {
     template<> struct _v_type<int16_t,8> { typedef int16_v_128 type; };
     template<> struct _v_type<int8_t,16> { typedef int8_v_128 type; };
 #endif
-    
+
+
 #ifdef SUPPORT_SSE
     struct float_v_128 : impl::common_real<float_v_128,__m128,float> {
         typedef impl::common_real<float_v_128,__m128,float> base_t;
@@ -706,6 +703,7 @@ namespace simd {
     
     template<> struct _v_type<float,4> { typedef float_v_128 type; };
 #endif
+    
     
     /* the zeros at the end are just so "largest_fit" (defined below) doesn't
        need to check if its argument is zero */
@@ -841,6 +839,30 @@ namespace simd {
         return size > 1 ? impl::padded_size<T>(size,0) : size;
     }
     
+    
+    template<typename T> scalar<T> max(scalar<T> a,scalar<T> b) {
+        return a.data > b.data ? a : b;
+    }
+
+    template<typename T> scalar<T> min(scalar<T> a,scalar<T> b) {
+        return a.data < b.data ? a : b;
+    }
+
+    template<typename T> mask_s cmp_nlt(scalar<T> a,scalar<T> b) {
+        return mask_s(!(a.data < b.data));
+    }
+
+    template<typename T> mask_s cmp_nle(scalar<T> a,scalar<T> b) {
+        return mask_s(!(a.data <= b.data));
+    }
+
+    template<typename T> mask_s cmp_ngt(scalar<T> a,scalar<T> b) {
+        return mask_s(!(a.data > b.data));
+    }
+
+    template<typename T> mask_s cmp_nge(scalar<T> a,scalar<T> b) {
+        return mask_s(!(a.data >= b.data));
+    }
     
     // [[[functions]]]
     

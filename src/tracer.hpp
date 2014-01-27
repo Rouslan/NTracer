@@ -135,7 +135,7 @@ template<typename Store> struct solid : solid_obj_common, primitive<Store> {
     solid(solid_type type,const matrix<Store> &o,const vector<Store> &p) : solid(type,o,o.inverse(),p) {}
     
     real intersects(const ray<Store> &target,ray<Store> &normal) const {
-        ray<Store> transformed(target.origin - position,inv_orientation * target.direction);
+        ray<Store> transformed(inv_orientation * target.origin - position,inv_orientation * target.direction);
         
         real dist;
         if(type == CUBE) {
@@ -148,7 +148,7 @@ template<typename Store> struct solid : solid_obj_common, primitive<Store> {
             if(!dist) return 0;
         }
         
-        normal.origin += position;
+        normal.origin = orientation * (normal.origin + position);
         normal.direction = orientation * normal.direction;
         return dist;
     }
@@ -469,8 +469,8 @@ template<typename Store> struct kd_leaf : kd_node<Store>, flexible_struct<kd_lea
         
         real dist;
         size_t i=0;
-        for(; i<size; ++i) {
-            dist = this->items()[i]->intersects(target,normal);
+        while(i<size) {
+            dist = this->items()[i++]->intersects(target,normal);
 
             if(dist) goto hit;
         }
@@ -480,8 +480,8 @@ template<typename Store> struct kd_leaf : kd_node<Store>, flexible_struct<kd_lea
         // is there anything closer?
         real new_dist;
         ray<Store> new_normal(target.dimension());
-        for(; i<size; ++i) {
-            new_dist = this->items()[i]->intersects(target,new_normal);
+        while(i<size) {
+            new_dist = this->items()[i++]->intersects(target,new_normal);
             if(new_dist && new_dist < dist) {
                 dist = new_dist;
                 normal = new_normal;
@@ -584,17 +584,14 @@ template<typename Store> struct aabb {
     bool intersects(const triangle_prototype<Store> &tp) const {
         INSTRUMENTATION_TIMER;
         
-        for(int i=0; i<dimension(); ++i) {
-            if(tp.aabb_min[i] >= end[i] || tp.aabb_max[i] <= start[i]) return false;
-        }
+        if((v_expr(tp.aabb_min) >= v_expr(end) || v_expr(tp.aabb_max) <= v_expr(start)).any()) return false;
         
         real n_offset = dot(tp.face_normal,tp.items()[0].point);
         vector<Store> origin = (start + end) * 0.5;
         
         real po = dot(origin,tp.face_normal);
         
-        real b_max = 0;
-        for(int i=0; i<dimension(); ++i) b_max += std::abs((end[i] - start[i])/2 * tp.face_normal[i]);
+        real b_max = (v_expr(end - start)/2 * v_expr(tp.face_normal)).abs().reduce_add();
         real b_min = po - b_max;
         b_max += po;
         
@@ -667,17 +664,14 @@ template<typename Store> struct aabb {
         real a_max = 0;
         for(int i=0; i<dimension(); ++i) a_max += std::abs(dot(c->cube_component(i),axis));
         
-        real b_max = 0;
-        for(int i=0; i<dimension(); ++i) b_max += std::abs((end[i] - start[i])/2 * axis[i]);
+        real b_max = (v_expr(end - start)/2 * v_expr(axis)).abs().reduce_add();
         
         return b_po+b_max < a_po-a_max || b_po-b_max > a_po+a_max;
     }
 
     bool intersects(const solid_prototype<Store> &sp) const {
         if(sp.p->type == CUBE) {
-            for(int i=0; i<dimension(); ++i) {
-                if(end[i] <= sp.aabb_min[i] || start[i] >= sp.aabb_max[i]) return false;
-            }
+            if((v_expr(end) <= v_expr(sp.aabb_min) || v_expr(start) >= v_expr(sp.aabb_max)).any()) return false;
             
             for(int i=0; i<dimension(); ++i) {
                 vector<Store> normal = sp.p->cube_normal(i);

@@ -6,6 +6,10 @@
 
 #include "simd.hpp"
 
+// this only applies to dividing by a scalar
+// Enabling this seems to causes problems
+//#define MULT_RECIPROCAL_INSTEAD_OF_DIV
+
 namespace impl {
     /* This is part of a very simple heuristic for determining if something is
        worth vectorizing. A score greater than or equal to this value means yes.
@@ -134,6 +138,14 @@ namespace impl {
             return a.F(); \
         } \
     }
+#define NCMP_FUNC(NAME,F,INT_OP) struct NAME { \
+        template<typename A,typename=typename std::enable_if<std::is_floating_point<typename A::item_t>::value>::type> static auto op(A a,A b) -> decltype(F(a,b)) { \
+            return F(a,b); \
+        } \
+        template<typename A,typename=typename std::enable_if<!std::is_floating_point<typename A::item_t>::value>::type> static auto op(A a,A b) -> decltype(a INT_OP b) { \
+            return a INT_OP b; \
+        } \
+    }
     
     BINARY_EQ_OP(op_subtract,-);
     BINARY_EQ_OP(op_multiply,*);
@@ -147,6 +159,10 @@ namespace impl {
     BINARY_OP(op_ge,>=);
     BINARY_OP(op_lt,<);
     BINARY_OP(op_le,<=);
+    NCMP_FUNC(op_ngt,simd::cmp_ngt,<=);
+    NCMP_FUNC(op_nge,simd::cmp_nge,<);
+    NCMP_FUNC(op_nlt,simd::cmp_nlt,>=);
+    NCMP_FUNC(op_nle,simd::cmp_nle,>);
     BINARY_OP(op_l_and,&&);
     BINARY_OP(op_l_or,||);
     UNARY_OP(op_l_not,!);
@@ -161,6 +177,7 @@ namespace impl {
 #undef BINARY_FUNC
 #undef UNARY_OP
 #undef UNARY_FUNC
+#undef NCMP_FUNC
     
     struct op_max {
         template<typename T> static T op(T a,T b) {
@@ -190,10 +207,14 @@ namespace impl {
     template<typename T> struct inverse {};
     template<> struct inverse<op_eq> { typedef op_neq type; };
     template<> struct inverse<op_neq> { typedef op_eq type; };
-    template<> struct inverse<op_gt> { typedef op_le type; };
-    template<> struct inverse<op_ge> { typedef op_lt type; };
-    template<> struct inverse<op_lt> { typedef op_ge type; };
-    template<> struct inverse<op_le> { typedef op_gt type; };
+    template<> struct inverse<op_gt> { typedef op_ngt type; };
+    template<> struct inverse<op_ge> { typedef op_nge type; };
+    template<> struct inverse<op_lt> { typedef op_nlt type; };
+    template<> struct inverse<op_le> { typedef op_nle type; };
+    template<> struct inverse<op_ngt> { typedef op_gt type; };
+    template<> struct inverse<op_nge> { typedef op_ge type; };
+    template<> struct inverse<op_nlt> { typedef op_lt type; };
+    template<> struct inverse<op_nle> { typedef op_le type; };
 
 
     template<typename...> struct score_sum;
@@ -219,13 +240,13 @@ namespace impl {
         size_t _v_size() const { return std::get<0>(values)._v_size(); }
 
         template<size_t Size> FORCE_INLINE v_item_t<v_op_expr<Op,T...>,Size> vec(size_t n) const {
-            return vec<Size>(n,make_index_list<sizeof...(T)>());
+            return _vec<Size>(n,make_index_list<sizeof...(T)>());
         }
         
         v_op_expr(const T&... args) : values(args...) {}
 
     private:
-        template<size_t Size,size_t... Indexes> FORCE_INLINE v_item_t<v_op_expr<Op,T...>,Size> vec(size_t n,index_list<Indexes...>) const {
+        template<size_t Size,size_t... Indexes> FORCE_INLINE v_item_t<v_op_expr<Op,T...>,Size> _vec(size_t n,index_list<Indexes...>) const {
             return Op::op(std::get<Indexes>(values).template vec<Size>(n)...);
         }
     };
@@ -324,10 +345,22 @@ namespace impl {
             v_rep(_v_size(),_v_compound<op_multiply,B>{*this,b});
             return *this;
         }
+        v_array<Store,T> &operator*=(T b) {
+            v_rep(_v_size(),_v_compound<op_multiply,v_repeat<T> >{*this,v_repeat<T>{_size(),b}});
+            return *this;
+        }
         template<typename B> v_array<Store,T> &operator/=(const v_expr<B> &b) {
             assert(b.v_size() >= _v_size());
             v_rep(_v_size(),_v_compound<op_divide,B>{*this,b});
             return *this;
+        }
+        v_array<Store,T> &operator/=(T b) {
+#ifdef MULT_RECIPROCAL_INSTEAD_OF_DIV
+            return operator*=(1/b);
+#else
+            v_rep(_v_size(),_v_compound<op_divide,v_repeat<T> >{*this,v_repeat<T>{_size(),b}});
+            return *this;
+#endif
         }
         template<typename B> v_array<Store,T> &operator&=(const v_expr<B> &b) {
             assert(b.v_size() >= _v_size());
@@ -472,6 +505,8 @@ namespace impl {
         template<size_t Size> FORCE_INLINE typename v_item_t<A,Size>::mask vec(size_t n) const {
             return Op::op(a.template vec<Size>(n),b.template vec<Size>(n));
         }
+        
+        v_l_expr(const A &a,const B &b) : a(a), b(b) {}
     };
     
     template<typename T> struct v_l_not;
@@ -487,6 +522,10 @@ namespace impl {
         
         template<size_t Size> FORCE_INLINE typename v_item_t<T,Size>::mask vec(size_t n) const {
             return !a.template vec<Size>(n);
+        }
+        
+        template<typename B> v_l_expr<op_l_andn,T,B> operator&&(const v_bool_expr<B> &b) const {
+            return {a,b};
         }
         
         T operator!() const {
@@ -506,10 +545,6 @@ namespace impl {
         
         template<typename B> v_l_expr<op_l_and,T,B> operator&&(const v_bool_expr<B> &b) const {
             return {*this,b};
-        }
-        
-        template<typename B> v_l_expr<op_l_andn,T,B> operator&&(const v_l_not<B> &b) const {
-            return {*this,static_cast<const B&>(b).a};
         }
         
         template<typename B> v_l_expr<op_l_or,T,B> operator||(const v_bool_expr<B> &b) const {
@@ -571,11 +606,23 @@ namespace impl {
             assert(size() == b.size());
             return {*this,b};
         }
+        v_op_expr<op_multiply,T,v_repeat<s_item_t<T> > > operator*(s_item_t<T> b) const {
+            return {*this,v_repeat<s_item_t<T> >{size(),b}};
+        }
         
         template<typename B> v_op_expr<op_divide,T,B> operator/(const v_expr<B> &b) const {
             assert(size() == b.size());
             return {*this,b};
         }
+#ifdef MULT_RECIPROCAL_INSTEAD_OF_DIV
+        v_op_expr<op_multiply,T,v_repeat<s_item_t<T> > > operator/(s_item_t<T> b) const {
+            return operator*(1/b);
+        }
+#else
+        v_op_expr<op_divide,T,v_repeat<s_item_t<T> > > operator/(s_item_t<T> b) const {
+            return {*this,v_repeat<s_item_t<T> >{size(),b}};
+        }
+#endif
         
         template<typename B> v_op_expr<op_and,T,B> operator&(const v_expr<B> &b) const {
             assert(size() == b.size());

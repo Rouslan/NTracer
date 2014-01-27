@@ -11,28 +11,29 @@ typedef float real;
 
 
 namespace impl {
-    template<typename T> struct vector_expr;
-    
-    template<typename VExpr> struct vector_expr_adapter : vector_expr<vector_expr_adapter<VExpr> > {
-        static const int v_score = VExpr::v_score;
-        static constexpr bool temporary = VExpr::temporary;
+    template<typename T,typename Base=v_expr<T> > struct vector_expr;
+}
+
+template<typename T,typename Base> constexpr Base &v_expr(impl::vector_expr<T,Base> &e) {
+    return e;
+}
+template<typename T,typename Base> constexpr const Base &v_expr(const impl::vector_expr<T,Base> &e) {
+    return e;
+}
+
+namespace impl {
+    template<typename VExpr> struct vector_expr_adapter : vector_expr<vector_expr_adapter<VExpr>,VExpr> {
+        typedef typename vector_expr_adapter::vector_expr base_t;
         
-        VExpr expr;
+        using VExpr::v_score;
+        using VExpr::temporary;
+        using VExpr::_size;
+        using VExpr::_v_size;
+        using VExpr::vec;
         
-        template<typename... Args> FORCE_INLINE vector_expr_adapter(Args&&... args) : expr(std::forward<Args>(args)...) {}
-        
-        size_t _size() const { return expr.size(); }
-        size_t _v_size() const { return expr.v_size(); }
-        template<size_t Size> v_item_t<VExpr,Size> &vec(size_t n) {
-            return expr.template vec<Size>(n);
-        }
-        template<size_t Size> v_item_t<VExpr,Size> vec(size_t n) const {
-            return expr.template vec<Size>(n);
-        }
+        template<typename... Args> FORCE_INLINE vector_expr_adapter(Args&&... args) : base_t(std::forward<Args>(args)...) {}
     };
-    template<typename T,size_t Size> struct _v_item_t<vector_expr_adapter<T>,Size> {
-        typedef v_item_t<T,Size> type;
-    };
+    template<typename VExpr,size_t Size> struct _v_item_t<vector_expr_adapter<VExpr>,Size> : _v_item_t<VExpr,Size> {};
     
     template<typename Op,typename... T> using vector_op_expr = vector_expr_adapter<v_op_expr<Op,T...> >;
 
@@ -42,6 +43,8 @@ namespace impl {
         typedef simd::v_type<typename Store::item_t,Size> type;
     };
     template<typename Store> struct v_axis : vector_expr<v_axis<Store> > {
+        friend struct v_expr<v_axis<Store> >;
+        
         typedef typename Store::item_t item_t;
         static constexpr bool temporary = true;
         
@@ -62,77 +65,75 @@ namespace impl {
 
         v_axis(int d,int axis,item_t length) : _dimension(d), axis(axis), length(length) {}
     };
-
-    template<typename Store> struct vector;
-    template<typename Store,size_t Size> struct _v_item_t<vector<Store>,Size> {
-        typedef simd::v_type<typename Store::item_t,Size> type;
-    };
+    
     struct vector_item_count {
         static constexpr int get(int d) { return d; }
     };
+
+    template<typename Store> struct vector;
+    template<typename Store,size_t Size> struct _v_item_t<vector<Store>,Size> : _v_item_t<v_array<Store,typename Store::item_t>,Size> {};
     template<typename Store> struct vector : vector_expr_adapter<v_array<Store,typename Store::item_t> > {
-        typedef vector_expr_adapter<v_array<Store,typename Store::item_t> > base_t;
+        typedef typename vector::vector_expr_adapter base_t;
         typedef typename Store::item_t item_t;
 
         explicit vector(int d) : base_t(d) {}
         template<typename F> vector(int d,F f) : base_t(d,f) {}    
-        template<typename B> FORCE_INLINE vector(const vector_expr<B> &b) : base_t(b) {}
+        template<typename B,typename Base> FORCE_INLINE vector(const vector_expr<B,Base> &b) : base_t(::v_expr(b)) {}
 
-        template<typename B> FORCE_INLINE vector<Store> &operator+=(const vector_expr<B> &b) {
-            this->expr += b;
+        template<typename B,typename Base> FORCE_INLINE vector<Store> &operator+=(const vector_expr<B,Base> &b) {
+            ::v_expr(*this) += ::v_expr(b);
             return *this;
         }
-        template<typename B> FORCE_INLINE vector<Store> &operator-=(const vector_expr<B> &b) {
-            this->expr -= b;
+        template<typename B,typename Base> FORCE_INLINE vector<Store> &operator-=(const vector_expr<B,Base> &b) {
+            ::v_expr(*this) -= ::v_expr(b);
             return *this;
         }
         vector<Store> &operator*=(item_t b) {
-            this->expr *= v_repeat<item_t>(dimension(),b);
+            ::v_expr(*this) *= b;
             return *this;
         }
         vector<Store> &operator/=(item_t b) {
-            this->expr *= v_repeat<item_t>(dimension(),1/b);
+            ::v_expr(*this) /= b;
             return *this;
         }
         
-        int dimension() const { return this->expr.size(); }
+        int dimension() const { return this->size(); }
         
-        template<typename T> void fill_with(T x) { this->expr.fill_with(x); }
-
-        item_t &operator[](size_t n) { return this->expr[n]; }
-        item_t operator[](size_t n) const { return this->expr[n]; }
+        using base_t::fill_with;
+        using base_t::operator[];
         
         void normalize() { operator/=(this->absolute()); }
         
-        static vector_expr_adapter<v_axis<Store> > axis(int d,int n,item_t length = 1) {
+        static v_axis<Store> axis(int d,int n,item_t length = 1) {
             return {d,n,length};
         }
     };
     
     
     template<typename T> using vector_multiply = vector_op_expr<op_multiply,T,v_repeat<s_item_t<T> > >;
-    template<typename T> using vector_divide = vector_op_expr<op_divide,T,v_repeat<s_item_t<T> > >;
+    template<typename T> using vector_divide = vector_op_expr<
+#ifdef MULT_RECIPROCAL_INSTEAD_OF_DIV
+        op_multiply
+#else
+        op_divide
+#endif
+        ,T,v_repeat<s_item_t<T> > >;
     template<typename T> using vector_rdivide = vector_op_expr<op_divide,v_repeat<s_item_t<T> >,T>;
     
-    template<typename T> vector_multiply<T> operator*(s_item_t<T> a,const vector_expr<T> &b);
-    template<typename T> vector_rdivide<T> operator/(s_item_t<T> a,const vector_expr<T> &b);
-    
-    template<typename T> struct vector_expr : private v_expr<T> {
-        friend struct v_expr<T>;
-        template<typename VExpr> friend struct vector_expr_adapter;
-        template<typename Store> friend struct vector;
-        friend vector_multiply<T> operator*<T>(s_item_t<T> a,const vector_expr<T> &b);
-        friend vector_rdivide<T> operator/<T>(s_item_t<T> a,const vector_expr<T> &b);
-        template<typename A,typename B> friend s_item_t<v_op_expr<op_multiply,A,B> > dot(const vector_expr<A> &a,const vector_expr<B> &b);
+    template<typename T,typename Base> struct vector_expr : protected Base {
+        friend Base;
+        
+        friend Base &::v_expr<T,Base>(vector_expr &e);
+        friend const Base &::v_expr<T,Base>(const vector_expr &e);
         
         operator T &() { return *static_cast<T*>(this); }
         operator const T &() const { return *static_cast<const T*>(this); }
         
-        template<typename B> vector_op_expr<op_add,T,B> operator+(const vector_expr<B> &b) const {
+        template<typename B,typename BaseB> vector_op_expr<op_add,T,B> operator+(const vector_expr<B,BaseB> &b) const {
             return {*this,b};
         }
         
-        template<typename B> vector_op_expr<op_subtract,T,B> operator-(const vector_expr<B> &b) const {
+        template<typename B,typename BaseB> vector_op_expr<op_subtract,T,B> operator-(const vector_expr<B,BaseB> &b) const {
             return {*this,b};
         }
         
@@ -141,41 +142,52 @@ namespace impl {
         }
         
         vector_multiply<T> operator*(s_item_t<T> b) const {
-            return {*this,v_repeat<s_item_t<T> >{this->size(),b}};
+            return {*this,v_repeat<s_item_t<T> >(this->size(),b)};
         }
         
-        vector_multiply<T> operator/(s_item_t<T> b) const {
-            return {*this,v_repeat<s_item_t<T> >{this->size(),1/b}};
+        vector_divide<T> operator/(s_item_t<T> b) const {
+            return {*this,v_repeat<s_item_t<T> >(this->size(),
+#ifdef MULT_RECIPROCAL_INSTEAD_OF_DIV
+                1/b
+#else
+                b
+#endif
+            )};
         }
 
-        template<typename B> bool operator==(const vector_expr<B> &b) const {
-            return (*static_cast<const v_expr<T>*>(this) == b).all();
+        template<typename B,typename BaseB> bool operator==(const vector_expr<B,BaseB> &b) const {
+            return (::v_expr(*this) == ::v_expr(b)).all();
         }
         
-        template<typename B> bool operator!=(const vector_expr<B> &b) const {
-            return (*static_cast<const v_expr<T>*>(this) != b).any();
+        template<typename B,typename BaseB> bool operator!=(const vector_expr<B,BaseB> &b) const {
+            return (::v_expr(*this) != ::v_expr(b)).any();
         }
         
         s_item_t<T> square() const { return dot(*this,*this); }
         s_item_t<T> absolute() const { return std::sqrt(square()); }
-        vector_multiply<T> unit() const {
+        vector_divide<T> unit() const {
             return operator/(absolute());
         }
         
         template<typename F> vector_expr_adapter<v_apply<T,F> > apply(F f) const {
             return {*this,f};
         }
+        
+    protected:
+        template<typename... Args> FORCE_INLINE vector_expr(Args&&... args) : Base(std::forward<Args>(args)...) {}
+        ~vector_expr() = default;
     };
     
-    template<typename T> vector_multiply<T> operator*(s_item_t<T> a,const vector_expr<T> &b) {
-        return {b,v_repeat<s_item_t<T> >{b.size(),a}};
+    template<typename T,typename Base> vector_multiply<T> operator*(s_item_t<T> a,const vector_expr<T,Base> &b) {
+        return b * a;
     }
-    template<typename T> vector_rdivide<T> operator/(s_item_t<T> a,const vector_expr<T> &b) {
+    template<typename T,typename Base> vector_rdivide<T> operator/(s_item_t<T> a,const vector_expr<T,Base> &b) {
         return {v_repeat<s_item_t<T> >{b.size(),a},b};
     }
     
-    template<typename A,typename B> s_item_t<v_op_expr<op_multiply,A,B> > dot(const vector_expr<A> &a,const vector_expr<B> &b) {
-        return (static_cast<const v_expr<A>&>(a) * b).reduce_add();
+    template<typename A,typename BaseA,typename B,typename BaseB> s_item_t<v_op_expr<op_multiply,A,B> >
+    dot(const vector_expr<A,BaseA> &a,const vector_expr<B,BaseB> &b) {
+        return (::v_expr(a) * ::v_expr(b)).reduce_add();
     }
 }
 
@@ -218,7 +230,7 @@ namespace impl {
                 }
             }
         };
-        template<typename B> FORCE_INLINE matrix_row<Store> &operator=(const vector_expr<B> &b) {
+        template<typename B,typename Base> FORCE_INLINE matrix_row<Store> &operator=(const vector_expr<B,Base> &b) {
             v_rep(a.dimension(),_v_assign<B>{a,row,b});
             
             return *this;
@@ -309,7 +321,7 @@ namespace impl {
                 for(size_t i=0; i<Size; ++i) self.a.get(n+i,self.col) = items[i];
             }
         };
-        template<typename B> matrix_column &operator=(const vector_expr<B> &b) {
+        template<typename B,typename Base> matrix_column &operator=(const vector_expr<B> &b) {
             a.v_rep(_v_assign<B>{*this,b});
         }
         
@@ -460,19 +472,19 @@ template<class Store> struct matrix {
                 lu[i][j] = (*this)[pivots[i]][j] - sum;
             }
             
-            if(lu[j][j] == 0) {
-                for(int i=j+1; i<dimension(); ++i) {
-                    if(lu[i][j] != 0) {
-                        std::swap(pivots[i],pivots[j]);
-                        ++swapped;
-                        for(int k=0; k<j+1; ++k) std::swap(lu[i][k],lu[j][k]);
-                        goto okay;
-                    }
+            int alt_row = j;
+            real alt_val = std::abs(lu[j][j]);
+            for(int i=j+1; i<dimension(); ++i) {
+                if(std::abs(lu[i][j]) > alt_val) {
+                    alt_row = i;
+                    alt_val = std::abs(lu[i][j]);
                 }
-                return -1;
             }
-        
-        okay:
+            if(alt_row != j) {
+                std::swap(pivots[alt_row],pivots[j]);
+                ++swapped;
+                for(int i=0; i<j+1; ++i) std::swap(lu[alt_row][i],lu[j][i]);
+            } else if(alt_val == 0) return -1;
             
             for(int i=j+1; i<dimension(); ++i) {
                 item_t sum = 0;
@@ -603,18 +615,18 @@ template<class Store> struct matrix {
                 (*this)[i][j] = (*this)[i][j] - sum;
             }
             
-            if((*this)[j][j] == 0) {
-                for(int i=j+1; i<dimension(); ++i) {
-                    if((*this)[i][j] != 0) {
-                        ++swapped;
-                        for(int k=0; k<dimension(); ++k) std::swap((*this)[i][k],(*this)[j][k]);
-                        goto okay;
-                    }
+            int alt_row = j;
+            real alt_val = std::abs((*this)[j][j]);
+            for(int i=j+1; i<dimension(); ++i) {
+                if(std::abs((*this)[i][j]) > alt_val) {
+                    alt_row = i;
+                    alt_val = std::abs((*this)[i][j]);
                 }
-                return 0;
             }
-        
-        okay:
+            if(alt_row != j) {
+                ++swapped;
+                for(int i=0; i<dimension(); ++i) std::swap((*this)[alt_row][i],(*this)[j][i]);
+            } else if(alt_val == 0) return 0;
             
             for(int i=j+1; i<dimension(); ++i) {
                 item_t sum = 0;

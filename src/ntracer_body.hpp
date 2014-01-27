@@ -182,7 +182,7 @@ SIMPLE_WRAPPER(matrix);
 SIMPLE_WRAPPER(camera);
 
 
-template<typename T> PyObject *to_pyobject(const ::impl::vector_expr<T> &e) {
+template<typename T,typename Base> PyObject *to_pyobject(const ::impl::vector_expr<T,Base> &e) {
     return to_pyobject(n_vector(e));
 }
 
@@ -1406,6 +1406,8 @@ PyObject *obj_Vector_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
                 base[i] = from_pyobject<real>(itr.next());
             }
             itr.finished();
+        } else {
+            for(int i=0; i<dimension; ++i) base[i] = 0;
         }
         
         return ptr;
