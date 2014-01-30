@@ -439,6 +439,14 @@ template<class Store> struct matrix {
         r.rep([&r,a](int row,int col){ r[row][col] = row == col ? a : item_t(0); });
     }
     
+    static void reflection_(matrix<Store> &r,const vector<Store> &a) {
+        item_t square = a.square();
+        
+        r.rep([&,square](int row,int col){
+            r[row][col] = (row == col ? item_t(1) : item_t(0)) - 2 * a[row] * a[col] / square;
+        });
+    }
+    
     /* Crout matrix decomposition with partial pivoting.
         
        Although this generates two matrices--an upper (U) and lower (L)
@@ -578,6 +586,12 @@ template<class Store> struct matrix {
     static matrix<Store> scale(int d,item_t a) {
         matrix<Store> r(d);
         scale_(r,a);
+        return r;
+    }
+    
+    static matrix<Store> reflection(const vector<Store> &a) {
+        matrix<Store> r(a.dimension());
+        reflection_(r,a);
         return r;
     }
 

@@ -1576,6 +1576,12 @@ PySequenceMethods obj_Matrix_sequence_methods = {
     NULL
 };
 
+PyObject *obj_Matrix_reflection(PyObject*,PyObject *arg) {
+    try {
+        return to_pyobject(n_matrix::reflection(from_pyobject<n_vector>(arg)));
+    } PY_EXCEPT_HANDLERS(NULL)
+}
+
 PyObject *obj_Matrix_scale(PyObject*,PyObject *args) {
     try {
         if(PyTuple_GET_SIZE(args) == 1) {
@@ -1643,6 +1649,7 @@ PyObject *obj_Matrix_transpose(wrapped_type<n_matrix> *self,PyObject*) {
 }
 
 PyMethodDef obj_Matrix_methods[] = {
+    {"reflection",reinterpret_cast<PyCFunction>(&obj_Matrix_reflection),METH_O|METH_STATIC,NULL},
     {"scale",reinterpret_cast<PyCFunction>(&obj_Matrix_scale),METH_VARARGS|METH_STATIC,NULL},
     {"rotation",reinterpret_cast<PyCFunction>(&obj_Matrix_rotation),METH_VARARGS|METH_KEYWORDS|METH_STATIC,NULL},
     {"identity",reinterpret_cast<PyCFunction>(&obj_Matrix_identity),METH_O|METH_STATIC,NULL},
