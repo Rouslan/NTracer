@@ -707,6 +707,22 @@ numbers or a sequence of <tt class="docutils literal"><span class="pre">dimensio
 </dd></dl>
 
 <dl class="staticmethod">
+<dt id="ntracer.tracern.Matrix.reflection">
+<em class="property">static </em><tt class="descname">reflection</tt><big>(</big><em>axis</em><big>)</big> &rarr; Matrix<a class="headerlink" href="#ntracer.tracern.Matrix.reflection" title="Permalink to this definition">¶</a></dt>
+<dd><p>Create a reflection matrix.</p>
+<p>The refection is by a hyperplane perpendicular to <tt class="docutils literal"><span class="pre">axis</span></tt> that passes
+through the origin.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>axis</strong> (<em>vector</em>) &#8211; The axis to reflect along.</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="staticmethod">
 <dt id="ntracer.tracern.Matrix.rotation">
 <em class="property">static </em><tt class="descname">rotation</tt><big>(</big><em>a</em>, <em>b</em>, <em>theta</em><big>)</big> &rarr; Matrix<a class="headerlink" href="#ntracer.tracern.Matrix.rotation" title="Permalink to this definition">¶</a></dt>
 <dd><p>Create a rotation matrix along the plane defined by the
