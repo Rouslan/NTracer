@@ -6,6 +6,7 @@ import math
 import pygame
 import argparse
 import os.path
+import sys
 from itertools import combinations
 from ntracer import NTracer,Renderer,build_composite_scene
 
@@ -13,6 +14,15 @@ from ntracer import NTracer,Renderer,build_composite_scene
 ROT_SENSITIVITY = 0.005
 WHEEL_INCREMENT = 8
 CAM_DIST_FACTOR = 4
+
+
+def excepthook(type,value,traceback):
+    if isinstance(value,Exception):
+        print(str(value),file=sys.stderr)
+    else:
+        sys.__excepthook__(type,value,traceback)
+    
+sys.excepthook = excepthook
 
 
 def schlafli_component(x):
@@ -60,6 +70,7 @@ class Instance:
         self.shape = shape
         self.position = position
         self.orientation = orientation
+        self.inv_orientation = orientation.inverse()
     
     def translated(self,position=nt.Vector(),orientation=nt.Matrix.identity()):
         return (
@@ -72,8 +83,8 @@ class Instance:
     def any_point(self,*args):
         return self.shape.any_point(*self.translated(*args))
     
-    def contains(self,p,*args):
-        return self.shape.contains(p,*self.translated(*args))
+    def contains(self,p):
+        return self.shape.contains(self.inv_orientation * (p - self.position))
 
 
 class Line:
@@ -87,13 +98,12 @@ class Polygon:
     def __init__(self,sides):
         self.dihedral_s = 2 * math.pi / sides
         self.parts = [Line(radial_vector(i * self.dihedral_s)) for i in range(sides)]
-    
-    def point_radius(self):
-        return 1/math.cos(self.dihedral_s/2)
+        
+        pr = 1/math.cos(self.dihedral_s/2)
+        self.base_points = [pr * radial_vector((i+0.5) * self.dihedral_s) for i in range(sides)]
     
     def points(self,position,orientation):
-        pr = self.point_radius()
-        return (orientation * (pr * radial_vector((i+0.5) * self.dihedral_s)) + position for i in range(len(self.parts)))
+        return (orientation * bp + position for bp in self.base_points)
     
     def tesselate(self,position,orientation):
         points = list(self.points(position,orientation))
@@ -105,10 +115,9 @@ class Polygon:
     def any_point(self,position,orientation):
         return next(self.points(position,orientation))
     
-    def contains(self,p,position,orientation):
-        return any(almost_equal(p,test_p) for test_p in self.points(position,orientation))
+    def contains(self,p):
+        return any(almost_equal(p,test_p) for test_p in self.base_points)
     
-    # special case
     def hull(self,position=nt.Vector(),orientation=nt.Matrix.identity()):
         return map(nt.TrianglePrototype,self.tesselate(position,orientation))
     
@@ -117,19 +126,21 @@ class Polygon:
         return r*r
 
 
+# Cells are enlarged ever so slightly to prevent the view frustum from being
+# wedged exactly between two adjacent primitives, which, do to limited
+# precision, would cause that volume to appear discontinuous (rays would hit or
+# miss depending on rounding).
+fuzz_scale = nt.Matrix.scale(1.00001)
 class PolyTope:
     def __init__(self,dihedral_s,face_radius,parts=None):
         self.dihedral_s = dihedral_s
         self.radius = math.tan((math.pi - dihedral_s)/2) * face_radius
         self.parts = parts or []
-    
-    def add_face(self,instance):
-        for p in self.parts:
-            if almost_equal(instance.position,p.position): return p
-
-        self.parts.append(instance)
         
-        for p in instance.shape.parts:
+    def propogate_faces(self,potentials):
+        new_p = set()
+        
+        for instance,p in potentials:
             dir = (instance.orientation * p.position).unit()
             
             reflect = nt.Matrix.reflection(dir)
@@ -139,18 +150,26 @@ class PolyTope:
                 dir,
                 self.dihedral_s)
             
-            f = self.add_face(Instance(
+            new_p |= self.add_face(Instance(
                 instance.shape,
                 turn * instance.position,
-                turn * reflect * instance.orientation))
+                fuzz_scale * turn * reflect * instance.orientation))
+        return new_p
+    
+    def add_face(self,instance):
+        for p in self.parts:
+            if almost_equal(instance.position,p.position): return set()
+
+        self.parts.append(instance)
         
-        return instance
+        return set((instance,p) for p in instance.shape.parts)
     
     def tesselate(self,position,orientation):
         point1 = self.parts[0].any_point(position,orientation)
         tris = []
+        inv_orientation = orientation.inverse()
         for part in self.parts[1:]:
-            if not part.contains(point1,position,orientation):
+            if not part.contains(inv_orientation * (point1 - position)):
                 new_t = part.tesselate(position,orientation)
                 for t in new_t: t.append(point1)
                 tris += new_t
@@ -165,8 +184,8 @@ class PolyTope:
     def any_point(self,position,orientation):
         return self.parts[0].any_point(position,orientation)
     
-    def contains(self,p,position,orientation):
-        return any(part.contains(p,position,orientation) for part in self.parts)
+    def contains(self,p):
+        return any(part.contains(p) for part in self.parts)
     
     def outer_radius_square(self):
         return self.radius*self.radius + self.parts[0].shape.outer_radius_square()
@@ -178,7 +197,9 @@ def compose(part,order,schlafli):
     higher = PolyTope(
         higher_dihedral_supplement(schlafli,part.dihedral_s),
         part.radius)
-    higher.add_face(Instance(part,nt.Vector.axis(order,higher.radius)))
+    potentials = higher.add_face(Instance(part,nt.Vector.axis(order,higher.radius)))
+    while potentials:
+        potentials = higher.propogate_faces(potentials)
     return higher
 
 
@@ -215,19 +236,17 @@ def announce_frame():
     print('drawing frame {0}/{1}'.format(frame+1,args.frames))
 
 
-
+print('building geometry...')
 p = Polygon(args.schlafli[0])
 for i,s in enumerate(args.schlafli[1:]):
     p = compose(p,i+2,s)
 
 hull = p.hull()
+print('done')
+
 cam_distance = -math.sqrt(p.outer_radius_square()) * CAM_DIST_FACTOR
 
-msg = 'partitioning scene'
-if len(args.schlafli) > 2:
-    if len(args.schlafli) == 3: msg += ' (this might take a minute)'
-    else: msg += ' (this might take a while)'
-print(msg + '...')
+print('partitioning scene...')
 scene = build_composite_scene(nt,hull)
 print('done')
 

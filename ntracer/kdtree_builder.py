@@ -31,7 +31,7 @@ COST_INTERSECTION = 0.5
 def product(x):
     return reduce(operator.mul,x)
 
-def split_cost(boundary,axis,contain_p,overlap_p,split):
+def split_cost(boundary,axis,l_count,r_count,split):
     cube_range = boundary.end - boundary.start
     l_range = split - boundary.start[axis]
     r_range = boundary.end[axis] - split
@@ -49,38 +49,52 @@ def split_cost(boundary,axis,contain_p,overlap_p,split):
         l_area += items * l_range
         r_area += items * r_range
 
-    r_count = 0
-    b_count = 0
-    for p in itertools.chain(contain_p,overlap_p):
-        if p.aabb_min[axis] >= split:
-            r_count += 1
-        elif p.aabb_max[axis] > split:
-            b_count += 1
-    l_count = len(contain_p) + len(overlap_p) - r_count
-    r_count += b_count
-
     return COST_TRAVERSAL + COST_INTERSECTION * (l_area/area * l_count + r_area/area * r_count)
-
 
 def find_split(boundary,axis,contain_p,overlap_p):
     pos = None
     best_cost = sys.float_info.max
-    for p in itertools.chain(contain_p,overlap_p):
-        split = p.aabb_min[axis]
-        if boundary.end[axis] > split > boundary.start[axis]:
-            cost = split_cost(boundary,axis,contain_p,overlap_p,split)
-            if cost < best_cost:
-                best_cost = cost
-                pos = split
+    
+    search_l = sorted(itertools.chain(contain_p,overlap_p),key=lambda p: p.aabb_min[axis])
+    search_r = sorted(itertools.chain(contain_p,overlap_p),key=lambda p: p.aabb_max[axis])
+    
+    il = 1
+    ir = 0
+    last_split = search_l[0].aabb_min[axis]
+    last_il = 0
+    while il < len(search_l):
+        split = min(search_l[il].aabb_min[axis],search_r[ir].aabb_max[axis])
+        
+        # Note: this test is not an optimization. Removing it will produce
+        # incorrect values for the l_count and r_count parameters.
+        if split != last_split:
+            if boundary.end[axis] > last_split > boundary.start[axis]:
+                cost = split_cost(boundary,axis,last_il,len(search_l)-ir,last_split)
+                if cost < best_cost:
+                    best_cost = cost
+                    pos = last_split
+            last_il = il
+            last_split = split
+            
+        if search_l[il].aabb_min[axis] <= search_r[ir].aabb_max[axis]:
+            il += 1
+        else:
+            ir += 1
+    
+    assert il == len(search_l)
+    
+    while ir < len(search_l):
+        split = search_r[ir].aabb_max[axis]
+        if split != last_split:
+            if boundary.end[axis] > last_split > boundary.start[axis]:
+                cost = split_cost(boundary,axis,len(search_l),len(search_l)-ir,last_split)
+                if cost < best_cost:
+                    best_cost = cost
+                    pos = last_split
+            last_split = split
+        ir += 1
 
-        split = p.aabb_max[axis]
-        if boundary.end[axis] > split > boundary.start[axis]:
-            cost = split_cost(boundary,axis,contain_p,overlap_p,split)
-            if cost < best_cost:
-                best_cost = cost
-                pos = split
-
-    compare = product(boundary.end - boundary.start) * (len(contain_p) + len(overlap_p))
+    compare = product(boundary.end - boundary.start) * len(search_l)
     return pos if best_cost is not None and best_cost < compare else None
 
 

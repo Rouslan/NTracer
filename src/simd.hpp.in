@@ -827,7 +827,8 @@ namespace simd {
             
             //return size >= s::value[i+1] ?
             return size >= s::value[i] ?
-                (size / s::value[i] * s::value[i]) + (size % s::value[i] == s::value[i+1] ? s::value[i+1] : s::value[i]) :
+                (size / s::value[i] * s::value[i])
+                    + (size % s::value[i] == 0 ? 0 : (size % s::value[i] == s::value[i+1] ? s::value[i+1] : s::value[i])) :
                 padded_size<T>(size,i+1);
         }
     }

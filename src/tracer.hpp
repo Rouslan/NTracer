@@ -294,7 +294,7 @@ template<typename Store> struct triangle : triangle_obj_common, primitive<Store>
             tot_area += area;
         }
         
-        if(tot_area >= 0 && tot_area <= 1) {
+        if(tot_area <= 1) {
             normal.origin = P;
             normal.direction = face_normal.unit();
             if(denom > 0) normal.direction = -normal.direction;

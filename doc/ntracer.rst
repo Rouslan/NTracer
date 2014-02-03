@@ -478,6 +478,15 @@ can't add a tuple and a :py:class:`Vector` together).
         Create an identity matrix.
 
         :param dimension: The dimension of the new matrix.
+        
+    .. py:staticmethod:: reflection(axis) -> Matrix
+    
+        Create a reflection matrix.
+        
+        The refection is by a hyperplane perpendicular to ``axis`` that passes
+        through the origin.
+        
+        :param vector axis: The axis to reflect along.
 
     .. py:staticmethod:: rotation(a,b,theta) -> Matrix
 

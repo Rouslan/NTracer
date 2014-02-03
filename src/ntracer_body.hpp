@@ -1399,6 +1399,7 @@ PyObject *obj_Vector_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
 
         auto ptr = py::check_obj(type->tp_alloc(type,0));
         auto &base = reinterpret_cast<wrapped_type<n_vector>*>(ptr)->alloc_base();
+        new(&base) n_vector(dimension);
         
         if(values) {
             sized_iter itr(*values,dimension);
