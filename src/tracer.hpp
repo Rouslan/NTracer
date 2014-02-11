@@ -5,10 +5,13 @@
 
 #include "geometry.hpp"
 #include "light.hpp"
-#include "scene.hpp"
+#include "render.hpp"
 #include "camera.hpp"
 #include "pyobject.hpp"
 #include "instrumentation.hpp"
+
+
+const real ROUNDING_FUZZ = std::numeric_limits<real>::epsilon() * 10;
 
 
 template<typename Store> class ray {
@@ -58,6 +61,7 @@ public:
     void unlock() throw() { locked = false; }
 };
 
+
 template<typename Store> real hypercube_intersects(const ray<Store> &target,ray<Store> &normal) {
     assert(target.dimension() == normal.dimension());
     INSTRUMENTATION_TIMER;
@@ -70,7 +74,7 @@ template<typename Store> real hypercube_intersects(const ray<Store> &target,ray<
                 for(int j=0; j<target.dimension(); ++j) {
                     if(i != j) {
                         normal.origin[j] = target.direction[j] * dist + target.origin[j];
-                        if(std::abs(normal.origin[j]) > 1) goto miss;
+                        if(std::abs(normal.origin[j]) > (1+ROUNDING_FUZZ)) goto miss;
                     }
                 }
                 normal.direction = vector<Store>::axis(target.dimension(),i,normal.origin[i]);
@@ -115,8 +119,7 @@ protected:
 enum solid_type {CUBE=1,SPHERE};
 
 struct solid_obj_common {
-    static PyTypeObject pytype;
-
+    CONTAINED_PYTYPE_DEF
     PyObject_HEAD
 };
 
@@ -129,7 +132,7 @@ template<typename Store> struct solid : solid_obj_common, primitive<Store> {
     
     solid(solid_type type,const matrix<Store> &o,const matrix<Store> &io,const vector<Store> &p) : type(type), orientation(o), inv_orientation(io), position(p) {
         assert(o.dimension() == p.dimension() && o.dimension() == io.dimension());
-        PyObject_Init(reinterpret_cast<PyObject*>(this),&pytype);
+        PyObject_Init(reinterpret_cast<PyObject*>(this),pytype());
     }
     
     solid(solid_type type,const matrix<Store> &o,const vector<Store> &p) : solid(type,o,o.inverse(),p) {}
@@ -254,8 +257,7 @@ template<typename T,typename Item> const size_t flexible_struct<T,Item>::item_si
 
 
 struct triangle_obj_common {
-    static PyTypeObject pytype;
-    
+    CONTAINED_PYTYPE_DEF
     PyObject_HEAD
 };
 
@@ -290,11 +292,11 @@ template<typename Store> struct triangle : triangle_obj_common, primitive<Store>
         real tot_area = 0;
         for(int i=0; i<dimension()-1; ++i) {
             real area = dot(this->items()[i],pside);
-            if(area < 0 || area > 1) return 0;
+            if(area < -ROUNDING_FUZZ || area > (1+ROUNDING_FUZZ)) return 0;
             tot_area += area;
         }
         
-        if(tot_area <= 1) {
+        if(tot_area <= (1+ROUNDING_FUZZ)) {
             normal.origin = P;
             normal.direction = face_normal.unit();
             if(denom > 0) normal.direction = -normal.direction;
@@ -336,26 +338,26 @@ private:
                 items().begin(),
                 items().end(),
                 [&](const vector<Store> &e){ return e.dimension() == p1.dimension() }));
-        PyObject_Init(reinterpret_cast<PyObject*>(this),&pytype);
+        PyObject_Init(reinterpret_cast<PyObject*>(this),pytype());
     }
 };
 
 template<typename Store> real primitive<Store>::intersects(const ray<Store> &target,ray<Store> &normal) const {
-    if(Py_TYPE(this) == &triangle_obj_common::pytype) {
+    if(Py_TYPE(this) == triangle_obj_common::pytype()) {
         INSTRUMENTATION_TIMER;
         return static_cast<const triangle<Store>*>(this)->intersects(target,normal);
     }
     
-    assert(Py_TYPE(this) == &solid_obj_common::pytype);
+    assert(Py_TYPE(this) == solid_obj_common::pytype());
     return static_cast<const solid<Store>*>(this)->intersects(target,normal);
 }
 
 template<typename Store> int primitive<Store>::dimension() const {
     if(Store::required_d) return Store::required_d;
     
-    if(Py_TYPE(this) == &triangle_obj_common::pytype) return static_cast<const triangle<Store>*>(this)->dimension();
+    if(Py_TYPE(this) == triangle_obj_common::pytype()) return static_cast<const triangle<Store>*>(this)->dimension();
     
-    assert(Py_TYPE(this) == &solid_obj_common::pytype);
+    assert(Py_TYPE(this) == solid_obj_common::pytype());
     return static_cast<const solid<Store>*>(this)->dimension();
 }
 
@@ -514,6 +516,46 @@ template<typename Store> inline void kd_node_deleter<Store>::operator()(kd_node<
         delete static_cast<const kd_branch<Store>*>(ptr);
     }
 }
+
+struct p_instance_obj_common {
+    CONTAINED_PYTYPE_DEF
+    PyObject_HEAD
+};
+
+template<typename Store> struct p_instance : p_instance_obj_common, primitive<Store> {
+    vector<Store> aabb_min, aabb_max;
+    std::unique_ptr<kd_node<Store>,kd_node_deleter<Store> > root;
+    
+    int dimension() const {
+        return aabb_min.dimension();
+    }
+    
+    real intersects(const ray<Store> &target,ray<Store> &normal) const {
+        for(int i=0; i<dimension(); ++i) {
+            if(target.direction[i]) {
+                real o = target.direction[i] > 0 ? aabb_min[i] : aabb_max[i];
+                real dist = (o - target.origin[i]) / target.direction[i];
+                int skip = i;
+                if(dist < 0) {
+                    dist = 0;
+                    skip = -1;
+                }
+
+                for(int j=0; j<dimension(); ++j) {
+                    if(j != skip) {
+                        o = target.direction[j] * dist + target.origin[j];
+                        if(o >= aabb_max[j] || o <= aabb_min[j]) goto miss;
+                    }
+                }
+                return root->intersects(target,normal,dist,std::numeric_limits<real>::max());
+
+                miss: ;
+            }
+        }
+        
+        return 0;
+    }
+};
 
 
 template<typename Store> struct solid_prototype {

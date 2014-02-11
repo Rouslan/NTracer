@@ -7,18 +7,18 @@ import pygame
 import argparse
 import os.path
 import sys
+import subprocess
 from itertools import combinations
-from ntracer import NTracer,Renderer,build_composite_scene
+from ntracer import NTracer,Renderer,build_composite_scene,CUBE
 
 
 ROT_SENSITIVITY = 0.005
 WHEEL_INCREMENT = 8
-CAM_DIST_FACTOR = 4
 
 
 def excepthook(type,value,traceback):
     if isinstance(value,Exception):
-        print(str(value),file=sys.stderr)
+        print('error: '+str(value),file=sys.stderr)
     else:
         sys.__excepthook__(type,value,traceback)
     
@@ -42,12 +42,25 @@ def screen_size(x):
     if w < 1 or h < 1: raise argparse.ArgumentTypeError('invalid screen size')
     return w,h
 
+def fov_type(x):
+    x = float(x)
+    if x <= 0 or x >= 180: raise argparse.ArgumentTypeError('fov must be between 0 and 180 degrees')
+    return x/180*math.pi
+
 parser = argparse.ArgumentParser(
     description='Display a convex regular polytope given its Schl\u00e4fli symbol.')
 parser.add_argument('schlafli',metavar='N',type=schlafli_component,nargs='+',help='the Schl\u00e4fli symbol components')
-parser.add_argument('-a','--make-anim',metavar='PATH',nargs='?',const='.',help='save images at PATH for an animation instead displaying the polytope')
+parser.add_argument('-o','--output',metavar='PATH',help='save an animation to PATH instead of displaying the polytope')
+parser.add_argument('-t','--type',metavar='TYPE',default='h264',
+    help='Specifies output type when --output is used. If TYPE is "png", the '+
+        'output is a series of PNG images. For any other value, it is used '+
+        'as the video codec for ffmpeg.')
 parser.add_argument('-f','--frames',metavar='F',type=positive_int,default=160,help='when creating an animation, the number of frames to create')
 parser.add_argument('-s','--screen',metavar='WIDTHxHEIGHT',type=screen_size,default=(800,600),help='screen size')
+parser.add_argument('-a','--fov',metavar='FOV',type=fov_type,default=0.8,help='field of vision in degrees')
+parser.add_argument('-d','--cam-dist',metavar='DIST',type=float,default=4,
+    help='How far the view-port is from the center of the polytope. The '+
+        'value is a multiple of the outer raidius of the polytope.')
 args = parser.parse_args()
 
 
@@ -128,8 +141,7 @@ class Polygon:
 
 # Cells are enlarged ever so slightly to prevent the view frustum from being
 # wedged exactly between two adjacent primitives, which, do to limited
-# precision, would cause that volume to appear discontinuous (rays would hit or
-# miss depending on rounding).
+# precision, would cause that volume to appear to vanish.
 fuzz_scale = nt.Matrix.scale(1.00001)
 class PolyTope:
     def __init__(self,dihedral_s,face_radius,parts=None):
@@ -233,61 +245,101 @@ def run():
 
 
 def announce_frame():
-    print('drawing frame {0}/{1}'.format(frame+1,args.frames))
+    if args.type == 'png':
+        print('drawing frame {0}/{1}'.format(frame+1,args.frames))
 
 
-print('building geometry...')
-p = Polygon(args.schlafli[0])
-for i,s in enumerate(args.schlafli[1:]):
-    p = compose(p,i+2,s)
 
-hull = p.hull()
-print('done')
+if nt.dimension >= 3 and args.schlafli[0] == 4 and all(c == 3 for c in args.schlafli[1:]):
+    cam_distance = -math.sqrt(nt.dimension) * args.cam_dist
+    scene = nt.BoxScene()
+else:
+    print('building geometry...')
+    p = Polygon(args.schlafli[0])
+    for i,s in enumerate(args.schlafli[1:]):
+        p = compose(p,i+2,s)
 
-cam_distance = -math.sqrt(p.outer_radius_square()) * CAM_DIST_FACTOR
+    hull = p.hull()
+    print('done')
 
-print('partitioning scene...')
-scene = build_composite_scene(nt,hull)
-print('done')
+    cam_distance = -math.sqrt(p.outer_radius_square()) * args.cam_dist
+
+    print('partitioning scene...')
+    scene = build_composite_scene(nt,hull)
+    print('done')
+    
+    del p
 
 camera = nt.Camera()
 camera.translate(nt.Vector.axis(2,cam_distance))
 scene.set_camera(camera)
+scene.set_fov(args.fov)
 
 render = Renderer()
 
 pygame.display.init()
 
-if args.make_anim is not None:
-    surf = pygame.Surface(args.screen,depth=24)
+if args.output is not None:
+    kwds = {'depth':24}
+    if args.type != 'png':
+        kwds['masks'] = (0xff,0xff00,0xff0000,0)
+        pipe = subprocess.Popen(['ffmpeg',
+                '-y',
+                '-f','rawvideo',
+                '-vcodec','rawvideo',
+                '-s','{0}x{1}'.format(*args.screen),
+                '-pix_fmt','rgb24',
+                '-r','40',
+                '-i','-',
+                '-an',
+                '-vcodec',args.type,
+                '-crf','10',
+                args.output],
+            stdin=subprocess.PIPE)
 
-    incr = 2*math.pi / args.frames
-    h = 1/math.sqrt(nt.dimension-1)
+    try:
+        surf = pygame.Surface(args.screen,**kwds)
 
-    frame = 0
-    announce_frame()
-    render.begin_render(surf,scene)
+        incr = 2*math.pi / args.frames
+        h = 1/math.sqrt(nt.dimension-1)
 
-    while True:
-        e = pygame.event.wait()
-        if e.type == pygame.USEREVENT:
-            frame += 1
-            pygame.image.save(
-                surf,
-                os.path.join(args.make_anim,'frame{0:04}.png'.format(frame)))
-            if frame >= args.frames: break
-            
-            a2 = camera.axes[0]*h + camera.axes[1]*h
-            for i in range(nt.dimension-3): a2 += camera.axes[i+3]*h
-            camera.transform(nt.Matrix.rotation(camera.axes[2],a2,incr))
-            camera.normalize()
-            camera.origin = camera.axes[2] * cam_distance
-            announce_frame()
-            scene.set_camera(camera)
-            render.begin_render(surf,scene)
-        elif e.type == pygame.QUIT:
-            render.abort_render()
-            break
+        frame = 0
+        announce_frame()
+        render.begin_render(surf,scene)
+
+        while True:
+            e = pygame.event.wait()
+            if e.type == pygame.USEREVENT:
+                frame += 1
+                if args.type != 'png':
+                    print(
+                        buffer(surf.get_buffer()),
+                        file=pipe.stdin,
+                        sep='',
+                        end='')
+                else:
+                    pygame.image.save(
+                        surf,
+                        os.path.join(args.output,'frame{0:04}.png'.format(frame)))
+                if frame >= args.frames: break
+                
+                a2 = camera.axes[0]*h + camera.axes[1]*h
+                for i in range(nt.dimension-3): a2 += camera.axes[i+3]*h
+                camera.transform(nt.Matrix.rotation(camera.axes[2],a2,incr))
+                camera.normalize()
+                camera.origin = camera.axes[2] * cam_distance
+                announce_frame()
+                scene.set_camera(camera)
+                render.begin_render(surf,scene)
+            elif e.type == pygame.QUIT:
+                render.abort_render()
+                break
+    finally:
+        if args.type != 'png':
+            pipe.stdin.close()
+    
+    if args.type != 'png':
+        sys.exit(pipe.wait())
 else:
     screen = pygame.display.set_mode(args.screen)
 
@@ -322,7 +374,7 @@ else:
         elif e.type == pygame.KEYDOWN:
             if e.key == pygame.K_c:
                 x,y = pygame.mouse.get_pos()
-                fovI = (2 * math.tan(0.8/2)) / screen.get_width()
+                fovI = (2 * math.tan(scene.fov/2)) / screen.get_width()
 
                 print(camera.origin)
                 print((camera.axes[2] + camera.axes[0] * (fovI * (x - screen.get_width()/2)) - camera.axes[1] * (fovI * (y - screen.get_height()/2))).unit())

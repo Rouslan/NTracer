@@ -33,9 +33,9 @@
 #include <memory>
 #include <pygame/pygame.h>
 
-#include "py_common.hpp"
 #include "pyobject.hpp"
-#include "scene.hpp"
+#define RENDER_MODULE
+#include "render.hpp"
 
 
 using namespace type_object_abbrev;
@@ -127,8 +127,7 @@ struct renderer {
 
 
 struct obj_Scene {
-    static PyTypeObject pytype;
-    
+    CONTAINED_PYTYPE_DEF
     PyObject_HEAD
 
     /* a dummy member whose offset in the struct should be the same as any
@@ -151,8 +150,7 @@ template<> struct invariable_storage<Scene> {
 };
 
 struct obj_Renderer {
-    static PyTypeObject pytype;
-    
+    CONTAINED_PYTYPE_DEF
     PyObject_HEAD
     storage_mode mode;
     
@@ -164,11 +162,11 @@ struct obj_Renderer {
     PY_MEM_GC_NEW_DELETE
 
     obj_Renderer(_object * _0) : base(_0), idict(NULL), weaklist(NULL) {
-        PyObject_Init(reinterpret_cast<PyObject*>(this),&pytype);
+        PyObject_Init(reinterpret_cast<PyObject*>(this),pytype());
         mode = CONTAINS;
     }
     obj_Renderer(_object * _0,unsigned int _1) : base(_0,_1), idict(NULL), weaklist(NULL) {
-        PyObject_Init(reinterpret_cast<PyObject*>(this),&pytype);
+        PyObject_Init(reinterpret_cast<PyObject*>(this),pytype());
         mode = CONTAINS;
     }
     ~obj_Renderer() {
@@ -416,7 +414,7 @@ PyObject *obj_Scene_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
     return NULL;
 }
 
-PyTypeObject obj_Scene::pytype = make_type_object(
+PyTypeObject obj_Scene::_pytype = make_type_object(
     "render.Scene",
     sizeof(obj_Scene),
     tp_new = &obj_Scene_new);
@@ -483,7 +481,7 @@ PyObject *obj_Renderer_begin_render(obj_Renderer *self,PyObject *args,PyObject *
         }
 
         Py_RETURN_NONE;
-    } PY_EXCEPT_HANDLERS(NULL)
+    } PY_EXCEPT_HANDLERS(nullptr)
 }
 
 PyObject *obj_Renderer_abort_render(obj_Renderer *self,PyObject*) {
@@ -505,7 +503,7 @@ PyObject *obj_Renderer_abort_render(obj_Renderer *self,PyObject*) {
         }
         
         Py_RETURN_NONE;
-    } PY_EXCEPT_HANDLERS(NULL)
+    } PY_EXCEPT_HANDLERS(nullptr)
 }
 
 PyObject *obj_Renderer_render_sync(PyObject*,PyObject *args,PyObject *kwds) {
@@ -533,7 +531,7 @@ PyObject *obj_Renderer_render_sync(PyObject*,PyObject *args,PyObject *kwds) {
         }
         
         Py_RETURN_NONE;
-    } PY_EXCEPT_HANDLERS(NULL)
+    } PY_EXCEPT_HANDLERS(nullptr)
 }
 
 PyMethodDef obj_Renderer_methods[] = {
@@ -566,7 +564,7 @@ int obj_Renderer_init(obj_Renderer *self,PyObject *args,PyObject *kwds) {
     return 0;
 }
 
-PyTypeObject obj_Renderer::pytype = make_type_object(
+PyTypeObject obj_Renderer::_pytype = make_type_object(
     "render.Renderer",
     sizeof(obj_Renderer),
     tp_dealloc = reinterpret_cast<destructor>(&obj_Renderer_dealloc),
@@ -577,6 +575,316 @@ PyTypeObject obj_Renderer::pytype = make_type_object(
     tp_methods = obj_Renderer_methods,
     tp_dictoffset = offsetof(obj_Renderer,idict),
     tp_init = &obj_Renderer_init);
+
+
+PyObject *obj_Color_repr(wrapped_type<color> *self) {
+    auto &base = self->get_base();
+    PyObject *r = nullptr;
+    char *cr;
+    char *cg = nullptr;
+    char *cb = nullptr;
+    
+    if((cr = PyOS_double_to_string(base.R,'r',0,0,nullptr))) {
+        if((cg = PyOS_double_to_string(base.G,'r',0,0,nullptr))) {
+            if((cb = PyOS_double_to_string(base.B,'r',0,0,nullptr))) {
+                r = PYSTR(FromFormat)("Color(%s,%s,%s)",cr,cg,cb);
+            }
+        }
+    }
+    
+    PyMem_Free(cr);
+    PyMem_Free(cg);
+    PyMem_Free(cb);
+    
+    return r;
+}
+
+PyObject *obj_Color_richcompare(wrapped_type<color> *self,PyObject *arg,int op) {
+    color *cb = get_base_if_is_type<color>(arg);
+    
+    if((op == Py_EQ || op == Py_NE) && cb) {
+        return to_pyobject((self->get_base() == *cb) == (op == Py_EQ));
+    }
+
+    Py_INCREF(Py_NotImplemented);
+    return Py_NotImplemented;
+}
+
+PyObject *obj_Color___neg__(wrapped_type<color> *self) {
+    try {
+        return to_pyobject(-self->get_base());
+    } PY_EXCEPT_HANDLERS(nullptr)
+}
+
+PyObject *obj_Color___add__(PyObject *a,PyObject *b) {
+    color *ca, *cb;
+    
+    if((ca = get_base_if_is_type<color>(a)) && (cb = get_base_if_is_type<color>(b))) {
+        return to_pyobject(*ca + *cb);
+    }
+    
+    Py_INCREF(Py_NotImplemented);
+    return Py_NotImplemented;
+}
+
+PyObject *obj_Color___sub__(PyObject *a,PyObject *b) {
+    color *ca, *cb;
+    
+    if((ca = get_base_if_is_type<color>(a)) && (cb = get_base_if_is_type<color>(b))) {
+        return to_pyobject(*ca - *cb);
+    }
+        
+    Py_INCREF(Py_NotImplemented);
+    return Py_NotImplemented;
+}
+
+PyObject *obj_Color___mul__(PyObject *a,PyObject *b) {
+    color *ca, *cb;
+ 
+    if((ca = get_base_if_is_type<color>(a))) {
+        if((cb = get_base_if_is_type<color>(b))) return to_pyobject(*ca * *cb);
+        if(PyNumber_Check(b)) return to_pyobject(*ca * from_pyobject<float>(b));
+    } else if(PyNumber_Check(a)) {
+        assert(PyObject_TypeCheck(b,&wrapped_type<n_vector>::pytype));
+        return to_pyobject(from_pyobject<float>(a) * reinterpret_cast<wrapped_type<color>*>(b)->get_base());
+    }
+
+    Py_INCREF(Py_NotImplemented);
+    return Py_NotImplemented;
+}
+
+PyObject *obj_Color___div__(PyObject *a,PyObject *b) {
+    color *ca, *cb;
+ 
+    if((ca = get_base_if_is_type<color>(a))) {
+        if((cb = get_base_if_is_type<color>(b))) return to_pyobject(*ca / *cb);
+        if(PyNumber_Check(b)) return to_pyobject(*ca / from_pyobject<float>(b));
+    }
+
+    Py_INCREF(Py_NotImplemented);
+    return Py_NotImplemented;
+}
+
+PyNumberMethods obj_Color_number_methods = {
+    &obj_Color___add__,
+    &obj_Color___sub__,
+    &obj_Color___mul__,
+#if PY_MAJOR_VERSION < 3
+    &obj_Color___div__,
+#endif
+    NULL,
+    NULL,
+    NULL,
+    reinterpret_cast<unaryfunc>(&obj_Color___neg__),
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+#if PY_MAJOR_VERSION < 3
+    NULL,
+#endif
+    NULL,
+    NULL,
+    NULL,
+#if PY_MAJOR_VERSION < 3
+    NULL,
+    NULL,
+#endif
+    NULL,
+    NULL,
+    NULL,
+#if PY_MAJOR_VERSION < 3
+    NULL,
+#endif
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    &obj_Color___div__,
+    NULL,
+    NULL,
+    NULL
+};
+
+/*Py_ssize_t obj_Color___sequence_len__(PyObject *self) {
+    return 3;
+}
+
+void c_index_check(const n_vector &v,Py_ssize_t index) {
+    if(index < 0 || index >= 3) THROW_PYERR_STRING(IndexError,"color index out of range");
+}
+
+PyObject *obj_Color___sequence_getitem__(wrapped_type<color> *self,Py_ssize_t index) {
+    try {
+        auto &v = self->get_base();
+        v_index_check(v,index);
+        return to_pyobject(v[index]);
+    } PY_EXCEPT_HANDLERS(NULL)
+}
+
+PySequenceMethods obj_Color_sequence_methods = {
+    reinterpret_cast<lenfunc>(&obj_Color___sequence_len__),
+    NULL,
+    NULL,
+    reinterpret_cast<ssizeargfunc>(&obj_Color___sequence_getitem__),
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL
+};*/
+
+PyObject *obj_Color_apply(wrapped_type<color> *self,PyObject *_func) {
+    try {
+        auto &base = self->get_base();
+        py::object func = py::borrowed_ref(_func);
+
+        return to_pyobject(color(
+            from_pyobject<float>(func(base.R)),
+            from_pyobject<float>(func(base.G)),
+            from_pyobject<float>(func(base.B))));
+    } PY_EXCEPT_HANDLERS(NULL)
+}
+
+PyMethodDef obj_Color_methods[] = {
+    {"apply",reinterpret_cast<PyCFunction>(&obj_Color_apply),METH_O,NULL},
+    {NULL}
+};
+
+PyObject *obj_Color_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
+    try {
+        const char *names[] = {"r","g","b"};
+        get_arg ga(args,kwds,names,"Color.__new__");
+        auto r = from_pyobject<float>(ga(true));
+        auto g = from_pyobject<float>(ga(true));
+        auto b = from_pyobject<float>(ga(true));
+        ga.finished();
+
+        auto ptr = py::check_obj(type->tp_alloc(type,0));
+        new(&reinterpret_cast<wrapped_type<color>*>(ptr)->alloc_base()) color(r,g,b);
+        
+        return ptr;
+    } PY_EXCEPT_HANDLERS(nullptr)
+}
+
+PyMemberDef obj_Color_members[] = {
+    {const_cast<char*>("r"),T_FLOAT,offsetof(wrapped_type<color>,base.R),READONLY,NULL},
+    {const_cast<char*>("g"),T_FLOAT,offsetof(wrapped_type<color>,base.G),READONLY,NULL},
+    {const_cast<char*>("b"),T_FLOAT,offsetof(wrapped_type<color>,base.B),READONLY,NULL},
+    {NULL}
+};
+
+PyTypeObject color_obj_base::_pytype = make_type_object(
+    "render.Color",
+    sizeof(wrapped_type<color>),
+    tp_dealloc = destructor_dealloc<wrapped_type<color> >::value,
+    tp_repr = &obj_Color_repr,
+    tp_as_number = &obj_Color_number_methods,
+    //tp_as_sequence = &obj_Color_sequence_methods,
+    tp_richcompare = &obj_Color_richcompare,
+    tp_methods = obj_Color_methods,
+    tp_members = obj_Color_members,
+    tp_new = &obj_Color_new);
+
+
+PyObject *obj_Material_repr(wrapped_type<material> *self) {
+    auto &base = self->get_base();
+    PyObject *ret = nullptr;
+    char *cr;
+    char *cg = nullptr;
+    char *cb = nullptr;
+    char *o = nullptr;
+    char *r = nullptr;
+    
+    if((cr = PyOS_double_to_string(base.c.R,'r',0,0,nullptr))) {
+        if((cg = PyOS_double_to_string(base.c.G,'r',0,0,nullptr))) {
+            if((cb = PyOS_double_to_string(base.c.B,'r',0,0,nullptr))) {
+                if(base.reflectivity == 0 && base.opacity == 1) {
+                    ret = PYSTR(FromFormat)("Material((%s,%s,%s))",cr,cg,cb);
+                } else if((o = PyOS_double_to_string(base.opacity,'r',0,0,nullptr))) {
+                    if(base.reflectivity == 0) {
+                        ret = PYSTR(FromFormat)("Material((%s,%s,%s),%s)",cr,cg,cb,o);
+                    } else if((r = PyOS_double_to_string(base.reflectivity,'r',0,0,nullptr))) {
+                        ret = PYSTR(FromFormat)("Material((%s,%s,%s),%s,%s)",cr,cg,cb,o,r);
+                    }
+                }
+            }
+        }
+    }
+    
+    PyMem_Free(cr);
+    PyMem_Free(cg);
+    PyMem_Free(cb);
+    PyMem_Free(o);
+    PyMem_Free(r);
+    
+    return ret;
+}
+
+PyObject *obj_Material_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
+    try {
+        const char *names[] = {"color","opacity","reflectivity"};
+        get_arg ga(args,kwds,names,"Material.__new__");
+        auto obj_c = ga(true);
+        float o = 1;
+        float r = 0;
+        auto temp = ga(false);
+        if(temp) o = from_pyobject<float>(temp);
+        temp = ga(false);
+        if(temp) r = from_pyobject<float>(temp);
+        ga.finished();
+        
+        auto ptr = py::check_obj(type->tp_alloc(type,0));
+        auto &base = reinterpret_cast<wrapped_type<material>*>(ptr)->alloc_base();
+        
+        if(PyTuple_Check(obj_c)) {
+            if(PyTuple_GET_SIZE(obj_c) != 3) {
+                PyErr_SetString(PyExc_ValueError,"\"color\" must have exactly 3 values");
+                return nullptr;
+            }
+            base.c.R = from_pyobject<float>(PyTuple_GET_ITEM(obj_c,0));
+            base.c.G = from_pyobject<float>(PyTuple_GET_ITEM(obj_c,1));
+            base.c.B = from_pyobject<float>(PyTuple_GET_ITEM(obj_c,2));
+        } else {
+            base.c = get_base<color>(obj_c);
+        }
+        
+        base.opacity = o;
+        base.reflectivity = r;
+        
+        return ptr;
+    } PY_EXCEPT_HANDLERS(nullptr)
+}
+
+PyGetSetDef obj_Material_getset[] = {
+    {const_cast<char*>("color"),OBJ_GETTER(wrapped_type<material>,self->get_base().c),NULL,NULL,NULL},
+    {NULL}
+};
+
+PyMemberDef obj_Material_members[] = {
+    {const_cast<char*>("opacity"),T_FLOAT,offsetof(wrapped_type<material>,base.opacity),READONLY,NULL},
+    {const_cast<char*>("reflectivity"),T_FLOAT,offsetof(wrapped_type<material>,base.reflectivity),READONLY,NULL},
+    {NULL}
+};
+
+PyTypeObject material_obj_base::_pytype = make_type_object(
+    "render.Material",
+    sizeof(wrapped_type<material>),
+    tp_dealloc = destructor_dealloc<wrapped_type<material> >::value,
+    tp_repr = &obj_Material_repr,
+    tp_members = obj_Material_members,
+    tp_new = &obj_Material_new);
+
 
 PyMethodDef func_table[] = {
     {NULL}
@@ -609,9 +917,11 @@ extern "C" SHARED(void) initrender(void) {
     import_pygame_event();
     if(PyErr_Occurred()) return INIT_ERR_VAL;
         
-    if(UNLIKELY(PyType_Ready(&obj_Scene::pytype) < 0)) return INIT_ERR_VAL;
-    obj_Renderer::pytype.tp_new = &PyType_GenericNew;
-    if(UNLIKELY(PyType_Ready(&obj_Renderer::pytype) < 0)) return INIT_ERR_VAL;
+    if(UNLIKELY(PyType_Ready(obj_Scene::pytype()) < 0)) return INIT_ERR_VAL;
+    obj_Renderer::pytype()->tp_new = &PyType_GenericNew;
+    if(UNLIKELY(PyType_Ready(obj_Renderer::pytype()) < 0)) return INIT_ERR_VAL;
+    if(UNLIKELY(PyType_Ready(wrapped_type<color>::pytype()) < 0)) return INIT_ERR_VAL;
+    if(UNLIKELY(PyType_Ready(wrapped_type<material>::pytype()) < 0)) return INIT_ERR_VAL;
 
 #if PY_MAJOR_VERSION >= 3
     PyObject *m = PyModule_Create(&module_def);
@@ -620,8 +930,10 @@ extern "C" SHARED(void) initrender(void) {
 #endif
     if(UNLIKELY(!m)) return INIT_ERR_VAL;
 
-    add_class(m,"Scene",&obj_Scene::pytype);
-    add_class(m,"Renderer",&obj_Renderer::pytype);
+    add_class(m,"Scene",obj_Scene::pytype());
+    add_class(m,"Renderer",obj_Renderer::pytype());
+    add_class(m,"Color",wrapped_type<color>::pytype());
+    add_class(m,"Material",wrapped_type<material>::pytype());
 
 #if PY_MAJOR_VERSION >= 3
     return m;

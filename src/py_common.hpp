@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "compatibility.hpp"
+#include "simd.hpp"
 
 
 #define PY_MEM_NEW_DELETE void *operator new(size_t s) {            \
@@ -299,17 +300,88 @@ template<typename T> struct invariable_storage {
     static constexpr bool value = false;
 };
 
-template<typename T,typename=wrapped_type<typename std::remove_cv<typename std::remove_reference<T>::type>::type> > PyObject *to_pyobject(T &&x) {
-    return reinterpret_cast<PyObject*>(new wrapped_type<typename std::remove_cv<typename std::remove_reference<T>::type>::type>(std::forward<T>(x)));
+template<typename T,typename=wrapped_type<typename std::decay<T>::type> > PyObject *to_pyobject(T &&x) {
+    return reinterpret_cast<PyObject*>(new wrapped_type<typename std::decay<T>::type>(std::forward<T>(x)));
 }
 
-template<typename T> auto get_base(PyObject *o) -> decltype(reinterpret_cast<wrapped_type<T>*>(o)->get_base()) {
-    if(UNLIKELY(!PyObject_TypeCheck(o,&wrapped_type<T>::pytype))) {
-        PyErr_Format(PyExc_TypeError,"object is not an instance of %s",wrapped_type<T>::pytype.tp_name);
+template<typename T> T &get_base(PyObject *o) {
+    if(UNLIKELY(!PyObject_TypeCheck(o,wrapped_type<T>::pytype()))) {
+        PyErr_Format(PyExc_TypeError,"object is not an instance of %s",wrapped_type<T>::pytype()->tp_name);
         throw py_error_set();
     }
     return reinterpret_cast<wrapped_type<T>*>(o)->get_base();
 }
+
+template<typename T> T *get_base_if_is_type(PyObject *o) {
+    return PyObject_TypeCheck(o,wrapped_type<T>::pytype()) ? &reinterpret_cast<wrapped_type<T>*>(o)->get_base() : nullptr;
+}
+
+
+template<typename T,bool trivial=std::is_trivially_destructible<T>::value> struct destructor_dealloc {
+    static void _function(PyObject *self) {
+        reinterpret_cast<T*>(self)->~T();
+        Py_TYPE(self)->tp_free(self);
+    }
+    
+    static constexpr void (*value)(PyObject*) = &_function;
+};
+
+template<typename T> struct destructor_dealloc<T,true> {
+    static constexpr void (*value)(PyObject*) = nullptr;
+};
+
+
+template<typename T,typename Base,bool InPlace=(alignof(T) <= PYOBJECT_ALIGNMENT)> struct simple_py_wrapper : Base {
+    PyObject_HEAD
+    T base;
+    PY_MEM_NEW_DELETE
+    simple_py_wrapper(const T &b) : base(b) {
+        PyObject_Init(reinterpret_cast<PyObject*>(this),Base::pytype());
+    }
+    simple_py_wrapper(T &&b) : base(std::move(b)) {
+        PyObject_Init(reinterpret_cast<PyObject*>(this),Base::pytype());
+    }
+    
+    T &alloc_base() {
+        return base;
+    }
+    
+    T &cast_base() { return base; }
+    T &get_base() { return base; }
+};
+
+template<typename T,typename Base> struct simple_py_wrapper<T,Base,false> : Base {
+    PyObject_HEAD
+    T *base;
+    PY_MEM_NEW_DELETE
+    simple_py_wrapper(const T &b) {
+        PyObject_Init(reinterpret_cast<PyObject*>(this),Base::pytype());
+        alloc_base();
+        new(base) T(b);
+    }
+    simple_py_wrapper(T &&b) {
+        PyObject_Init(reinterpret_cast<PyObject*>(this),Base::pytype());
+        alloc_base();
+        new(base) T(std::move(b));
+    }
+    ~simple_py_wrapper() {
+        if(base) base->~T();
+        simd::aligned_free(base);
+    }
+    
+    T &alloc_base() {
+        assert(!base);
+        base = reinterpret_cast<T*>(simd::aligned_alloc(alignof(T),sizeof(T)));
+        return *base;
+    }
+    
+    T &cast_base() { return *base; }
+    T &get_base() { return *base; }
+};
+
+#define CONTAINED_PYTYPE_DEF \
+    static PyTypeObject _pytype; \
+    static constexpr PyTypeObject *pytype() { return &_pytype; }
 
 
 

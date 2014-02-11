@@ -890,11 +890,11 @@ namespace py {
     
     template<typename Item,const char* FullName,bool GC,bool ReadOnly> struct obj_array_adapter : impl::array_adapter_alloc<Item,FullName,GC,ReadOnly> {
         static PySequenceMethods seq_methods;
-        static PyTypeObject pytype;
+        CONTAINED_PYTYPE_DEF
         PyObject_HEAD
             
         obj_array_adapter(PyObject *origin,size_t size,Item *items) : data(origin,size,items) {
-            PyObject_Init(reinterpret_cast<PyObject*>(this),&pytype);
+            PyObject_Init(reinterpret_cast<PyObject*>(this),pytype());
         }
             
         array_adapter<Item> data;
@@ -922,7 +922,7 @@ namespace py {
     };
     
     template<typename Item,const char* FullName,bool GC,bool ReadOnly>
-        PyTypeObject obj_array_adapter<Item,FullName,GC,ReadOnly>::pytype = type_object_abbrev::make_type_object(
+        PyTypeObject obj_array_adapter<Item,FullName,GC,ReadOnly>::_pytype = type_object_abbrev::make_type_object(
         
         FullName,
         sizeof(obj_array_adapter<Item,FullName,GC,ReadOnly>),
@@ -930,7 +930,7 @@ namespace py {
             typedef obj_array_adapter<Item,FullName,GC,ReadOnly> self_t;
         
             reinterpret_cast<self_t*>(self)->~self_t();
-            (*self_t::pytype.tp_free)(self);
+            (*self_t::pytype()->tp_free)(self);
         },
         type_object_abbrev::tp_flags = obj_array_adapter<Item,FullName,GC,ReadOnly>::tp_flags,
         type_object_abbrev::tp_as_sequence = &obj_array_adapter<Item,FullName,GC,ReadOnly>::seq_methods,

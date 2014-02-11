@@ -89,47 +89,54 @@ class NTracer(object):
     
     Instances of ``NTracer`` are cached, so invoking ``NTracer`` while another
     instance with the same dimension already exists, will simply give you the
-    first instance.
+    first instance (unless ``force_generic`` is given a value of ``True``).
     
     :param integer dimension: The value that will be automatically given to any
         function/method/constructor that requires a ``dimension`` parameter.
+    :param boolean force_generic: If ``True``, :py:mod:`.tracern` will be used
+        even if a specialized version exists. This is mainly for testing.
     """
     
     _cache = weakref.WeakValueDictionary()
     
-    def __new__(cls,dimension):
-        obj = NTracer._cache.get(dimension)
+    def __new__(cls,dimension,force_generic=False):
+        if not force_generic:
+            obj = NTracer._cache.get(dimension)
+            if obj is not None: return obj
         
-        if obj is None:
-            obj = object.__new__(cls)
-            
+        obj = object.__new__(cls)
+        
+        if force_generic:
+            mod = importlib.import_module('ntracer.tracern')
+        else:
             try:
                 mod = importlib.import_module('ntracer.tracer{0:d}'.format(dimension))
             except ImportError:
                 mod = importlib.import_module('ntracer.tracern')
-            
-            obj.dimension = dimension
-            obj.Vector = vector_wrapper(mod,dimension)
-            obj.Matrix = matrix_wrapper(mod,dimension)
-            obj.Camera = camera_wrapper(mod,dimension)
-            obj.BoxScene = boxscene_wrapper(mod,dimension)
-            obj.AABB = aabb_wrapper(mod,dimension)
-            
-            for n in [
-                'CompositeScene',
-                'KDNode',
-                'KDLeaf',
-                'KDBranch',
-                'Primitive',
-                'PrimitivePrototype',
-                'Solid',
-                'SolidPrototype',
-                'Triangle',
-                'TrianglePrototype',
-                'dot',
-                'cross']:
-                setattr(obj,n,getattr(mod,n))
-            
+        
+        obj.dimension = dimension
+        obj.Vector = vector_wrapper(mod,dimension)
+        obj.Matrix = matrix_wrapper(mod,dimension)
+        obj.Camera = camera_wrapper(mod,dimension)
+        obj.BoxScene = boxscene_wrapper(mod,dimension)
+        obj.AABB = aabb_wrapper(mod,dimension)
+        
+        for n in [
+            'CompositeScene',
+            'KDNode',
+            'KDLeaf',
+            'KDBranch',
+            'Primitive',
+            'PrimitivePrototype',
+            'Solid',
+            'SolidPrototype',
+            'Triangle',
+            'TrianglePrototype',
+            'dot',
+            'cross']:
+            setattr(obj,n,getattr(mod,n))
+        
+        if not force_generic:
             NTracer._cache[dimension] = obj
             
         return obj

@@ -72,6 +72,13 @@ struct color {
         R /= b.R; G /= b.G; B /= b.B;
         return *this;
     }
+    
+    bool operator==(const color &b) const {
+        return R == b.R && G == b.G && B == b.B;
+    }
+    bool operator!=(const color &b) const {
+        return R != b.R || G != b.G || B != b.B;
+    }
 
     float R,G,B;
 };
@@ -96,6 +103,7 @@ inline color operator-(float c,const color& v) {
 struct material {
     color c;
     float opacity, reflectivity;
+    material(color c,float opacity=1,float reflectivity=0) : c(c), opacity(opacity), reflectivity(reflectivity) {}
 };
 
 #endif
