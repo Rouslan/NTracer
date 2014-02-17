@@ -7,7 +7,7 @@
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     
-    <title>ntracer Package &mdash; NTracer 0.2 documentation</title>
+    <title>ntracer Package &mdash; NTracer 0.3 documentation</title>
     
     <link rel="stylesheet" href="../_static/nature.css" type="text/css" />
     <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
@@ -15,7 +15,7 @@
     <script type="text/javascript">
       var DOCUMENTATION_OPTIONS = {
         URL_ROOT:    '../',
-        VERSION:     '0.2',
+        VERSION:     '0.3',
         COLLAPSE_INDEX: false,
         FILE_SUFFIX: '',
         HAS_SOURCE:  true
@@ -24,7 +24,7 @@
     <script type="text/javascript" src="../_static/jquery.js"></script>
     <script type="text/javascript" src="../_static/underscore.js"></script>
     <script type="text/javascript" src="../_static/doctools.js"></script>
-    <link rel="top" title="NTracer 0.2 documentation" href="../" />
+    <link rel="top" title="NTracer 0.3 documentation" href="../" />
     <link rel="prev" title="Basic Usage" href="../example/" /> 
   </head>
   <body>
@@ -40,7 +40,7 @@
         <li class="right" >
           <a href="../example/" title="Basic Usage"
              accesskey="P">previous</a> |</li>
-        <li><a href="../">NTracer 0.2 documentation</a> &raquo;</li> 
+        <li><a href="../">NTracer 0.3 documentation</a> &raquo;</li> 
       </ul>
     </div>  
 
@@ -53,12 +53,102 @@
 <h1>ntracer Package<a class="headerlink" href="#ntracer-package" title="Permalink to this headline">¶</a></h1>
 <div class="section" id="module-ntracer.__init__">
 <span id="init-module"></span><h2><tt class="xref py py-mod docutils literal"><span class="pre">__init__</span></tt> Module<a class="headerlink" href="#module-ntracer.__init__" title="Permalink to this headline">¶</a></h2>
-<p>The names <a class="reference internal" href="#ntracer.render.Renderer" title="ntracer.render.Renderer"><tt class="xref py py-class docutils literal"><span class="pre">render.Renderer</span></tt></a>, <a class="reference internal" href="#ntracer.wrapper.NTracer" title="ntracer.wrapper.NTracer"><tt class="xref py py-class docutils literal"><span class="pre">wrapper.NTracer</span></tt></a>,
+<p>The names <a class="reference internal" href="#ntracer.render.Color" title="ntracer.render.Color"><tt class="xref py py-class docutils literal"><span class="pre">render.Color</span></tt></a>, <a class="reference internal" href="#ntracer.render.Material" title="ntracer.render.Material"><tt class="xref py py-class docutils literal"><span class="pre">render.Material</span></tt></a>,
+<a class="reference internal" href="#ntracer.render.Renderer" title="ntracer.render.Renderer"><tt class="xref py py-class docutils literal"><span class="pre">render.Renderer</span></tt></a>, <a class="reference internal" href="#ntracer.wrapper.NTracer" title="ntracer.wrapper.NTracer"><tt class="xref py py-class docutils literal"><span class="pre">wrapper.NTracer</span></tt></a>,
 <a class="reference internal" href="#ntracer.wrapper.CUBE" title="ntracer.wrapper.CUBE"><tt class="xref py py-data docutils literal"><span class="pre">wrapper.CUBE</span></tt></a>, <a class="reference internal" href="#ntracer.wrapper.SPHERE" title="ntracer.wrapper.SPHERE"><tt class="xref py py-data docutils literal"><span class="pre">wrapper.SPHERE</span></tt></a> and
-<a class="reference internal" href="#ntracer.kdtree_builder.build_composite_scene" title="ntracer.kdtree_builder.build_composite_scene"><tt class="xref py py-func docutils literal"><span class="pre">kdtree_builder.build_composite_scene()</span></tt></a> are imported here for convenience.</p>
+<a class="reference internal" href="#ntracer.kdtree_builder.build_composite_scene" title="ntracer.kdtree_builder.build_composite_scene"><tt class="xref py py-func docutils literal"><span class="pre">kdtree_builder.build_composite_scene()</span></tt></a> are imported here for
+convenience.</p>
 </div>
 <div class="section" id="module-ntracer.render">
 <span id="render-module"></span><h2><tt class="xref py py-mod docutils literal"><span class="pre">render</span></tt> Module<a class="headerlink" href="#module-ntracer.render" title="Permalink to this headline">¶</a></h2>
+<dl class="class">
+<dt id="ntracer.render.Color">
+<em class="property">class </em><tt class="descname">Color</tt><big>(</big><em>r</em>, <em>g</em>, <em>b</em><big>)</big><a class="headerlink" href="#ntracer.render.Color" title="Permalink to this definition">¶</a></dt>
+<dd><p>A red-green-blue triplet specifying a color.</p>
+<p>For each component, zero represents its minimum value and one represents its
+maximum value. Therefore, <tt class="code docutils literal"><span class="pre">Color(0,0,0)</span></tt> represents black,
+<tt class="code docutils literal"><span class="pre">Color(1,1,1)</span></tt> represents white and <tt class="code docutils literal"><span class="pre">Color(0,0,0.5)</span></tt> represents
+dark blue.</p>
+<p>Although values outside of 0-1 are allowed, they are clipped to the normal
+range when drawn onto a <a class="reference external" href="http://www.pygame.org/docs/ref/surface.html#pygame.Surface">pygame.Surface</a> object. Such
+values will, however, affect how reflections and transparency are
+calculated.</p>
+<p>Instances of this class are read-only.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>r</strong> (<em>number</em>) &#8211; Red component</li>
+<li><strong>g</strong> (<em>number</em>) &#8211; Green component</li>
+<li><strong>b</strong> (<em>number</em>) &#8211; Blue component</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+<dl class="attribute">
+<dt id="ntracer.render.Color.r">
+<tt class="descname">r</tt><a class="headerlink" href="#ntracer.render.Color.r" title="Permalink to this definition">¶</a></dt>
+<dd><p>Red component</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="ntracer.render.Color.g">
+<tt class="descname">g</tt><a class="headerlink" href="#ntracer.render.Color.g" title="Permalink to this definition">¶</a></dt>
+<dd><p>Green component</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="ntracer.render.Color.b">
+<tt class="descname">b</tt><a class="headerlink" href="#ntracer.render.Color.b" title="Permalink to this definition">¶</a></dt>
+<dd><p>Blue component</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="ntracer.render.Material">
+<em class="property">class </em><tt class="descname">Material</tt><big>(</big><em>color</em><span class="optional">[</span>, <em>opacity=1</em>, <em>reflectivity=0</em><span class="optional">]</span><big>)</big><a class="headerlink" href="#ntracer.render.Material" title="Permalink to this definition">¶</a></dt>
+<dd><p>Specifies how light will interact with a primitive.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>color</strong> &#8211; An instance of <a class="reference internal" href="#ntracer.render.Color" title="ntracer.render.Color"><tt class="xref py py-class docutils literal"><span class="pre">Color</span></tt></a> or a tuple with three
+numbers.</li>
+<li><strong>opacity</strong> (<em>number</em>) &#8211; A value between 0 and 1 specifying transparency.</li>
+<li><strong>reflectivity</strong> (<em>number</em>) &#8211; A value between 0 and 1 specifying reflectivity.</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+<dl class="attribute">
+<dt id="ntracer.render.Material.color">
+<tt class="descname">color</tt><a class="headerlink" href="#ntracer.render.Material.color" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="attribute">
+<dt id="ntracer.render.Material.opacity">
+<tt class="descname">opacity</tt><a class="headerlink" href="#ntracer.render.Material.opacity" title="Permalink to this definition">¶</a></dt>
+<dd><p>A value between 0 and 1 specifying transparency.</p>
+<p>0 mean completely transparent. 1 means completely opaque.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="ntracer.render.Material.reflectivity">
+<tt class="descname">reflectivity</tt><a class="headerlink" href="#ntracer.render.Material.reflectivity" title="Permalink to this definition">¶</a></dt>
+<dd><p>A value between 0 and 1 specifying reflectivity.</p>
+<p>0 means does not reflect at all. 1 means 100% reflective. The color of
+the reflection is multiplied by <a class="reference internal" href="#ntracer.render.Material.color" title="ntracer.render.Material.color"><tt class="xref py py-attr docutils literal"><span class="pre">color</span></tt></a>, thus if
+<a class="reference internal" href="#ntracer.render.Material.color" title="ntracer.render.Material.color"><tt class="xref py py-attr docutils literal"><span class="pre">color</span></tt></a> is <tt class="docutils literal"><span class="pre">(1,0,0)</span></tt>, the reflection will always be in shades
+of red.</p>
+</dd></dl>
+
+</dd></dl>
+
 <dl class="class">
 <dt id="ntracer.render.Renderer">
 <em class="property">class </em><tt class="descname">Renderer</tt><big>(</big><span class="optional">[</span><em>threads=0</em><span class="optional">]</span><big>)</big><a class="headerlink" href="#ntracer.render.Renderer" title="Permalink to this definition">¶</a></dt>
@@ -474,7 +564,23 @@ function will raise an exception instead.</p>
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>fov</strong> &#8211; The new field of vision in radians.</td>
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>fov</strong> (<em>number</em>) &#8211; The new field of vision in radians.</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="ntracer.tracern.CompositeScene.set_max_reflect_depth">
+<tt class="descname">set_max_reflect_depth</tt><big>(</big><em>depth</em><big>)</big><a class="headerlink" href="#ntracer.tracern.CompositeScene.set_max_reflect_depth" title="Permalink to this definition">¶</a></dt>
+<dd><p>Set the value of <a class="reference internal" href="#ntracer.tracern.CompositeScene.max_reflect_depth" title="ntracer.tracern.CompositeScene.max_reflect_depth"><tt class="xref py py-attr docutils literal"><span class="pre">max_reflect_depth</span></tt></a>.</p>
+<p>If the scene has been locked by a <a class="reference internal" href="#ntracer.render.Renderer" title="ntracer.render.Renderer"><tt class="xref py py-class docutils literal"><span class="pre">render.Renderer</span></tt></a>, this
+function will raise an exception instead.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>depth</strong> (<em>integer</em>) &#8211; The new value.</td>
 </tr>
 </tbody>
 </table>
@@ -493,6 +599,18 @@ function will raise an exception instead.</p>
 <tt class="descname">locked</tt><a class="headerlink" href="#ntracer.tracern.CompositeScene.locked" title="Permalink to this definition">¶</a></dt>
 <dd><p>A boolean specifying whether or not the scene is locked.</p>
 <p>This attribute cannot be modified in Python code.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="ntracer.tracern.CompositeScene.max_reflect_depth">
+<tt class="descname">max_reflect_depth</tt><a class="headerlink" href="#ntracer.tracern.CompositeScene.max_reflect_depth" title="Permalink to this definition">¶</a></dt>
+<dd><p>The maximum number of times a ray is allowed to bounce.</p>
+<p>The default value is 4.</p>
+<p>Recursive reflections require shooting rays multiple times per pixel,
+thus lower values can improve performance at the cost of image quality.
+A value of 0 disables reflections altogether.</p>
+<p>This attribute is read-only. To modify the value, use
+<a class="reference internal" href="#ntracer.tracern.CompositeScene.set_fov" title="ntracer.tracern.CompositeScene.set_fov"><tt class="xref py py-meth docutils literal"><span class="pre">set_fov()</span></tt></a>.</p>
 </dd></dl>
 
 </dd></dl>
@@ -587,7 +705,7 @@ to.</li>
 <dl class="method">
 <dt id="ntracer.tracern.KDLeaf.__getitem__">
 <tt class="descname">__getitem__</tt><big>(</big><em>index</em><big>)</big><a class="headerlink" href="#ntracer.tracern.KDLeaf.__getitem__" title="Permalink to this definition">¶</a></dt>
-<dd><p><tt class="code docutils literal"><span class="pre">self.__getitem__(i)</span></tt> &lt;==&gt; <tt class="code docutils literal"><span class="pre">x[i]</span></tt></p>
+<dd><p><tt class="code docutils literal"><span class="pre">self.__getitem__(i)</span></tt> &lt;==&gt; <tt class="code docutils literal"><span class="pre">self[i]</span></tt></p>
 </dd></dl>
 
 <dl class="method">
@@ -611,11 +729,17 @@ to.</li>
 <p>This class cannot be instantiated directly in Python code.</p>
 <dl class="method">
 <dt id="ntracer.tracern.KDNode.intersects">
-<tt class="descname">intersects</tt><big>(</big><em>origin</em>, <em>direction</em><span class="optional">[</span>, <em>t_near</em>, <em>t_far</em><span class="optional">]</span><big>)</big> &rarr; tuple or None<a class="headerlink" href="#ntracer.tracern.KDNode.intersects" title="Permalink to this definition">¶</a></dt>
+<tt class="descname">intersects</tt><big>(</big><em>origin</em>, <em>direction</em><span class="optional">[</span>, <em>t_near</em>, <em>t_far</em><span class="optional">]</span><big>)</big> &rarr; list<a class="headerlink" href="#ntracer.tracern.KDNode.intersects" title="Permalink to this definition">¶</a></dt>
 <dd><p>Tests whether a given ray intersects.</p>
-<p>If the ray intersects with an object under the node, a tuple is returned
-with the point of intersection and the normal vector of the surface at
-the intersection. Otherwise, the return value is <tt class="docutils literal"><span class="pre">None</span></tt>.</p>
+<p>The return value is a list containing one tuple for every intersection
+that occured. Multiple intersections can occur when the ray passes
+through primitives that have an opacity of less than one. Each tuple
+will contain the distance between <tt class="docutils literal"><span class="pre">origin</span></tt> and the intersection, the
+point of intersection, the normal of the surface intersected and the
+material of the intersected primitive. If an opaque primitive is
+intersected, it will always be the last element and have the greatest
+distance, but every other element will be in an arbitrary order. If no
+intersection occurs, the return value will be an empty list.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
@@ -810,7 +934,7 @@ even as a base class for another class.</p>
 <tt class="descname">intersects</tt><big>(</big><em>origin</em>, <em>direction</em><big>)</big> &rarr; tuple or None<a class="headerlink" href="#ntracer.tracern.Primitive.intersects" title="Permalink to this definition">¶</a></dt>
 <dd><p>Tests whether a given ray intersects.</p>
 <p>If the ray intersects with the object, a tuple is returned with the
-distance between origin and the point of intersection, the point of
+distance between <tt class="docutils literal"><span class="pre">origin</span></tt> and the intersection, the point of
 intersection and the normal vector of the surface at the intersection.
 Otherwise, the return value is <tt class="docutils literal"><span class="pre">None</span></tt>.</p>
 <table class="docutils field-list" frame="void" rules="none">
@@ -825,6 +949,12 @@ Otherwise, the return value is <tt class="docutils literal"><span class="pre">No
 </tr>
 </tbody>
 </table>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="ntracer.tracern.Primitive.material">
+<tt class="descname">material</tt><a class="headerlink" href="#ntracer.tracern.Primitive.material" title="Permalink to this definition">¶</a></dt>
+<dd><p>The material of the primitive.</p>
 </dd></dl>
 
 </dd></dl>
@@ -854,11 +984,17 @@ bounding box.</p>
 bounding box.</p>
 </dd></dl>
 
+<dl class="attribute">
+<dt id="ntracer.tracern.PrimitivePrototype.material">
+<tt class="descname">material</tt><a class="headerlink" href="#ntracer.tracern.PrimitivePrototype.material" title="Permalink to this definition">¶</a></dt>
+<dd><p>The material of the primitive.</p>
+</dd></dl>
+
 </dd></dl>
 
 <dl class="class">
 <dt id="ntracer.tracern.Solid">
-<em class="property">class </em><tt class="descname">Solid</tt><big>(</big><em>type</em>, <em>orientation</em>, <em>position</em><big>)</big><a class="headerlink" href="#ntracer.tracern.Solid" title="Permalink to this definition">¶</a></dt>
+<em class="property">class </em><tt class="descname">Solid</tt><big>(</big><em>type</em>, <em>position</em>, <em>orientation</em>, <em>material</em><big>)</big><a class="headerlink" href="#ntracer.tracern.Solid" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference internal" href="#ntracer.tracern.Primitive" title="ntracer.tracern.Primitive"><tt class="xref py py-class docutils literal"><span class="pre">Primitive</span></tt></a></p>
 <p>A non-flat geometric primitive.</p>
 <p>It is either a hypercube or a hypersphere.</p>
@@ -873,6 +1009,7 @@ bounding box.</p>
 <li><strong>position</strong> (<em>vector</em>) &#8211; The position of the solid.</li>
 <li><strong>orientation</strong> (<em>Matrix</em>) &#8211; A transformation matrix. The matrix must be
 invertable.</li>
+<li><strong>material</strong> (<em>Material</em>) &#8211; A material to apply to the solid.</li>
 </ul>
 </td>
 </tr>
@@ -913,7 +1050,7 @@ invertable.</li>
 
 <dl class="class">
 <dt id="ntracer.tracern.SolidPrototype">
-<em class="property">class </em><tt class="descname">SolidPrototype</tt><big>(</big><em>type</em>, <em>orientation</em>, <em>position</em><big>)</big><a class="headerlink" href="#ntracer.tracern.SolidPrototype" title="Permalink to this definition">¶</a></dt>
+<em class="property">class </em><tt class="descname">SolidPrototype</tt><big>(</big><em>type</em>, <em>position</em>, <em>orientation</em>, <em>material</em><big>)</big><a class="headerlink" href="#ntracer.tracern.SolidPrototype" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference internal" href="#ntracer.tracern.PrimitivePrototype" title="ntracer.tracern.PrimitivePrototype"><tt class="xref py py-class docutils literal"><span class="pre">PrimitivePrototype</span></tt></a></p>
 <p>A solid with extra data needed for quick spacial partitioning.</p>
 <p>Instances of this class are read-only.</p>
@@ -927,6 +1064,7 @@ invertable.</li>
 <li><strong>position</strong> (<em>vector</em>) &#8211; The position of the solid.</li>
 <li><strong>orientation</strong> (<em>Matrix</em>) &#8211; A transformation matrix. The matrix must be
 invertable.</li>
+<li><strong>material</strong> (<em>Material</em>) &#8211; A material to apply to the solid.</li>
 </ul>
 </td>
 </tr>
@@ -967,7 +1105,7 @@ invertable.</li>
 
 <dl class="class">
 <dt id="ntracer.tracern.Triangle">
-<em class="property">class </em><tt class="descname">Triangle</tt><big>(</big><em>p1</em>, <em>face_normal</em>, <em>edge_normals</em><big>)</big><a class="headerlink" href="#ntracer.tracern.Triangle" title="Permalink to this definition">¶</a></dt>
+<em class="property">class </em><tt class="descname">Triangle</tt><big>(</big><em>p1</em>, <em>face_normal</em>, <em>edge_normals</em>, <em>material</em><big>)</big><a class="headerlink" href="#ntracer.tracern.Triangle" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference internal" href="#ntracer.tracern.Primitive" title="ntracer.tracern.Primitive"><tt class="xref py py-class docutils literal"><span class="pre">Primitive</span></tt></a></p>
 <p>A simplex of codimension 1.</p>
 <p>Note: it is unlikely that you will need to call this constructor directly.
@@ -986,6 +1124,7 @@ perimeter/hull.</p>
 <li><strong>p1</strong> (<em>vector</em>) &#8211; </li>
 <li><strong>face_normal</strong> (<em>vector</em>) &#8211; </li>
 <li><strong>edge_normals</strong> (<em>iterable</em>) &#8211; </li>
+<li><strong>material</strong> (<em>Material</em>) &#8211; A material to apply to the simplex.</li>
 </ul>
 </td>
 </tr>
@@ -993,14 +1132,18 @@ perimeter/hull.</p>
 </table>
 <dl class="staticmethod">
 <dt id="ntracer.tracern.Triangle.from_points">
-<em class="property">static </em><tt class="descname">from_points</tt><big>(</big><em>points</em><big>)</big> &rarr; Triangle<a class="headerlink" href="#ntracer.tracern.Triangle.from_points" title="Permalink to this definition">¶</a></dt>
+<em class="property">static </em><tt class="descname">from_points</tt><big>(</big><em>points</em>, <em>material</em><big>)</big> &rarr; Triangle<a class="headerlink" href="#ntracer.tracern.Triangle.from_points" title="Permalink to this definition">¶</a></dt>
 <dd><p>Create a <a class="reference internal" href="#ntracer.tracern.Triangle" title="ntracer.tracern.Triangle"><tt class="xref py py-class docutils literal"><span class="pre">Triangle</span></tt></a> object from the vertices of the simplex.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>points</strong> &#8211; A sequence of vectors specifying the vertices. The number
-of vectors must equal their dimension.</td>
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>points</strong> &#8211; A sequence of vectors specifying the vertices. The number
+of vectors must equal their dimension.</li>
+<li><strong>material</strong> (<em>Material</em>) &#8211; A material to apply to the simplex.</li>
+</ul>
+</td>
 </tr>
 </tbody>
 </table>
@@ -1077,7 +1220,7 @@ point that&#8217;s kept.</p>
 
 <dl class="class">
 <dt id="ntracer.tracern.TrianglePrototype">
-<em class="property">class </em><tt class="descname">TrianglePrototype</tt><big>(</big><em>points</em><big>)</big><a class="headerlink" href="#ntracer.tracern.TrianglePrototype" title="Permalink to this definition">¶</a></dt>
+<em class="property">class </em><tt class="descname">TrianglePrototype</tt><big>(</big><em>points</em>, <em>material</em><big>)</big><a class="headerlink" href="#ntracer.tracern.TrianglePrototype" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference internal" href="#ntracer.tracern.PrimitivePrototype" title="ntracer.tracern.PrimitivePrototype"><tt class="xref py py-class docutils literal"><span class="pre">PrimitivePrototype</span></tt></a></p>
 <p>A simplex with extra data needed for quick spacial partitioning.</p>
 <p>Unlike the <a class="reference internal" href="#ntracer.tracern.Triangle" title="ntracer.tracern.Triangle"><tt class="xref py py-class docutils literal"><span class="pre">Triangle</span></tt></a> class, this keeps the vertices that make up
@@ -1087,8 +1230,12 @@ the simplex.</p>
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>points</strong> &#8211; A sequence of vectors specifying the vertices of the simplex.
-The number of vectors must equal their dimension.</td>
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>points</strong> &#8211; A sequence of vectors specifying the vertices of the simplex.
+The number of vectors must equal their dimension.</li>
+<li><strong>material</strong> (<em>Material</em>) &#8211; A material to apply to the simplex.</li>
+</ul>
+</td>
 </tr>
 </tbody>
 </table>
@@ -1323,13 +1470,18 @@ tracer<em>{dimension}</em> version if it exists, and falls back to
 <a class="reference internal" href="#module-ntracer.tracern" title="ntracer.tracern"><tt class="xref py py-mod docutils literal"><span class="pre">tracern</span></tt></a> otherwise.</p>
 <p>Instances of <tt class="docutils literal"><span class="pre">NTracer</span></tt> are cached, so invoking <tt class="docutils literal"><span class="pre">NTracer</span></tt> while another
 instance with the same dimension already exists, will simply give you the
-first instance.</p>
+first instance (unless <tt class="docutils literal"><span class="pre">force_generic</span></tt> is given a value of <tt class="docutils literal"><span class="pre">True</span></tt>).</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>dimension</strong> (<em>integer</em>) &#8211; The value that will be automatically given to any
-function/method/constructor that requires a <tt class="docutils literal"><span class="pre">dimension</span></tt> parameter.</td>
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>dimension</strong> (<em>integer</em>) &#8211; The value that will be automatically given to any
+function/method/constructor that requires a <tt class="docutils literal"><span class="pre">dimension</span></tt> parameter.</li>
+<li><strong>force_generic</strong> (<em>boolean</em>) &#8211; If <tt class="docutils literal"><span class="pre">True</span></tt>, <a class="reference internal" href="#module-ntracer.tracern" title="ntracer.tracern"><tt class="xref py py-mod docutils literal"><span class="pre">tracern</span></tt></a> will be used
+even if a specialized version exists. This is mainly for testing.</li>
+</ul>
+</td>
 </tr>
 </tbody>
 </table>
@@ -1432,7 +1584,7 @@ interchangeable with each other.</p>
         <li class="right" >
           <a href="../example/" title="Basic Usage"
              >previous</a> |</li>
-        <li><a href="../">NTracer 0.2 documentation</a> &raquo;</li> 
+        <li><a href="../">NTracer 0.3 documentation</a> &raquo;</li> 
       </ul>
     </div>
     <div class="footer">
