@@ -56,7 +56,7 @@
 #define OBJ_SETTER(T,EXPR) [](PyObject *obj_self,PyObject *arg,void*) -> int { \
     try {                                                                      \
         setter_no_delete(arg);                                                 \
-        auto self = reinterpret_cast<T*>(self);                                \
+        auto self = reinterpret_cast<T*>(obj_self);                                \
         EXPR = from_pyobject<typename std::decay<decltype(EXPR)>::type>(arg);  \
         return 0;                                                              \
     } PY_EXCEPT_HANDLERS(-1)                                                   \
@@ -304,12 +304,16 @@ template<typename T,typename=wrapped_type<typename std::decay<T>::type> > PyObje
     return reinterpret_cast<PyObject*>(new wrapped_type<typename std::decay<T>::type>(std::forward<T>(x)));
 }
 
-template<typename T> T &get_base(PyObject *o) {
-    if(UNLIKELY(!PyObject_TypeCheck(o,wrapped_type<T>::pytype()))) {
-        PyErr_Format(PyExc_TypeError,"object is not an instance of %s",wrapped_type<T>::pytype()->tp_name);
+template<typename T> T *checked_py_cast(PyObject *o) {
+    if(UNLIKELY(!PyObject_TypeCheck(o,T::pytype()))) {
+        PyErr_Format(PyExc_TypeError,"object is not an instance of %s",T::pytype()->tp_name);
         throw py_error_set();
     }
-    return reinterpret_cast<wrapped_type<T>*>(o)->get_base();
+    return reinterpret_cast<T*>(o);
+}
+
+template<typename T> T &get_base(PyObject *o) {
+    return checked_py_cast<wrapped_type<T> >(o)->get_base();
 }
 
 template<typename T> T *get_base_if_is_type(PyObject *o) {

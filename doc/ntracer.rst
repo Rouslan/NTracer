@@ -16,6 +16,67 @@ ntracer Package
 
 .. py:module:: ntracer.render
 
+.. py:class:: Color(r,g,b)
+
+    A red-green-blue triplet specifying a color.
+    
+    For each component, zero represents its minimum value and one represents its
+    maximum value. Therefore, :code:`Color(0,0,0)` represents black,
+    :code:`Color(1,1,1)` represents white and :code:`Color(0,0,0.5)` represents
+    dark blue.
+    
+    Although values outside of 0-1 are allowed, they are clipped to the normal
+    range when drawn onto a `pygame.Surface
+    <http://www.pygame.org/docs/ref/surface.html#pygame.Surface>`_ object. Such
+    values will, however, affect how reflections and transparency are
+    calculated.
+    
+    Instances of this class are read-only.
+    
+    :param number r: Red component
+    :param number g: Green component
+    :param number b: Blue component
+    
+    .. py:attribute:: r
+    
+        Red component
+    
+    .. py:attribute:: g
+    
+        Green component
+    
+    .. py:attribute:: b
+    
+        Blue component
+
+
+.. py:class:: Material(color,[opacity=1,reflectivity=0])
+
+    Specifies how light will interact with a primitive.
+    
+    :param color: An instance of :py:class:`Color` or a tuple with three
+        numbers.
+    :param number opacity: A value between 0 and 1 specifying transparency.
+    :param number reflectivity: A value between 0 and 1 specifying reflectivity.
+    
+    .. py:attribute:: color
+    
+    .. py:attribute:: opacity
+    
+        A value between 0 and 1 specifying transparency.
+        
+        0 mean completely transparent. 1 means completely opaque.
+    
+    .. py:attribute:: reflectivity
+    
+        A value between 0 and 1 specifying reflectivity.
+        
+        0 means does not reflect at all. 1 means 100% reflective. The color of
+        the reflection is multiplied by :py:attr:`color`, thus if
+        :py:attr:`color` is ``(1,0,0)``, the reflection will always be in shades
+        of red.
+
+
 .. py:class:: Renderer([threads=0])
 
     A multi-threaded scene renderer.
@@ -320,7 +381,16 @@ can't add a tuple and a :py:class:`Vector` together).
         If the scene has been locked by a :py:class:`.render.Renderer`, this
         function will raise an exception instead.
 
-        :param fov: The new field of vision in radians.
+        :param number fov: The new field of vision in radians.
+        
+    .. py:method:: set_max_reflect_depth(depth)
+
+        Set the value of :py:attr:`max_reflect_depth`.
+
+        If the scene has been locked by a :py:class:`.render.Renderer`, this
+        function will raise an exception instead.
+
+        :param integer depth: The new value.
 
     .. py:attribute:: fov
 
@@ -334,6 +404,19 @@ can't add a tuple and a :py:class:`Vector` together).
         A boolean specifying whether or not the scene is locked.
 
         This attribute cannot be modified in Python code.
+    
+    .. py:attribute:: max_reflect_depth
+
+        The maximum number of times a ray is allowed to bounce.
+        
+        The default value is 4.
+        
+        Recursive reflections require shooting rays multiple times per pixel,
+        thus lower values can improve performance at the cost of image quality.
+        A value of 0 disables reflections altogether.
+
+        This attribute is read-only. To modify the value, use
+        :py:meth:`set_fov`.
 
 
 .. py:class:: FrozenVectorView
@@ -400,7 +483,7 @@ can't add a tuple and a :py:class:`Vector` together).
 
     .. py:method:: __getitem__(index)
 
-        :code:`self.__getitem__(i)` <==> :code:`x[i]`
+        :code:`self.__getitem__(i)` <==> :code:`self[i]`
 
     .. py:method:: __len__()
 
@@ -417,13 +500,19 @@ can't add a tuple and a :py:class:`Vector` together).
 
     This class cannot be instantiated directly in Python code.
 
-    .. py:method:: intersects(origin,direction[,t_near,t_far]) -> tuple or None
+    .. py:method:: intersects(origin,direction[,t_near,t_far]) -> list
 
         Tests whether a given ray intersects.
 
-        If the ray intersects with an object under the node, a tuple is returned
-        with the point of intersection and the normal vector of the surface at
-        the intersection. Otherwise, the return value is ``None``.
+        The return value is a list containing one tuple for every intersection
+        that occured. Multiple intersections can occur when the ray passes
+        through primitives that have an opacity of less than one. Each tuple
+        will contain the distance between ``origin`` and the intersection, the
+        point of intersection, the normal of the surface intersected and the
+        material of the intersected primitive. If an opaque primitive is
+        intersected, it will always be the last element and have the greatest
+        distance, but every other element will be in an arbitrary order. If no
+        intersection occurs, the return value will be an empty list.
 
         :param vector origin: The origin of the ray.
         :param vector direction: The direction of the ray.
@@ -561,12 +650,16 @@ can't add a tuple and a :py:class:`Vector` together).
         Tests whether a given ray intersects.
 
         If the ray intersects with the object, a tuple is returned with the
-        distance between origin and the point of intersection, the point of
+        distance between ``origin`` and the intersection, the point of
         intersection and the normal vector of the surface at the intersection.
         Otherwise, the return value is ``None``.
 
         :param origin: The origin of the ray.
         :param direction: The direction of the ray.
+        
+    .. py:attribute:: material
+    
+        The material of the primitive.
 
 
 .. py:class:: PrimitivePrototype
@@ -588,9 +681,13 @@ can't add a tuple and a :py:class:`Vector` together).
 
         A vector specifying the minimum extent of the primitive's axis aligned
         bounding box.
+    
+    .. py:attribute:: material
+    
+        The material of the primitive.
 
 
-.. py:class:: Solid(type,orientation,position)
+.. py:class:: Solid(type,position,orientation,material)
 
     Bases: :py:class:`Primitive`
 
@@ -605,6 +702,7 @@ can't add a tuple and a :py:class:`Vector` together).
     :param vector position: The position of the solid.
     :param Matrix orientation: A transformation matrix. The matrix must be
         invertable.
+    :param Material material: A material to apply to the solid.
 
     .. py:attribute:: dimension
 
@@ -628,7 +726,7 @@ can't add a tuple and a :py:class:`Vector` together).
         :py:data:`.wrapper.SPHERE`
 
 
-.. py:class:: SolidPrototype(type,orientation,position)
+.. py:class:: SolidPrototype(type,position,orientation,material)
 
     Bases: :py:class:`PrimitivePrototype`
 
@@ -641,6 +739,7 @@ can't add a tuple and a :py:class:`Vector` together).
     :param vector position: The position of the solid.
     :param Matrix orientation: A transformation matrix. The matrix must be
         invertable.
+    :param Material material: A material to apply to the solid.
 
     .. py:attribute:: dimension
 
@@ -664,7 +763,7 @@ can't add a tuple and a :py:class:`Vector` together).
         :py:data:`.wrapper.SPHERE`.
 
 
-.. py:class:: Triangle(p1,face_normal,edge_normals)
+.. py:class:: Triangle(p1,face_normal,edge_normals,material)
 
     Bases: :py:class:`Primitive`
 
@@ -684,13 +783,15 @@ can't add a tuple and a :py:class:`Vector` together).
     :param vector p1:
     :param vector face_normal:
     :param iterable edge_normals:
+    :param Material material: A material to apply to the simplex.
 
-    .. py:staticmethod:: from_points(points) -> Triangle
+    .. py:staticmethod:: from_points(points,material) -> Triangle
 
         Create a :py:class:`Triangle` object from the vertices of the simplex.
 
         :param points: A sequence of vectors specifying the vertices. The number
             of vectors must equal their dimension.
+        :param Material material: A material to apply to the simplex.
 
     .. py:attribute:: d
 
@@ -739,7 +840,7 @@ can't add a tuple and a :py:class:`Vector` together).
         A simplex vertex.
 
 
-.. py:class:: TrianglePrototype(points)
+.. py:class:: TrianglePrototype(points,material)
 
     Bases: :py:class:`PrimitivePrototype`
 
@@ -752,6 +853,7 @@ can't add a tuple and a :py:class:`Vector` together).
 
     :param points: A sequence of vectors specifying the vertices of the simplex.
         The number of vectors must equal their dimension.
+    :param Material material: A material to apply to the simplex.
 
     .. py:attribute:: dimension
 

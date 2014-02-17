@@ -1,5 +1,5 @@
-#ifndef scene_hpp
-#define scene_hpp
+#ifndef render_hpp
+#define render_hpp
 
 #include "light.hpp"
 #include "py_common.hpp"
@@ -28,16 +28,18 @@ template<> struct _wrapped_type<color> {
     typedef simple_py_wrapper<color,color_obj_base> type;
 };
 
-struct material_obj_base {
+struct material {
 #ifdef RENDER_MODULE
     CONTAINED_PYTYPE_DEF
 #else
     static PyTypeObject *_pytype;
     static PyTypeObject *pytype() { return _pytype; }
 #endif
-};
-template<> struct _wrapped_type<material> {
-    typedef simple_py_wrapper<material,material_obj_base> type;
+    
+    PyObject_HEAD
+    
+    color c;
+    float opacity, reflectivity;
 };
 
 #endif

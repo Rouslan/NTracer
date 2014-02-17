@@ -1,4 +1,4 @@
-
+from . import render
 from . import wrapper
 
 class FileFormatError(Exception):
@@ -14,6 +14,8 @@ def load_obj(file,nt=None):
         nt = wrapper.NTracer(3)
     elif nt.dimension != 3:
         raise ValueError('Wavefront .obj files only support 3-dimensional geometry')
+    
+    m = render.Material((1,1,1))
         
     vertices = []
     triangles = []
@@ -37,6 +39,6 @@ def load_obj(file,nt=None):
                     raise FileFormatError()
             
                 for i in range(1,len(coords)-1):
-                    triangles.append(nt.TrianglePrototype([coords[0],coords[i],coords[i+1]]))
+                    triangles.append(nt.TrianglePrototype([coords[0],coords[i],coords[i+1]],m))
                 
     return triangles

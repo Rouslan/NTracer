@@ -9,7 +9,7 @@ import os.path
 import sys
 import subprocess
 from itertools import combinations
-from ntracer import NTracer,Renderer,build_composite_scene,CUBE
+from ntracer import NTracer,Material,Renderer,build_composite_scene,CUBE
 
 
 ROT_SENSITIVITY = 0.005
@@ -64,6 +64,7 @@ parser.add_argument('-d','--cam-dist',metavar='DIST',type=float,default=4,
 args = parser.parse_args()
 
 
+material = Material((1,0.5,0.5))
 nt = NTracer(max(len(args.schlafli)+1,3))
 
 
@@ -132,7 +133,7 @@ class Polygon:
         return any(almost_equal(p,test_p) for test_p in self.base_points)
     
     def hull(self,position=nt.Vector(),orientation=nt.Matrix.identity()):
-        return map(nt.TrianglePrototype,self.tesselate(position,orientation))
+        return [nt.TrianglePrototype(tri,material) for tri in self.tesselate(position,orientation)]
     
     def outer_radius_square(self):
         r = 1/math.cos(math.pi/len(self.parts))
@@ -141,7 +142,7 @@ class Polygon:
 
 # Cells are enlarged ever so slightly to prevent the view frustum from being
 # wedged exactly between two adjacent primitives, which, do to limited
-# precision, would cause that volume to appear to vanish.
+# precision, can cause that volume to appear to vanish.
 fuzz_scale = nt.Matrix.scale(1.00001)
 class PolyTope:
     def __init__(self,dihedral_s,face_radius,parts=None):
@@ -191,7 +192,7 @@ class PolyTope:
     def hull(self,position=nt.Vector(),orientation=nt.Matrix.identity()):
         tris = []
         for p in self.parts: tris += p.tesselate(position,orientation)
-        return map(nt.TrianglePrototype,tris)
+        return [nt.TrianglePrototype(tri,material) for tri in tris]
     
     def any_point(self,position,orientation):
         return self.parts[0].any_point(position,orientation)

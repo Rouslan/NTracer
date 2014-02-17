@@ -272,7 +272,7 @@ unsigned int cpu_cores() {
 void draw_pixel(const Scene *scene,byte *&dest,const SDL_Surface *surface,int x,int y) {
     color c = scene->calculate_color(x,y,surface->w,surface->h);
 
-    Uint32 pval = SDL_MapRGB(surface->format,to_byte(c.R),to_byte(c.G),to_byte(c.B));
+    Uint32 pval = SDL_MapRGB(surface->format,to_byte(c.r),to_byte(c.g),to_byte(c.b));
     switch(surface->format->BytesPerPixel) {
     case 4:
         *reinterpret_cast<Uint32*>(dest) = pval;
@@ -411,7 +411,7 @@ renderer::~renderer() {
 
 PyObject *obj_Scene_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
     PyErr_SetString(PyExc_TypeError,"the Scene type cannot be instantiated directly");
-    return NULL;
+    return nullptr;
 }
 
 PyTypeObject obj_Scene::_pytype = make_type_object(
@@ -584,9 +584,9 @@ PyObject *obj_Color_repr(wrapped_type<color> *self) {
     char *cg = nullptr;
     char *cb = nullptr;
     
-    if((cr = PyOS_double_to_string(base.R,'r',0,0,nullptr))) {
-        if((cg = PyOS_double_to_string(base.G,'r',0,0,nullptr))) {
-            if((cb = PyOS_double_to_string(base.B,'r',0,0,nullptr))) {
+    if((cr = PyOS_double_to_string(base.r,'r',0,0,nullptr))) {
+        if((cg = PyOS_double_to_string(base.g,'r',0,0,nullptr))) {
+            if((cb = PyOS_double_to_string(base.b,'r',0,0,nullptr))) {
                 r = PYSTR(FromFormat)("Color(%s,%s,%s)",cr,cg,cb);
             }
         }
@@ -750,9 +750,9 @@ PyObject *obj_Color_apply(wrapped_type<color> *self,PyObject *_func) {
         py::object func = py::borrowed_ref(_func);
 
         return to_pyobject(color(
-            from_pyobject<float>(func(base.R)),
-            from_pyobject<float>(func(base.G)),
-            from_pyobject<float>(func(base.B))));
+            from_pyobject<float>(func(base.r)),
+            from_pyobject<float>(func(base.g)),
+            from_pyobject<float>(func(base.b))));
     } PY_EXCEPT_HANDLERS(NULL)
 }
 
@@ -778,9 +778,9 @@ PyObject *obj_Color_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
 }
 
 PyMemberDef obj_Color_members[] = {
-    {const_cast<char*>("r"),T_FLOAT,offsetof(wrapped_type<color>,base.R),READONLY,NULL},
-    {const_cast<char*>("g"),T_FLOAT,offsetof(wrapped_type<color>,base.G),READONLY,NULL},
-    {const_cast<char*>("b"),T_FLOAT,offsetof(wrapped_type<color>,base.B),READONLY,NULL},
+    {const_cast<char*>("r"),T_FLOAT,offsetof(wrapped_type<color>,base.r),READONLY,NULL},
+    {const_cast<char*>("g"),T_FLOAT,offsetof(wrapped_type<color>,base.g),READONLY,NULL},
+    {const_cast<char*>("b"),T_FLOAT,offsetof(wrapped_type<color>,base.b),READONLY,NULL},
     {NULL}
 };
 
@@ -797,8 +797,7 @@ PyTypeObject color_obj_base::_pytype = make_type_object(
     tp_new = &obj_Color_new);
 
 
-PyObject *obj_Material_repr(wrapped_type<material> *self) {
-    auto &base = self->get_base();
+PyObject *obj_Material_repr(material *self) {
     PyObject *ret = nullptr;
     char *cr;
     char *cg = nullptr;
@@ -806,15 +805,15 @@ PyObject *obj_Material_repr(wrapped_type<material> *self) {
     char *o = nullptr;
     char *r = nullptr;
     
-    if((cr = PyOS_double_to_string(base.c.R,'r',0,0,nullptr))) {
-        if((cg = PyOS_double_to_string(base.c.G,'r',0,0,nullptr))) {
-            if((cb = PyOS_double_to_string(base.c.B,'r',0,0,nullptr))) {
-                if(base.reflectivity == 0 && base.opacity == 1) {
+    if((cr = PyOS_double_to_string(self->c.r,'r',0,0,nullptr))) {
+        if((cg = PyOS_double_to_string(self->c.g,'r',0,0,nullptr))) {
+            if((cb = PyOS_double_to_string(self->c.b,'r',0,0,nullptr))) {
+                if(self->reflectivity == 0 && self->opacity == 1) {
                     ret = PYSTR(FromFormat)("Material((%s,%s,%s))",cr,cg,cb);
-                } else if((o = PyOS_double_to_string(base.opacity,'r',0,0,nullptr))) {
-                    if(base.reflectivity == 0) {
+                } else if((o = PyOS_double_to_string(self->opacity,'r',0,0,nullptr))) {
+                    if(self->reflectivity == 0) {
                         ret = PYSTR(FromFormat)("Material((%s,%s,%s),%s)",cr,cg,cb,o);
-                    } else if((r = PyOS_double_to_string(base.reflectivity,'r',0,0,nullptr))) {
+                    } else if((r = PyOS_double_to_string(self->reflectivity,'r',0,0,nullptr))) {
                         ret = PYSTR(FromFormat)("Material((%s,%s,%s),%s,%s)",cr,cg,cb,o,r);
                     }
                 }
@@ -845,42 +844,50 @@ PyObject *obj_Material_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
         ga.finished();
         
         auto ptr = py::check_obj(type->tp_alloc(type,0));
-        auto &base = reinterpret_cast<wrapped_type<material>*>(ptr)->alloc_base();
+        auto base = reinterpret_cast<material*>(ptr);
         
         if(PyTuple_Check(obj_c)) {
             if(PyTuple_GET_SIZE(obj_c) != 3) {
                 PyErr_SetString(PyExc_ValueError,"\"color\" must have exactly 3 values");
                 return nullptr;
             }
-            base.c.R = from_pyobject<float>(PyTuple_GET_ITEM(obj_c,0));
-            base.c.G = from_pyobject<float>(PyTuple_GET_ITEM(obj_c,1));
-            base.c.B = from_pyobject<float>(PyTuple_GET_ITEM(obj_c,2));
+            base->c.r = from_pyobject<float>(PyTuple_GET_ITEM(obj_c,0));
+            base->c.g = from_pyobject<float>(PyTuple_GET_ITEM(obj_c,1));
+            base->c.b = from_pyobject<float>(PyTuple_GET_ITEM(obj_c,2));
         } else {
-            base.c = get_base<color>(obj_c);
+            base->c = get_base<color>(obj_c);
         }
         
-        base.opacity = o;
-        base.reflectivity = r;
+        base->opacity = o;
+        base->reflectivity = r;
         
         return ptr;
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
+int obj_Material_set_color(material *self,PyObject *arg,void*) {
+    try {
+        setter_no_delete(arg);
+        self->c = get_base<color>(arg);
+        return 0;
+    } PY_EXCEPT_HANDLERS(-1)
+}
+
 PyGetSetDef obj_Material_getset[] = {
-    {const_cast<char*>("color"),OBJ_GETTER(wrapped_type<material>,self->get_base().c),NULL,NULL,NULL},
+    {const_cast<char*>("color"),OBJ_GETTER(material,self->c),reinterpret_cast<setter>(&obj_Material_set_color),NULL,NULL},
     {NULL}
 };
 
 PyMemberDef obj_Material_members[] = {
-    {const_cast<char*>("opacity"),T_FLOAT,offsetof(wrapped_type<material>,base.opacity),READONLY,NULL},
-    {const_cast<char*>("reflectivity"),T_FLOAT,offsetof(wrapped_type<material>,base.reflectivity),READONLY,NULL},
+    {const_cast<char*>("opacity"),T_FLOAT,offsetof(material,opacity),0,NULL},
+    {const_cast<char*>("reflectivity"),T_FLOAT,offsetof(material,reflectivity),0,NULL},
     {NULL}
 };
 
-PyTypeObject material_obj_base::_pytype = make_type_object(
+PyTypeObject material::_pytype = make_type_object(
     "render.Material",
-    sizeof(wrapped_type<material>),
-    tp_dealloc = destructor_dealloc<wrapped_type<material> >::value,
+    sizeof(material),
+    tp_dealloc = destructor_dealloc<material>::value,
     tp_repr = &obj_Material_repr,
     tp_members = obj_Material_members,
     tp_new = &obj_Material_new);
@@ -921,7 +928,7 @@ extern "C" SHARED(void) initrender(void) {
     obj_Renderer::pytype()->tp_new = &PyType_GenericNew;
     if(UNLIKELY(PyType_Ready(obj_Renderer::pytype()) < 0)) return INIT_ERR_VAL;
     if(UNLIKELY(PyType_Ready(wrapped_type<color>::pytype()) < 0)) return INIT_ERR_VAL;
-    if(UNLIKELY(PyType_Ready(wrapped_type<material>::pytype()) < 0)) return INIT_ERR_VAL;
+    if(UNLIKELY(PyType_Ready(material::pytype()) < 0)) return INIT_ERR_VAL;
 
 #if PY_MAJOR_VERSION >= 3
     PyObject *m = PyModule_Create(&module_def);
@@ -933,7 +940,7 @@ extern "C" SHARED(void) initrender(void) {
     add_class(m,"Scene",obj_Scene::pytype());
     add_class(m,"Renderer",obj_Renderer::pytype());
     add_class(m,"Color",wrapped_type<color>::pytype());
-    add_class(m,"Material",wrapped_type<material>::pytype());
+    add_class(m,"Material",material::pytype());
 
 #if PY_MAJOR_VERSION >= 3
     return m;

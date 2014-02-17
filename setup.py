@@ -206,7 +206,7 @@ setup(name='ntracer',
     url='https://github.com/Rouslan/NTracer',
     version=version.get_version(base_dir) or 'unversioned',
     packages=['ntracer','ntracer.tests'],
-    scripts=['scripts/hypercube.py'],
+    scripts=['scripts/hypercube.py','scripts/polytope.py'],
     ext_package='ntracer',
     ext_modules=[
         Extension(

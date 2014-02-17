@@ -3,107 +3,101 @@
 
 struct color {
     color() {}
-    color(float R,float G,float B) : R(R), G(G), B(B) {}
-
-    color operator+(const color &b) const {
-        return color(R+b.R,G+b.G,B+b.B);
-    }
-
-    color operator-(const color &b) const {
-        return color(R-b.R,G-b.G,B-b.B);
-    }
-
-    color operator-() const {
-        return color(-R,-G,-B);
-    }
+    color(float r,float g,float b) : r(r), g(g), b(b) {}
 
     color operator*(float c) const {
-        return color(R*c,G*c,B*c);
+        return {r*c,g*c,b*c};
     }
 
     color operator/(float c) const {
-        return color(R/c,G/c,B/c);
-    }
-
-    color &operator+=(const color &b) {
-        R += b.R; G += b.G; B += b.B;
-        return *this;
-    }
-
-    color &operator-=(const color &b) {
-        R -= b.R; G -= b.G; B -= b.B;
-        return *this;
+        return {r/c,g/c,b/c};
     }
 
     color &operator*=(float c) {
-        R *= c; G *= c; B *= c;
+        r *= c; g *= c; b *= c;
         return *this;
     }
 
     color &operator/=(float c) {
-        R /= c; G /= c; B /= c;
+        r /= c; g /= c; b /= c;
         return *this;
     }
 
     color &operator+=(float c) {
-        R += c; G += c; B += c;
+        r += c; g += c; b += c;
         return *this;
     }
 
     color &operator-=(float c) {
-        R -= c; G -= c; B -= c;
-        return *this;
-    }
-
-    color operator*(const color &b) const {
-        return color(R*b.R,G*b.G,B*b.B);
-    }
-
-    color operator/(const color &b) const {
-        return color(R/b.R,G/b.G,B/b.B);
-    }
-
-    color &operator*=(const color &b) {
-        R *= b.R; G *= b.G; B *= b.B;
-        return *this;
-    }
-
-    color &operator/=(const color &b) {
-        R /= b.R; G /= b.G; B /= b.B;
+        r -= c; g -= c; b -= c;
         return *this;
     }
     
-    bool operator==(const color &b) const {
-        return R == b.R && G == b.G && B == b.B;
-    }
-    bool operator!=(const color &b) const {
-        return R != b.R || G != b.G || B != b.B;
+    color operator-() {
+        return {-r,-g,-b};
     }
 
-    float R,G,B;
+    color operator*(const color &cb) const {
+        return {r*cb.r,g*cb.g,b*cb.b};
+    }
+
+    color operator/(const color &cb) const {
+        return {r/cb.r,g/cb.g,b/cb.b};
+    }
+    
+    color operator+(const color &cb) const {
+        return {r+cb.r,g+cb.g,b+cb.b};
+    }
+
+    color operator-(const color &cb) const {
+        return {r-cb.r,g-cb.g,b-cb.b};
+    }
+
+    color &operator*=(const color &cb) {
+        r *= cb.r; g *= cb.g; b *= cb.b;
+        return *this;
+    }
+
+    color &operator/=(const color &cb) {
+        r /= cb.r; g /= cb.g; b /= cb.b;
+        return *this;
+    }
+    
+    color &operator+=(const color &cb) {
+        r += cb.r; g += cb.g; b += cb.b;
+        return *this;
+    }
+
+    color &operator-=(const color &cb) {
+        r -= cb.r; g -= cb.g; b -= cb.b;
+        return *this;
+    }
+    
+    bool operator==(const color &cb) const {
+        return r == cb.r && g == cb.g && b == cb.b;
+    }
+    bool operator!=(const color &cb) const {
+        return r != cb.r || g != cb.g || b != cb.b;
+    }
+
+
+    float r,g,b;
 };
 
 inline color operator*(float c,const color& v) {
-    return color(c*v.R,c*v.G,c*v.B);
+    return {c*v.r,c*v.g,c*v.b};
 }
 
 inline color operator/(float c,const color& v) {
-    return color(c/v.R,c/v.G,c/v.B);
+    return {c/v.r,c/v.g,c/v.b};
 }
 
 inline color operator+(float c,const color& v) {
-    return color(c+v.R,c+v.G,c+v.B);
+    return {c+v.r,c+v.g,c+v.b};
 }
 
 inline color operator-(float c,const color& v) {
-    return color(c-v.R,c-v.G,c-v.B);
+    return {c-v.r,c-v.g,c-v.b};
 }
-
-
-struct material {
-    color c;
-    float opacity, reflectivity;
-    material(color c,float opacity=1,float reflectivity=0) : c(c), opacity(opacity), reflectivity(reflectivity) {}
-};
 
 #endif
