@@ -524,9 +524,11 @@ effect is undefined).</p>
 <col class="field-body" />
 <tbody valign="top">
 <tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
-<li><strong>aabb_min</strong> (<em>vector</em>) &#8211; </li>
-<li><strong>aabb_max</strong> (<em>vector</em>) &#8211; </li>
-<li><strong>data</strong> (<em>KDNode</em>) &#8211; </li>
+<li><strong>aabb_min</strong> (<em>vector</em>) &#8211; The minimum extent of the axis-aligned bounding-box
+that encloses all the primitives of the scene.</li>
+<li><strong>aabb_max</strong> (<em>vector</em>) &#8211; The maximum extent of the axis-aligned bounding-box
+that encloses all the primitives of the scene.</li>
+<li><strong>data</strong> (<em>KDNode</em>) &#8211; The root node of a k-d tree.</li>
 </ul>
 </td>
 </tr>
@@ -587,6 +589,22 @@ function will raise an exception instead.</p>
 </dd></dl>
 
 <dl class="attribute">
+<dt id="ntracer.tracern.CompositeScene.aabb_max">
+<tt class="descname">aabb_max</tt><a class="headerlink" href="#ntracer.tracern.CompositeScene.aabb_max" title="Permalink to this definition">¶</a></dt>
+<dd><p>The maximum extent of the axis-aligned bounding-box that encloses all
+the primitives of the scene.</p>
+<p>This attribute is read-only.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="ntracer.tracern.CompositeScene.aabb_min">
+<tt class="descname">aabb_min</tt><a class="headerlink" href="#ntracer.tracern.CompositeScene.aabb_min" title="Permalink to this definition">¶</a></dt>
+<dd><p>The minimum extent of the axis-aligned bounding-box that encloses all
+the primitives of the scene.</p>
+<p>This attribute is read-only.</p>
+</dd></dl>
+
+<dl class="attribute">
 <dt id="ntracer.tracern.CompositeScene.fov">
 <tt class="descname">fov</tt><a class="headerlink" href="#ntracer.tracern.CompositeScene.fov" title="Permalink to this definition">¶</a></dt>
 <dd><p>The scene&#8217;s horizontal field of vision in radians.</p>
@@ -611,6 +629,13 @@ thus lower values can improve performance at the cost of image quality.
 A value of 0 disables reflections altogether.</p>
 <p>This attribute is read-only. To modify the value, use
 <a class="reference internal" href="#ntracer.tracern.CompositeScene.set_fov" title="ntracer.tracern.CompositeScene.set_fov"><tt class="xref py py-meth docutils literal"><span class="pre">set_fov()</span></tt></a>.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="ntracer.tracern.CompositeScene.root">
+<tt class="descname">root</tt><a class="headerlink" href="#ntracer.tracern.CompositeScene.root" title="Permalink to this definition">¶</a></dt>
+<dd><p>The root node of a k-d tree.</p>
+<p>This attribute is read-only.</p>
 </dd></dl>
 
 </dd></dl>
@@ -729,17 +754,18 @@ to.</li>
 <p>This class cannot be instantiated directly in Python code.</p>
 <dl class="method">
 <dt id="ntracer.tracern.KDNode.intersects">
-<tt class="descname">intersects</tt><big>(</big><em>origin</em>, <em>direction</em><span class="optional">[</span>, <em>t_near</em>, <em>t_far</em><span class="optional">]</span><big>)</big> &rarr; list<a class="headerlink" href="#ntracer.tracern.KDNode.intersects" title="Permalink to this definition">¶</a></dt>
+<tt class="descname">intersects</tt><big>(</big><em>origin</em>, <em>direction</em><span class="optional">[</span>, <em>t_near</em>, <em>t_far</em>, <em>source</em><span class="optional">]</span><big>)</big> &rarr; list<a class="headerlink" href="#ntracer.tracern.KDNode.intersects" title="Permalink to this definition">¶</a></dt>
 <dd><p>Tests whether a given ray intersects.</p>
 <p>The return value is a list containing one tuple for every intersection
 that occured. Multiple intersections can occur when the ray passes
 through primitives that have an opacity of less than one. Each tuple
 will contain the distance between <tt class="docutils literal"><span class="pre">origin</span></tt> and the intersection, the
 point of intersection, the normal of the surface intersected and the
-material of the intersected primitive. If an opaque primitive is
-intersected, it will always be the last element and have the greatest
-distance, but every other element will be in an arbitrary order. If no
-intersection occurs, the return value will be an empty list.</p>
+intersected primitive itself. If an opaque primitive is intersected, it
+will always be the last element and have the greatest distance, but
+every other element will be in an arbitrary order and may contain
+duplicates (this can happen when a primitive crosses a split pane). If
+no intersection occurs, the return value will be an empty list.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
@@ -749,6 +775,8 @@ intersection occurs, the return value will be an empty list.</p>
 <li><strong>direction</strong> (<em>vector</em>) &#8211; The direction of the ray.</li>
 <li><strong>t_near</strong> (<em>number</em>) &#8211; </li>
 <li><strong>t_far</strong> (<em>number</em>) &#8211; </li>
+<li><strong>source</strong> (<em>KDNode</em>) &#8211; A node that will not be considered for
+intersection.</li>
 </ul>
 </td>
 </tr>
