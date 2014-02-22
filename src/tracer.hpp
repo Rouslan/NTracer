@@ -33,14 +33,14 @@ public:
 template<typename Store> real hypercube_intersects(const ray<Store> &target,ray<Store> &normal);
 template<typename Store> color background_color(const vector<Store> &dir);
 
-template<typename Store> class BoxScene : public Scene {
+template<typename Store> class box_scene : public scene {
 public:
     bool locked;
     real fov;
     
     camera<Store> cam;
 
-    BoxScene(int d) : locked(false), fov(0.8), cam(d) {}
+    box_scene(int d) : locked(false), fov(0.8), cam(d) {}
     
     color calculate_color(int x,int y,int w,int h) const {
         real fovI = (2 * std::tan(fov/2)) / w;
@@ -456,9 +456,10 @@ public:
     T *end() { return data() + _size; }
     const T *end() const { return data() + _size; }
     
-    void sort() {
+    void sort_and_unique() {
         T *d = data();
         std::sort(d,d+_size);
+        std::unique(d,d+_size);
     }
     
     void remove_at(size_t i) {
@@ -473,13 +474,16 @@ public:
 
 template<typename Store> struct ray_intersection {
     real dist;
-    material *m;
+    primitive<Store> *p;
     ray<Store> normal;
     
-    template<typename Ntype> ray_intersection(real dist,material *m,Ntype &&normal) : dist(dist), m(m), normal(std::forward<Ntype>(normal)) {}
+    template<typename Ntype> ray_intersection(real dist,primitive<Store> *p,Ntype &&normal) : dist(dist), p(p), normal(std::forward<Ntype>(normal)) {}
     
     bool operator<(const ray_intersection &b) const {
         return dist < b.dist;
+    }
+    bool operator==(const ray_intersection &b) const {
+        return p == b.p;
     }
 };
 template<typename Store> using ray_intersections = quick_list<ray_intersection<Store> >;
@@ -499,7 +503,7 @@ template<typename Store> struct kd_node {
        manually */
     node_type type;
     
-    real intersects(const ray<Store> &target,ray<Store> &normal,material *&m,ray_intersections<Store> &hits,real t_near,real t_far) const;
+    real intersects(const ray<Store> &target,ray<Store> &normal,primitive<Store> *&p,ray_intersections<Store> &hits,real t_near,real t_far) const;
     
     void *operator new(size_t size) {
         return py::malloc(size);
@@ -530,13 +534,13 @@ template<typename Store> struct kd_branch : kd_node<Store> {
     kd_branch(int axis,real split,std::unique_ptr<kd_node<Store> > &&left,std::unique_ptr<kd_node<Store> > &&right) :
         kd_node<Store>(BRANCH), axis(axis), split(split), left(left), right(right) {}
     
-    real intersects(const ray<Store> &target,ray<Store> &normal,material *&m,ray_intersections<Store> &hits,real t_near,real t_far) const {
+    real intersects(const ray<Store> &target,ray<Store> &normal,primitive<Store> *&p,ray_intersections<Store> &hits,real t_near,real t_far) const {
         assert(target.dimension() == normal.dimension());
         
         if(target.direction[axis]) {
             if(target.origin[axis] == split) {
                 auto node = (target.direction[axis] > 0 ? right : left).get();
-                return node ? node->intersects(target,normal,m,hits,t_near,t_far) : 0;
+                return node ? node->intersects(target,normal,p,hits,t_near,t_far) : 0;
             }
             
             real t = (split - target.origin[axis]) / target.direction[axis];
@@ -548,13 +552,13 @@ template<typename Store> struct kd_branch : kd_node<Store> {
                 n_far = left.get();
             }
 
-            if(t < 0 || t > t_far) return n_near ? n_near->intersects(target,normal,m,hits,t_near,t_far) : 0;
-            if(t < t_near) return n_far ? n_far->intersects(target,normal,m,hits,t_near,t_far) : 0;
+            if(t < 0 || t > t_far) return n_near ? n_near->intersects(target,normal,p,hits,t_near,t_far) : 0;
+            if(t < t_near) return n_far ? n_far->intersects(target,normal,p,hits,t_near,t_far) : 0;
 
             if(n_near) {
                 size_t h_start = hits.size();
-                
-                real dist = n_near->intersects(target,normal,m,hits,t_near,t);
+                primitive<Store> *new_p = p;
+                real dist = n_near->intersects(target,normal,p,hits,t_near,t);
                 if((dist && dist <= t) || !n_far) return dist;
                 
                 if(dist) {
@@ -567,10 +571,11 @@ template<typename Store> struct kd_branch : kd_node<Store> {
                        primitive is also in t_far. */
                     
                     ray<Store> new_normal(target.dimension());
-                    real new_dist = n_far->intersects(target,new_normal,m,hits,t,t_far);
+                    real new_dist = n_far->intersects(target,new_normal,new_p,hits,t,t_far);
                     if(new_dist && new_dist < dist) {
                         dist = new_dist;
                         normal = new_normal;
+                        p = new_p;
                     }
                     trim_intersections(hits,dist,h_start);
                     return dist;
@@ -578,11 +583,11 @@ template<typename Store> struct kd_branch : kd_node<Store> {
             }
             
             assert(n_far);
-            return n_far->intersects(target,normal,m,hits,t,t_far);
+            return n_far->intersects(target,normal,p,hits,t,t_far);
         }
 
         auto node = (target.origin[axis] >= split ? right : left).get();
-        return node ? node->intersects(target,normal,m,hits,t_near,t_far) : 0;
+        return node ? node->intersects(target,normal,p,hits,t_near,t_far) : 0;
     }
 };
 
@@ -602,23 +607,26 @@ template<typename Store> struct kd_leaf : kd_node<Store>, flexible_struct<kd_lea
         return new(size) kd_leaf<Store>(size,f);
     }
     
-    real intersects(const ray<Store> &target,ray<Store> &normal,material *&m,ray_intersections<Store> &hits) const {
+    real intersects(const ray<Store> &target,ray<Store> &normal,primitive<Store> *&p,ray_intersections<Store> &hits) const {
         assert(dimension() == target.dimension() && dimension() == normal.dimension());
         
         size_t h_start = hits.size();
         
         real dist;
         size_t i=0;
+        primitive<Store> *old_p = p;
         while(i<size) {
             auto item = this->items()[i++].get();
-            dist = item->intersects(target,normal);
-            
-            if(dist) {
-                if(item->opaque()) {
-                    m = item->m.get();
-                    goto hit;
-                } else {
-                    hits.add({dist,item->m.get(),normal});
+            if(item != p) {
+                dist = item->intersects(target,normal);
+                
+                if(dist) {
+                    if(item->opaque()) {
+                        p = item;
+                        goto hit;
+                    } else {
+                        hits.add({dist,item,normal});
+                    }
                 }
             }
         }
@@ -630,14 +638,16 @@ template<typename Store> struct kd_leaf : kd_node<Store>, flexible_struct<kd_lea
         ray<Store> new_normal(target.dimension());
         while(i<size) {
             auto item = this->items()[i++].get();
-            new_dist = item->intersects(target,new_normal);
-            if(new_dist && new_dist < dist) {
-                if(item->opaque()) {
-                    dist = new_dist;
-                    normal = new_normal;
-                    m = item->m.get();
-                } else {
-                    hits.add({new_dist,item->m.get(),new_normal});
+            if(item != old_p) {
+                new_dist = item->intersects(target,new_normal);
+                if(new_dist && new_dist < dist) {
+                    if(item->opaque()) {
+                        dist = new_dist;
+                        normal = new_normal;
+                        p = item;
+                    } else {
+                        hits.add({new_dist,item,new_normal});
+                    }
                 }
             }
         }
@@ -655,11 +665,11 @@ private:
     template<typename F> kd_leaf(size_t size,F f) : kd_node<Store>(LEAF), flex_base(size,f), size(size) {}
 };
 
-template<typename Store> real kd_node<Store>::intersects(const ray<Store> &target,ray<Store> &normal,material *&m,ray_intersections<Store> &hits,real t_near,real t_far) const {
-    if(type == LEAF) return static_cast<const kd_leaf<Store>*>(this)->intersects(target,normal,m,hits);
+template<typename Store> real kd_node<Store>::intersects(const ray<Store> &target,ray<Store> &normal,primitive<Store> *&p,ray_intersections<Store> &hits,real t_near,real t_far) const {
+    if(type == LEAF) return static_cast<const kd_leaf<Store>*>(this)->intersects(target,normal,p,hits);
     
     assert(type == BRANCH);
-    return static_cast<const kd_branch<Store>*>(this)->intersects(target,normal,m,hits,t_near,t_far);
+    return static_cast<const kd_branch<Store>*>(this)->intersects(target,normal,p,hits,t_near,t_far);
 }
 
 template<typename Store> inline void kd_node_deleter<Store>::operator()(kd_node<Store> *ptr) const {
@@ -904,7 +914,7 @@ template<typename Store> struct aabb {
 };
 
 
-template<typename Store> struct composite_scene : Scene {
+template<typename Store> struct composite_scene : scene {
     bool locked;
     real fov;
     int max_reflect_depth;
@@ -917,40 +927,41 @@ template<typename Store> struct composite_scene : Scene {
         assert(aabb_min.dimension() == aabb_max.dimension());
     }
     
-    color base_color(const ray<Store> &target,const ray<Store> &normal,const material *m,int depth) const {
+    color base_color(const ray<Store> &target,const ray<Store> &normal,primitive<Store> *p,int depth) const {
+        auto m = p->m.get();
         real sine = dot(target.direction,normal.direction);
         auto r = (sine <= 0 ? -sine : real(0)) * m->c;
         
         if(m->reflectivity && depth < max_reflect_depth) {
             r = m->c * ray_color(
                 ray<Store>(normal.origin,target.direction - normal.direction * (2 * dot(target.direction,normal.direction))),
-                depth+1) * m->reflectivity + r * (1 - m->reflectivity);
+                depth+1,
+                p) * m->reflectivity + r * (1 - m->reflectivity);
         }
         return r;
     }
     
-    color ray_color(const ray<Store> &target,int depth=0) const {
+    color ray_color(const ray<Store> &target,int depth=0,primitive<Store> *source=nullptr) const {
         ray<Store> normal{target.dimension()};
         ray_intersections<Store> transparent_hits;
-        material *m;
         color r;
         
         real dist = aabb_distance(target);
-        if(dist >= 0 && (dist = root->intersects(target,normal,m,transparent_hits,dist,std::numeric_limits<real>::max()))) {
-            r = base_color(target,normal,m,depth);
+        if(dist >= 0 && (dist = root->intersects(target,normal,source,transparent_hits,dist,std::numeric_limits<real>::max()))) {
+            r = base_color(target,normal,source,depth);
         } else {
             r = background_color<Store>(target.direction);
         }
         
         if(transparent_hits) {
-            transparent_hits.sort();
+            transparent_hits.sort_and_unique();
             
             auto data = transparent_hits.data();
             for(auto itr = data + (transparent_hits.size()-1); itr >= data; --itr) {
-                assert(itr->m->opacity != 1);
-                auto base = base_color(target,itr->normal,itr->m,depth);
+                assert(itr->p->m->opacity != 1);
+                auto base = base_color(target,itr->normal,itr->p,depth);
                 
-                r = base * itr->m->opacity + r * (1 - itr->m->opacity);
+                r = base * itr->p->m->opacity + r * (1 - itr->p->m->opacity);
             }
         }
         

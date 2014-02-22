@@ -1016,6 +1016,14 @@ template<> inline py::bytes from_pyobject<py::bytes>(PyObject *o) {
     return py::borrowed_ref(o);
 }
 
+inline PyObject *to_pyobject(py::new_ref r) {
+    return r._ptr;
+}
+
+inline PyObject *to_pyobject(py::borrowed_ref r) {
+    return py::incref(r._ptr);
+}
+
 template<typename T> inline PyObject *to_pyobject(const py::pyptr<T> &x) {
     return py::incref(x.ref());
 }

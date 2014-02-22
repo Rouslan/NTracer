@@ -111,6 +111,7 @@ PyTypeObject *material::_pytype = nullptr;
 #define SIMPLE_WRAPPER(ROOT) \
 struct ROOT ## _obj_base { \
     CONTAINED_PYTYPE_DEF \
+    PyObject_HEAD \
 }; \
 template<> struct _wrapped_type<n_ ## ROOT> { \
     typedef simple_py_wrapper<n_ ## ROOT,ROOT ## _obj_base> type; \
@@ -131,15 +132,16 @@ struct obj_BoxScene {
     CONTAINED_PYTYPE_DEF
     
     PyObject_HEAD
-    BoxScene<module_store> base;
+    box_scene<module_store> &(obj_BoxScene::*_get_base)();
+    box_scene<module_store> base;
     PyObject *idict;
     PyObject *weaklist;
     PY_MEM_GC_NEW_DELETE
 
-    obj_BoxScene(int d) : base(d), idict(NULL), weaklist(NULL) {
+    obj_BoxScene(int d) : _get_base(&obj_BoxScene::get_base), base(d), idict(NULL), weaklist(NULL) {
         PyObject_Init(reinterpret_cast<PyObject*>(this),pytype());
     }
-    obj_BoxScene(BoxScene<module_store> const &b) : base(b), idict(NULL), weaklist(NULL) {
+    obj_BoxScene(box_scene<module_store> const &b) : _get_base(&obj_BoxScene::get_base), base(b), idict(NULL), weaklist(NULL) {
         PyObject_Init(reinterpret_cast<PyObject*>(this),pytype());
     }
     ~obj_BoxScene() {
@@ -147,11 +149,11 @@ struct obj_BoxScene {
         if(weaklist) PyObject_ClearWeakRefs(reinterpret_cast<PyObject*>(this));
     }
     
-    BoxScene<module_store> &cast_base() { return base; }
-    BoxScene<module_store> &get_base() { return base; }
+    box_scene<module_store> &cast_base() { return base; }
+    box_scene<module_store> &get_base() { return base; }
 };
 
-template<> struct _wrapped_type<BoxScene<module_store> > {
+template<> struct _wrapped_type<box_scene<module_store> > {
     typedef obj_BoxScene type;
 };
 
@@ -173,11 +175,13 @@ struct obj_CameraAxes {
 };
 
 
-struct obj_CompositeScene {
+struct obj_CompositeScene;
+struct composite_scene_obj_base {
     CONTAINED_PYTYPE_DEF
-    
     PyObject_HEAD
-    composite_scene<module_store> base;
+    composite_scene<module_store> &(obj_CompositeScene::*_get_base)();
+};
+struct obj_CompositeScene : simple_py_wrapper<composite_scene<module_store>,composite_scene_obj_base> {
     PyObject *idict;
     PyObject *weaklist;
     PY_MEM_GC_NEW_DELETE
@@ -186,9 +190,6 @@ struct obj_CompositeScene {
         Py_XDECREF(idict);
         if(weaklist) PyObject_ClearWeakRefs(reinterpret_cast<PyObject*>(this));
     }
-    
-    composite_scene<module_store> &cast_base() { return base; }
-    composite_scene<module_store> &get_base() { return base; }
 };
 
 template<> struct _wrapped_type<composite_scene<module_store> > {
@@ -196,7 +197,7 @@ template<> struct _wrapped_type<composite_scene<module_store> > {
 };
 
 template<typename T> void ensure_unlocked(T *s) {
-    if(s->base.locked) {
+    if(s->get_base().locked) {
         PyErr_SetString(PyExc_RuntimeError,"the scene is locked for reading");
         throw py_error_set();
     }
@@ -218,6 +219,14 @@ struct obj_Primitive {
 
 typedef solid<module_store> obj_Solid;
 typedef triangle<module_store> obj_Triangle;
+
+template<> primitive<module_store> *checked_py_cast<primitive<module_store> >(PyObject *o) {
+    if(UNLIKELY(Py_TYPE(o) != solid_obj_common::pytype() && Py_TYPE(o) != triangle_obj_common::pytype())) {
+        PyErr_Format(PyExc_TypeError,"object is not an instance of %s",obj_Primitive::pytype()->tp_name);
+        throw py_error_set();
+    }
+    return reinterpret_cast<primitive<module_store>*>(o);
+}
 
 
 /* The following wrappers store their associated data in a special way. In large
@@ -308,6 +317,7 @@ struct obj_PrimitivePrototype {
 
 struct triangle_prototype_obj_base {
     CONTAINED_PYTYPE_DEF
+    PyObject_HEAD
 };
 
 /* Whether this object is variable-sized or not depends on whether
@@ -315,7 +325,6 @@ struct triangle_prototype_obj_base {
    stored in-place (which it can't if it requires extra alignment). If it is
    stored in-place, care must be taken to ensure it has enough room  */
 template<bool Var,bool InPlace> struct tproto_base : triangle_prototype_obj_base {
-    PyObject_HEAD
     n_triangle_prototype base;
     
     n_triangle_prototype &alloc_base(int dimension) {
@@ -362,7 +371,7 @@ template<> struct tproto_base<true,true> : triangle_prototype_obj_base {
     }
 
     static const size_t base_size;
-    static const size_t item_size = sizeof(n_triangle_point);
+    static const size_t item_size = n_triangle_prototype::item_size;
 };
 #define COMMA_WORKAROUND tproto_base<true,true>
 const size_t tproto_base<true,true>::base_size = n_triangle_prototype::item_offset + offsetof(COMMA_WORKAROUND,base);
@@ -456,9 +465,10 @@ PyObject *obj_BoxScene_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
                 real d = from_pyobject<real>(ga(true));
                 ga.finished();
                 
-                new(&ptr->base) BoxScene<module_store>(d);
+                new(&ptr->base) box_scene<module_store>(d);
+                ptr->_get_base = &obj_BoxScene::get_base;
             } catch(...) {
-                type->tp_free(ptr);
+                Py_DECREF(ptr);
                 throw;
             }
         } PY_EXCEPT_HANDLERS(nullptr)
@@ -509,26 +519,26 @@ PyObject *obj_CompositeScene_set_camera(obj_CompositeScene *self,PyObject *arg) 
         ensure_unlocked(self);
         
         auto &c = get_base<n_camera>(arg);
-        if(!compatible(self->base,c)) {
+        if(!compatible(self->get_base(),c)) {
             PyErr_SetString(PyExc_TypeError,"the scene and camera must have the same dimension");
             return nullptr;
         }
         
-        self->base.cam = c;
+        self->get_base().cam = c;
         Py_RETURN_NONE;
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
 PyObject *obj_CompositeScene_get_camera(obj_CompositeScene *self,PyObject *) {
     try {
-        return to_pyobject(self->base.cam);
+        return to_pyobject(self->get_base().cam);
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
 PyObject *obj_CompositeScene_set_fov(obj_CompositeScene *self,PyObject *arg) {
     try {
         ensure_unlocked(self);
-        self->base.fov = from_pyobject<real>(arg);
+        self->get_base().fov = from_pyobject<real>(arg);
         Py_RETURN_NONE;
     } PY_EXCEPT_HANDLERS(nullptr)
 }
@@ -536,7 +546,7 @@ PyObject *obj_CompositeScene_set_fov(obj_CompositeScene *self,PyObject *arg) {
 PyObject *obj_CompositeScene_set_max_reflect_depth(obj_CompositeScene *self,PyObject *arg) {
     try {
         ensure_unlocked(self);
-        self->base.max_reflect_depth = from_pyobject<int>(arg);
+        self->get_base().max_reflect_depth = from_pyobject<int>(arg);
         Py_RETURN_NONE;
     } PY_EXCEPT_HANDLERS(nullptr)
 }
@@ -550,7 +560,7 @@ PyMethodDef obj_CompositeScene_methods[] = {
 };
 
 PyObject *obj_CompositeScene_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
-    auto ptr = reinterpret_cast<obj_CompositeScene*>(type->tp_alloc(type,0));
+    auto ptr = type->tp_alloc(type,0);
     if(ptr) {
         try {
             try {
@@ -568,33 +578,47 @@ PyObject *obj_CompositeScene_new(PyTypeObject *type,PyObject *args,PyObject *kwd
                 ga.finished();
                 
                 auto d_node = reinterpret_cast<obj_KDNode*>(data);
+                if(d_node->parent) THROW_PYERR_STRING(ValueError,"\"data\" must not be already attached to another node");
                 
                 if(aabb_min.dimension() != aabb_max.dimension() || aabb_min.dimension() != d_node->dimension())
                     THROW_PYERR_STRING(TypeError,"\"aabb_min\", \"aabb_max\" and \"data\" must all have the same dimesion");
                 
-                new(&ptr->base) composite_scene<module_store>(aabb_min,aabb_max,d_node->_data);
-                d_node->parent = py::borrowed_ref(reinterpret_cast<PyObject*>(ptr));
+                auto &base = reinterpret_cast<obj_CompositeScene*>(ptr)->alloc_base();
+                
+                new(&base) composite_scene<module_store>(aabb_min,aabb_max,d_node->_data);
+                reinterpret_cast<obj_CompositeScene*>(ptr)->_get_base = &obj_CompositeScene::get_base; 
+                d_node->parent = py::borrowed_ref(ptr);
             } catch(...) {
-                type->tp_free(ptr);
+                Py_DECREF(ptr);
                 throw;
             }
         } PY_EXCEPT_HANDLERS(nullptr)
     }
-    return reinterpret_cast<PyObject*>(ptr);
+    return ptr;
+}
+
+PyObject *new_obj_node(PyObject *parent,kd_node<module_store> *node,int dimension) {
+    if(!node) Py_RETURN_NONE;
+    
+    if(node->type == LEAF) return reinterpret_cast<PyObject*>(new obj_KDLeaf(py::borrowed_ref(parent),static_cast<kd_leaf<module_store>*>(node)));
+    
+    assert(node->type == BRANCH);
+    return reinterpret_cast<PyObject*>(new obj_KDBranch(py::borrowed_ref(parent),static_cast<kd_branch<module_store>*>(node),dimension));
 }
 
 PyGetSetDef obj_CompositeScene_getset[] = {
-    {const_cast<char*>("locked"),OBJ_GETTER(obj_CompositeScene,self->base.locked),NULL,NULL,NULL},
+    {const_cast<char*>("locked"),OBJ_GETTER(obj_CompositeScene,self->get_base().locked),NULL,NULL,NULL},
+    {const_cast<char*>("fov"),OBJ_GETTER(obj_CompositeScene,self->get_base().fov),NULL,NULL,NULL},
+    {const_cast<char*>("max_reflect_depth"),OBJ_GETTER(obj_CompositeScene,self->get_base().max_reflect_depth),NULL,NULL,NULL},
+    {const_cast<char*>("aabb_min"),OBJ_GETTER(obj_CompositeScene,self->get_base().aabb_min),NULL,NULL,NULL},
+    {const_cast<char*>("aabb_max"),OBJ_GETTER(obj_CompositeScene,self->get_base().aabb_max),NULL,NULL,NULL},
+    {const_cast<char*>("root"),OBJ_GETTER(
+        obj_CompositeScene,
+        py::new_ref(new_obj_node(obj_self,self->get_base().root.get(),self->get_base().dimension()))),NULL,NULL,NULL},
     {NULL}
 };
 
-PyMemberDef obj_CompositeScene_members[] = {
-    {const_cast<char*>("fov"),member_macro<real>::value,offsetof(obj_CompositeScene,base.fov),READONLY,NULL},
-    {const_cast<char*>("max_reflect_depth"),T_INT,offsetof(obj_CompositeScene,base.max_reflect_depth),READONLY,NULL},
-    {NULL}
-};
-
-PyTypeObject obj_CompositeScene::_pytype = make_type_object(
+PyTypeObject composite_scene_obj_base::_pytype = make_type_object(
     MODULE_STR ".CompositeScene",
     sizeof(obj_CompositeScene),
     tp_dealloc = destructor_dealloc<obj_CompositeScene>::value,
@@ -603,7 +627,6 @@ PyTypeObject obj_CompositeScene::_pytype = make_type_object(
     tp_clear = &obj_CompositeScene_clear,
     tp_weaklistoffset = offsetof(obj_CompositeScene,weaklist),
     tp_methods = obj_CompositeScene_methods,
-    tp_members = obj_CompositeScene_members,
     tp_getset = obj_CompositeScene_getset,
     tp_dictoffset = offsetof(obj_CompositeScene,idict),
     tp_new = &obj_CompositeScene_new);
@@ -900,7 +923,7 @@ PyObject *kdnode_intersects(obj_KDNode *self,PyObject *args,PyObject *kwds) {
     try {
         assert(self->_data->type == LEAF || self->_data->type == BRANCH);
         
-        const char *names[] = {"origin","direction","t_near","t_far"};
+        const char *names[] = {"origin","direction","t_near","t_far","source"};
         get_arg ga(args,kwds,names,self->_data->type == LEAF ? "KDLeaf.intersects" : "KDBranch.intersects");
         auto origin = from_pyobject<n_vector>(ga(true));
         auto direction = from_pyobject<n_vector>(ga(true));
@@ -908,20 +931,22 @@ PyObject *kdnode_intersects(obj_KDNode *self,PyObject *args,PyObject *kwds) {
         real t_near = std::numeric_limits<real>::lowest();
         real t_far = std::numeric_limits<real>::max();
         
-        PyObject *tmp = ga(false);
+        auto tmp = ga(false);
         if(tmp) t_near = from_pyobject<real>(tmp);
         tmp = ga(false);
         if(tmp) t_far = from_pyobject<real>(tmp);
+        
+        tmp = ga(false);
+        auto source = tmp ? checked_py_cast<primitive<module_store> >(tmp) : nullptr;
         ga.finished();
         
         check_origin_dir_compat(origin,direction);
         
         ray<module_store> target(origin,direction);
         ray<module_store> normal(origin.dimension());
-        material *m;
         ray_intersections<module_store> hits;
         
-        real dist = self->_data->intersects(target,normal,m,hits,t_near,t_far);
+        real dist = self->_data->intersects(target,normal,source,hits,t_near,t_far);
         
         size_t r_size = hits.size();
         if(dist) ++r_size;
@@ -934,12 +959,12 @@ PyObject *kdnode_intersects(obj_KDNode *self,PyObject *args,PyObject *kwds) {
             for(; i<hits.size(); ++i) PyList_SET_ITEM(
                 r,
                 i,
-                py::make_tuple(data[i].dist,data[i].normal.origin,data[i].normal.direction,reinterpret_cast<PyObject*>(data[i].m)).new_ref());
+                py::make_tuple(data[i].dist,data[i].normal.origin,data[i].normal.direction,reinterpret_cast<PyObject*>(data[i].p)).new_ref());
             
             if(dist) PyList_SET_ITEM(
                 r,
                 i,
-                py::make_tuple(dist,normal.origin,normal.direction,reinterpret_cast<PyObject*>(m)).new_ref());
+                py::make_tuple(dist,normal.origin,normal.direction,reinterpret_cast<PyObject*>(source)).new_ref());
         } catch(...) {
             Py_DECREF(r);
             throw;
@@ -1006,11 +1031,7 @@ PyObject *obj_KDLeaf_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
             
             ptr->data() = kd_leaf<module_store>::create(size,[=](size_t i) -> primitive<module_store>* {
                 auto p = primitives[i];
-                
-                if(p.type() != solid_obj_common::pytype() && p.type() != triangle_obj_common::pytype()) {
-                    THROW_PYERR_STRING(TypeError,"object is not an instance of " MODULE_STR ".Primitive");
-                }
-
+                checked_py_cast<primitive<module_store> >(p.ref());
                 return reinterpret_cast<primitive<module_store>*>(p.new_ref());
             });
             
@@ -1102,15 +1123,6 @@ PyObject *obj_KDBranch_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
         } PY_EXCEPT_HANDLERS(nullptr)
     }
     return reinterpret_cast<PyObject*>(ptr);
-}
-
-PyObject *new_obj_node(PyObject *parent,kd_node<module_store> *node,int dimension) {
-    if(!node) Py_RETURN_NONE;
-    
-    if(node->type == LEAF) return reinterpret_cast<PyObject*>(new obj_KDLeaf(py::borrowed_ref(parent),static_cast<kd_leaf<module_store>*>(node)));
-    
-    assert(node->type == BRANCH);
-    return reinterpret_cast<PyObject*>(new obj_KDBranch(py::borrowed_ref(parent),static_cast<kd_branch<module_store>*>(node),dimension));
 }
 
 PyObject *obj_KDBranch_get_child(obj_KDBranch *self,void *index) {

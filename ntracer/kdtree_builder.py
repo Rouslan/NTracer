@@ -27,6 +27,28 @@ COST_TRAVERSAL = 0.5
 COST_INTERSECTION = 0.5
 
 
+class CachedProto(object):
+    def __init__(self,p):
+        self.p = p
+        self.realized = None
+    
+    def realize(self):
+        if not self.realized:
+            self.realized = self.p.realize()
+        return self.realized
+    
+    @property
+    def dimension(self):
+        return self.p.dimension
+    
+    @property
+    def aabb_min(self):
+        return self.p.aabb_min
+    
+    @property
+    def aabb_max(self):
+        return self.p.aabb_max
+
 
 def product(x):
     return reduce(operator.mul,x)
@@ -144,10 +166,10 @@ def ortho_flat(p):
 
 def overlap_intersects(bound,p,skip,axis):
     if skip is None:
-        return bound.intersects(p)
+        return bound.intersects(p.p)
     if skip == axis:
         return bound.start[axis] < p.aabb_min[axis] < bound.end[axis]
-    return bound.intersects_flat(p,skip)
+    return bound.intersects_flat(p.p,skip)
 
 
 # The primitives are divided into the lists: contain_p and overlap_p.
@@ -197,7 +219,7 @@ def create_node(nt,depth,boundary,contain_p,overlap_p):
         # alternate algorithm is used when p is flat along an axis other than
         # "axis", that disregards that axis.
         skip = ortho_flat(p)
-        assert isinstance(p,nt.TrianglePrototype) or skip is None
+        assert isinstance(p.p,nt.TrianglePrototype) or skip is None
         
         if overlap_intersects(b_left,p,skip,axis):
             l_overlap_p.append(p)
@@ -237,7 +259,7 @@ def build_kdtree(nt,primitives):
 
     start = nt.Vector(reduce(partial(map,min),(p.aabb_min for p in primitives)))
     end = nt.Vector(reduce(partial(map,max),(p.aabb_max for p in primitives)))
-    return start,end,create_node(nt,-1,nt.AABB(start,end),primitives,[])
+    return start,end,create_node(nt,-1,nt.AABB(start,end),[CachedProto(p) for p in primitives],[])
 
 
 def build_composite_scene(nt,primitives):

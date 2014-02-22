@@ -102,7 +102,7 @@ struct py_error_set {
     void clear() { PyErr_Clear(); }
 };
 
-enum storage_mode {UNINITIALIZED = 0,CONTAINS,MANAGEDREF,MANAGEDPTR,UNMANAGEDREF};
+enum storage_mode {UNINITIALIZED = 0,CONTAINS,INDIRECT};
 
 
 // checks that min <= x <= max and raises an exception otherwise
@@ -336,7 +336,8 @@ template<typename T> struct destructor_dealloc<T,true> {
 
 
 template<typename T,typename Base,bool InPlace=(alignof(T) <= PYOBJECT_ALIGNMENT)> struct simple_py_wrapper : Base {
-    PyObject_HEAD
+    static constexpr bool contained = true;
+    
     T base;
     PY_MEM_NEW_DELETE
     simple_py_wrapper(const T &b) : base(b) {
@@ -355,7 +356,8 @@ template<typename T,typename Base,bool InPlace=(alignof(T) <= PYOBJECT_ALIGNMENT
 };
 
 template<typename T,typename Base> struct simple_py_wrapper<T,Base,false> : Base {
-    PyObject_HEAD
+    static constexpr bool contained = false;
+    
     T *base;
     PY_MEM_NEW_DELETE
     simple_py_wrapper(const T &b) {

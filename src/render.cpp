@@ -115,7 +115,7 @@ struct renderer {
     condition barrier;
     mutex mut;
     std::vector<SDL_Thread*> workers;
-    Scene *scene;
+    scene *sc;
     SDL_Surface *destination;
     std::atomic<unsigned int> line;
     PyObject *self;
@@ -129,24 +129,16 @@ struct renderer {
 struct obj_Scene {
     CONTAINED_PYTYPE_DEF
     PyObject_HEAD
-
-    /* a dummy member whose offset in the struct should be the same as any
-       derived type's */
-    union { void *a; long double b; } base;
     
-    Scene &cast_base() {
-        return reinterpret_cast<Scene&>(base);
-    }
-    Scene &get_base() {
-        return reinterpret_cast<Scene&>(base);
+    scene &(obj_Scene::*_get_base)();
+
+    scene &get_base() {
+        return (this->*_get_base)();
     }
 };
 
-template<> struct _wrapped_type<Scene> {
+template<> struct _wrapped_type<scene> {
     typedef obj_Scene type;
-};
-template<> struct invariable_storage<Scene> {
-    static constexpr bool value = true;
 };
 
 struct obj_Renderer {
@@ -269,8 +261,8 @@ unsigned int cpu_cores() {
 #endif
 }
 
-void draw_pixel(const Scene *scene,byte *&dest,const SDL_Surface *surface,int x,int y) {
-    color c = scene->calculate_color(x,y,surface->w,surface->h);
+void draw_pixel(const scene *sc,byte *&dest,const SDL_Surface *surface,int x,int y) {
+    color c = sc->calculate_color(x,y,surface->w,surface->h);
 
     Uint32 pval = SDL_MapRGB(surface->format,to_byte(c.r),to_byte(c.g),to_byte(c.b));
     switch(surface->format->BytesPerPixel) {
@@ -323,7 +315,7 @@ int worker(obj_Renderer *self) {
             for(int x = 0; x < r.destination->w; ++x) {
                 if(UNLIKELY(r.state != renderer::NORMAL)) goto finish;
 
-                draw_pixel(r.scene,pixels,r.destination,x,y);
+                draw_pixel(r.sc,pixels,r.destination,x,y);
             }
 
             if(SDL_MUSTLOCK(r.destination)) SDL_LockSurface(r.destination);
@@ -363,7 +355,7 @@ int worker(obj_Renderer *self) {
                        workers is harmless. */
                     r.barrier.signal_all();
                 }
-                r.scene->unlock();
+                r.sc->unlock();
                 SDL_FreeSurface(r.destination);
                 Py_DECREF(self);
                 
@@ -453,7 +445,7 @@ PyObject *obj_Renderer_begin_render(obj_Renderer *self,PyObject *args,PyObject *
         const char *names[] = {"dest","scene"};
         get_arg ga(args,kwds,names,"Renderer.begin_render");
         PySurfaceObject *dest = py_to_surface(ga(true));
-        Scene *scene = &get_base<Scene>(ga(true));
+        scene *sc = &get_base<scene>(ga(true));
         ga.finished();
         
         Py_INCREF(self);
@@ -466,14 +458,14 @@ PyObject *obj_Renderer_begin_render(obj_Renderer *self,PyObject *args,PyObject *
             r.busy_threads = r.threads;
             r.line.store(0,std::memory_order_relaxed);
             ++r.job;
-            r.scene = scene;
-            scene->lock();
+            r.sc = sc;
+            sc->lock();
             try {
                 r.destination = PySurface_AsSurface(dest);
                 ++r.destination->refcount;
                 r.barrier.signal_all();
             } catch(...) {
-                r.scene->unlock();
+                r.sc->unlock();
                 throw;
             }
         } catch(...) {
@@ -511,7 +503,7 @@ PyObject *obj_Renderer_render_sync(PyObject*,PyObject *args,PyObject *kwds) {
         const char *names[] = {"dest","scene"};
         get_arg ga(args,kwds,names,"Renderer.render_sync");
         PySurfaceObject *dest = py_to_surface(ga(true));
-        Scene *scene = &get_base<Scene>(ga(true));
+        scene *sc = &get_base<scene>(ga(true));
         ga.finished();
         
         SDL_Surface *surface = PySurface_AsSurface(dest);
@@ -524,7 +516,7 @@ PyObject *obj_Renderer_render_sync(PyObject*,PyObject *args,PyObject *kwds) {
                 auto line = reinterpret_cast<byte*>(surface->pixels) + y*surface->pitch;
                 
                 for(int x=0; x<surface->w; ++x) {
-                    draw_pixel(scene,line,surface,x,y);
+                    draw_pixel(sc,line,surface,x,y);
                 }
             }
             if(SDL_MUSTLOCK(surface)) SDL_UnlockSurface(surface);

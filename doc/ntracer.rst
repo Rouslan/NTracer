@@ -357,9 +357,11 @@ can't add a tuple and a :py:class:`Vector` together).
     You normally don't need to create this object directly, but instead call
     :py:func:`.kdtree_builder.build_composite_scene`.
 
-    :param vector aabb_min:
-    :param vector aabb_max:
-    :param KDNode data:
+    :param vector aabb_min: The minimum extent of the axis-aligned bounding-box
+        that encloses all the primitives of the scene.
+    :param vector aabb_max: The maximum extent of the axis-aligned bounding-box
+        that encloses all the primitives of the scene.
+    :param KDNode data: The root node of a k-d tree.
 
     .. py:method:: get_camera() -> Camera
 
@@ -391,6 +393,20 @@ can't add a tuple and a :py:class:`Vector` together).
         function will raise an exception instead.
 
         :param integer depth: The new value.
+        
+    .. py:attribute:: aabb_max
+    
+        The maximum extent of the axis-aligned bounding-box that encloses all
+        the primitives of the scene.
+        
+        This attribute is read-only.
+    
+    .. py:attribute:: aabb_min
+    
+        The minimum extent of the axis-aligned bounding-box that encloses all
+        the primitives of the scene.
+        
+        This attribute is read-only.
 
     .. py:attribute:: fov
 
@@ -417,6 +433,12 @@ can't add a tuple and a :py:class:`Vector` together).
 
         This attribute is read-only. To modify the value, use
         :py:meth:`set_fov`.
+        
+    .. py:attribute:: root
+    
+        The root node of a k-d tree.
+        
+        This attribute is read-only.
 
 
 .. py:class:: FrozenVectorView
@@ -500,7 +522,7 @@ can't add a tuple and a :py:class:`Vector` together).
 
     This class cannot be instantiated directly in Python code.
 
-    .. py:method:: intersects(origin,direction[,t_near,t_far]) -> list
+    .. py:method:: intersects(origin,direction[,t_near,t_far,source]) -> list
 
         Tests whether a given ray intersects.
 
@@ -509,15 +531,18 @@ can't add a tuple and a :py:class:`Vector` together).
         through primitives that have an opacity of less than one. Each tuple
         will contain the distance between ``origin`` and the intersection, the
         point of intersection, the normal of the surface intersected and the
-        material of the intersected primitive. If an opaque primitive is
-        intersected, it will always be the last element and have the greatest
-        distance, but every other element will be in an arbitrary order. If no
-        intersection occurs, the return value will be an empty list.
+        intersected primitive itself. If an opaque primitive is intersected, it
+        will always be the last element and have the greatest distance, but
+        every other element will be in an arbitrary order and may contain
+        duplicates (this can happen when a primitive crosses a split pane). If
+        no intersection occurs, the return value will be an empty list.
 
         :param vector origin: The origin of the ray.
         :param vector direction: The direction of the ray.
         :param number t_near:
         :param number t_far:
+        :param KDNode source: A node that will not be considered for
+            intersection.
 
 
 .. py:class:: Matrix(dimension,values)
