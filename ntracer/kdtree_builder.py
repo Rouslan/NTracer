@@ -154,7 +154,7 @@ if DUMP_ASY_REPR:
         print 'draw(box({0},{1}),red);'.format(v_str(start),v_str(end))
         print '//{0},{1}'.format(bound.start,bound.end)
         print 'label("{0}",{1},Z,red);'.format(
-            ','.join(str(T_IDS[id(t)]) for t in (cp+op)),
+            ','.join(str(T_IDS[id(t.p)]) for t in (cp+op)),
             v_str((bound.start+bound.end)*0.5))
 
 
@@ -164,11 +164,11 @@ def ortho_flat(p):
     return None
 
 
-def overlap_intersects(bound,p,skip,axis):
+def overlap_intersects(bound,p,skip,axis,right):
     if skip is None:
         return bound.intersects(p.p)
     if skip == axis:
-        return bound.start[axis] < p.aabb_min[axis] < bound.end[axis]
+        return p.aabb_min[axis] >= bound.start[axis] if right else p.aabb_min[axis] < bound.end[axis]
     return bound.intersects_flat(p.p,skip)
 
 
@@ -221,9 +221,9 @@ def create_node(nt,depth,boundary,contain_p,overlap_p):
         skip = ortho_flat(p)
         assert isinstance(p.p,nt.TrianglePrototype) or skip is None
         
-        if overlap_intersects(b_left,p,skip,axis):
+        if overlap_intersects(b_left,p,skip,axis,False):
             l_overlap_p.append(p)
-            if overlap_intersects(b_right,p,skip,axis):
+            if overlap_intersects(b_right,p,skip,axis,True):
                 r_overlap_p.append(p)
         else:
             r_overlap_p.append(p)

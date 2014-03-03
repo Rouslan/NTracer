@@ -28,6 +28,7 @@
 #include <exception>
 #include <assert.h>
 #include <vector>
+#include <forward_list>
 #include <SDL_thread.h>
 #include <atomic>
 #include <memory>
@@ -151,16 +152,6 @@ struct obj_Renderer {
     PyObject *idict;
     PyObject *weaklist;
     
-    PY_MEM_GC_NEW_DELETE
-
-    obj_Renderer(_object * _0) : base(_0), idict(NULL), weaklist(NULL) {
-        PyObject_Init(reinterpret_cast<PyObject*>(this),pytype());
-        mode = CONTAINS;
-    }
-    obj_Renderer(_object * _0,unsigned int _1) : base(_0,_1), idict(NULL), weaklist(NULL) {
-        PyObject_Init(reinterpret_cast<PyObject*>(this),pytype());
-        mode = CONTAINS;
-    }
     ~obj_Renderer() {
         Py_XDECREF(idict);
         if(weaklist) PyObject_ClearWeakRefs(reinterpret_cast<PyObject*>(this));
@@ -178,13 +169,14 @@ struct obj_Renderer {
             throw py_error_set();
         }
     }
+    
+    static std::forward_list<obj_Renderer*> instances;
+    static void abort_all();
 };
+std::forward_list<obj_Renderer*> obj_Renderer::instances;
 
 template<> struct _wrapped_type<renderer> {
     typedef obj_Renderer type;
-};
-template<> struct invariable_storage<renderer> {
-    static constexpr bool value = true;
 };
 
 
@@ -413,6 +405,14 @@ PyTypeObject obj_Scene::_pytype = make_type_object(
 
 
 void obj_Renderer_dealloc(obj_Renderer *self) {
+    auto last = obj_Renderer::instances.before_begin();
+    for(auto itr = obj_Renderer::instances.begin(); itr != obj_Renderer::instances.end(); last=itr++) {
+        if(*itr == self) {
+            obj_Renderer::instances.erase_after(last);
+            break;
+        }
+    }
+    
     switch(self->mode) {
     case CONTAINS:
         self->~obj_Renderer();
@@ -566,7 +566,29 @@ PyTypeObject obj_Renderer::_pytype = make_type_object(
     tp_weaklistoffset = offsetof(obj_Renderer,weaklist),
     tp_methods = obj_Renderer_methods,
     tp_dictoffset = offsetof(obj_Renderer,idict),
-    tp_init = &obj_Renderer_init);
+    tp_init = &obj_Renderer_init,
+    
+    tp_new = [](PyTypeObject *type,PyObject *args,PyObject *kwds) -> PyObject* {
+        auto r = type->tp_alloc(type,0);
+        if(!r) return nullptr;
+        try {
+            obj_Renderer::instances.push_front(reinterpret_cast<obj_Renderer*>(r));
+        } catch(std::bad_alloc&) {
+            Py_DECREF(r);
+            PyErr_NoMemory();
+            return nullptr;
+        }
+        return r;
+    });
+
+void obj_Renderer::abort_all() {
+    for(auto inst : instances) {
+        if(inst->mode == CONTAINS) {
+            auto r = obj_Renderer_abort_render(inst,nullptr);
+            if(r) Py_DECREF(r);
+        }
+    }
+}
 
 
 PyObject *obj_Color_repr(wrapped_type<color> *self) {
@@ -882,6 +904,7 @@ PyTypeObject material::_pytype = make_type_object(
     tp_dealloc = destructor_dealloc<material>::value,
     tp_repr = &obj_Material_repr,
     tp_members = obj_Material_members,
+    tp_getset = obj_Material_getset,
     tp_new = &obj_Material_new);
 
 
@@ -910,6 +933,9 @@ extern "C" SHARED(PyObject) * PyInit_render(void) {
 
 extern "C" SHARED(void) initrender(void) {
 #endif
+    import_pygame_base();
+    if(PyErr_Occurred()) return INIT_ERR_VAL;
+
     import_pygame_surface();
     if(PyErr_Occurred()) return INIT_ERR_VAL;
 
@@ -917,7 +943,6 @@ extern "C" SHARED(void) initrender(void) {
     if(PyErr_Occurred()) return INIT_ERR_VAL;
         
     if(UNLIKELY(PyType_Ready(obj_Scene::pytype()) < 0)) return INIT_ERR_VAL;
-    obj_Renderer::pytype()->tp_new = &PyType_GenericNew;
     if(UNLIKELY(PyType_Ready(obj_Renderer::pytype()) < 0)) return INIT_ERR_VAL;
     if(UNLIKELY(PyType_Ready(wrapped_type<color>::pytype()) < 0)) return INIT_ERR_VAL;
     if(UNLIKELY(PyType_Ready(material::pytype()) < 0)) return INIT_ERR_VAL;
@@ -933,6 +958,11 @@ extern "C" SHARED(void) initrender(void) {
     add_class(m,"Renderer",obj_Renderer::pytype());
     add_class(m,"Color",wrapped_type<color>::pytype());
     add_class(m,"Material",material::pytype());
+    
+    /* When PyGame shuts down, it destroys all surface objects regardless of
+       reference counts, so any threads working with surfaces need to be stopped
+       first. */
+    PyGame_RegisterQuit(&obj_Renderer::abort_all);
 
 #if PY_MAJOR_VERSION >= 3
     return m;

@@ -294,7 +294,7 @@ template<typename Store> struct triangle : triangle_obj_common, primitive<Store>
         if(!denom) return 0;
         
         real t = -(dot(face_normal,target.origin) + d) / denom;
-        if(t <= 0) return 0;
+        if(t < 0) return 0;
         
         vector<Store> P = target.origin + t * target.direction;
         vector<Store> pside = p1 - P;
@@ -934,7 +934,7 @@ template<typename Store> struct composite_scene : scene {
         
         if(m->reflectivity && depth < max_reflect_depth) {
             r = m->c * ray_color(
-                ray<Store>(normal.origin,target.direction - normal.direction * (2 * dot(target.direction,normal.direction))),
+                ray<Store>(normal.origin,target.direction - normal.direction * (2 * sine)),
                 depth+1,
                 p) * m->reflectivity + r * (1 - m->reflectivity);
         }

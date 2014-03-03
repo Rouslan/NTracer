@@ -25,7 +25,7 @@ namespace py {
     };
 
     inline PyObject *check_obj(PyObject *o) {
-        if(!o) throw py_error_set();
+        if(UNLIKELY(!o)) throw py_error_set();
         return o;
     }
 
@@ -62,9 +62,13 @@ namespace py {
         explicit new_ref(PyObject *ptr) : _ptr(ptr) {}
     };
     
+    inline new_ref check_new_ref(PyObject *o) {
+        return new_ref(check_obj(o));
+    }
+    
     inline void *malloc(size_t size) {
         void *r = PyMem_Malloc(size);
-        if(!r) throw std::bad_alloc();
+        if(UNLIKELY(!r)) throw std::bad_alloc();
         return r;
     }
     
@@ -190,10 +194,10 @@ namespace py {
 
         object_attr_proxy(PyObject *ptr,const char *name) : _ptr(ptr), name(name) {}
     public:
-        operator object() const { return new_ref(check_obj(PyObject_GetAttrString(_ptr,name))); }
+        operator object() const { return check_new_ref(PyObject_GetAttrString(_ptr,name)); }
 
         object_attr_proxy &operator=(object val) {
-            if(PyObject_SetAttrString(_ptr,name,val.ref()) == -1) throw py_error_set();
+            if(UNLIKELY(PyObject_SetAttrString(_ptr,name,val.ref()) == -1)) throw py_error_set();
             return *this;
         }
 
@@ -203,29 +207,29 @@ namespace py {
         }
 
         template<typename... Args> object operator()(const Args&... args) const {
-            return new_ref(check_obj(PyObject_CallMethodObjArgs(
+            return check_new_ref(PyObject_CallMethodObjArgs(
                 _ptr,
                 object(new_ref(check_obj(PYSTR(InternFromString)(name)))).ref(),
                 make_object(args).ref()...,
-                0)));
+                0));
         }
     };
 
     inline object_attr_proxy _object_base::attr(const char *name) const { return object_attr_proxy(_ptr,name); }
 
     inline object _object_base::operator()() const {
-        return py::new_ref(check_obj(PyObject_CallObject(_ptr,0)));
+        return check_new_ref(PyObject_CallObject(_ptr,0));
     }
 
     template<typename Arg1,typename... Args> inline object _object_base::operator()(const Arg1 &arg1,const Args&... args) const {
-        return py::new_ref(check_obj(PyObject_CallFunctionObjArgs(_ptr,
+        return check_new_ref(PyObject_CallFunctionObjArgs(_ptr,
             make_object(arg1).ref(),
             make_object(args).ref()...,
-            0)));
+            0));
     }
 
     inline void del(const object_attr_proxy &attr) {
-        if(PyObject_DelAttrString(attr._ptr,attr.name) == -1) throw py_error_set();
+        if(UNLIKELY(PyObject_DelAttrString(attr._ptr,attr.name) == -1)) throw py_error_set();
     }
 
 
@@ -243,10 +247,10 @@ namespace py {
             Py_DECREF(key);
         }
 
-        operator object() const { return new_ref(check_obj(PyObject_GetItem(_ptr,key))); }
+        operator object() const { return check_new_ref(PyObject_GetItem(_ptr,key)); }
 
         object_item_proxy &operator=(object val) {
-            if(PyObject_SetItem(_ptr,key,val.ref()) == -1) throw py_error_set();
+            if(UNLIKELY(PyObject_SetItem(_ptr,key,val.ref()) == -1)) throw py_error_set();
             return *this;
         }
 
@@ -265,7 +269,7 @@ namespace py {
     }
 
     inline void del(const object_item_proxy &item) {
-        if(PyObject_DelItem(item._ptr,item.key) == -1) throw py_error_set();
+        if(UNLIKELY(PyObject_DelItem(item._ptr,item.key) == -1)) throw py_error_set();
     }
 
 
@@ -413,7 +417,7 @@ namespace py {
     public:
         tuple(borrowed_ref r) : _object_base(r) { assert(PyTuple_Check(r._ptr)); }
         tuple(py::new_ref r) : _object_base(r) { assert(PyTuple_Check(r._ptr)); }
-        explicit tuple(Py_ssize_t len) : _object_base(py::new_ref(check_obj(PyTuple_New(len)))) {}
+        explicit tuple(Py_ssize_t len) : _object_base(check_new_ref(PyTuple_New(len))) {}
         tuple(const tuple &b) : _object_base(b) {}
         explicit tuple(const _object_base &b) : _object_base(object(py::borrowed_ref(reinterpret_cast<PyObject*>(&PyTuple_Type)))(b)) {
             assert(PyTuple_Check(_ptr));
@@ -487,7 +491,7 @@ namespace py {
     public:
         list(borrowed_ref r) : _object_base(r) { assert(PyList_Check(r._ptr)); }
         list(py::new_ref r) : _object_base(r) { assert(PyList_Check(r._ptr)); }
-        list() : _object_base(py::new_ref(check_obj(PyList_New(0)))) {}
+        list() : _object_base(check_new_ref(PyList_New(0))) {}
         list(const list &b) : _object_base(b) {}
         explicit list(const _object_base &b) : _object_base(object(py::borrowed_ref(reinterpret_cast<PyObject*>(&PyList_Type)))(b)) {
             assert(PyList_Check(_ptr));
@@ -557,7 +561,7 @@ namespace py {
     public:
         dict(borrowed_ref r) : _object_base(r) { assert(PyDict_Check(r._ptr)); }
         dict(py::new_ref r) : _object_base(r) { assert(PyDict_Check(r._ptr)); }
-        dict() : _object_base(py::new_ref(check_obj(PyDict_New()))) {}
+        dict() : _object_base(check_new_ref(PyDict_New())) {}
         dict(const dict &b) : _object_base(b) {}
 
         dict &operator=(const dict &b) {
@@ -604,8 +608,8 @@ namespace py {
     public:
         bytes(borrowed_ref r) : _object_base(r) { assert(PYBYTES(Check)(r._ptr)); }
         bytes(py::new_ref r) : _object_base(r) { assert(PYBYTES(Check)(r._ptr)); }
-        bytes(const char *str="") : _object_base(py::new_ref(check_obj(PYBYTES(FromString)(str)))) {}
-        explicit bytes(Py_ssize_t s) : _object_base(py::new_ref(check_obj(PYBYTES(FromStringAndSize)(NULL,s)))) {}
+        bytes(const char *str="") : _object_base(check_new_ref(PYBYTES(FromString)(str))) {}
+        explicit bytes(Py_ssize_t s) : _object_base(check_new_ref(PYBYTES(FromStringAndSize)(NULL,s))) {}
         bytes(const bytes &b) : _object_base(b) {}
 
         bytes &operator=(const bytes &b) {
@@ -624,6 +628,50 @@ namespace py {
     };
     
     typedef _nullable<bytes> nullable_bytes;
+    
+    
+    class set_base : public _object_base {
+    public:
+        Py_ssize_t size() const { return PySet_GET_SIZE(_ptr); }
+        
+        bool contains(PyObject *x) {
+            int r = PySet_Contains(_ptr,x);
+            if(UNLIKELY(r == -1)) throw py_error_set();
+            return r != 0;
+        }
+        template<typename T> bool contains(const T &x) {
+            return contains(make_object(x).ref());
+        }
+        
+    protected:
+        template<typename T> set_base(T x) : _object_base(x) {}
+        ~set_base() = default;
+    };
+    
+    class set : public set_base {
+    public:
+        set(borrowed_ref r) : set_base(r) { assert(PySet_Check(r._ptr)); }
+        set(py::new_ref r) : set_base(r) { assert(PySet_Check(r._ptr)); }
+        set() : set_base(check_new_ref(PySet_New(nullptr))) {}
+        
+        void add(PyObject *x) {
+            if(UNLIKELY(PySet_Add(_ptr,x)) == -1) throw py_error_set();
+        }
+        template<typename T> bool add(const T &x) {
+            return add(make_object(x).ref());
+        }
+        
+        bool discard(PyObject *x) {
+            int r = PySet_Discard(_ptr,x);
+            if(UNLIKELY(r == -1)) throw py_error_set();
+            return r != 0;
+        }
+        template<typename T> bool discard(const T &x) {
+            return discard(make_object(x).ref());
+        }
+    };
+    
+    typedef _nullable<set> nullable_set;
 
 
     /*template<typename T,bool invariable=invariable_storage<T>::value> class pyptr {
@@ -766,15 +814,15 @@ namespace py {
     }
     
     inline object str(const object &o) {
-        return new_ref(check_obj(PyObject_Str(o.ref())));
+        return check_new_ref(PyObject_Str(o.ref()));
     }
     
     inline object repr(const object &o) {
-        return new_ref(check_obj(PyObject_Repr(o.ref())));
+        return check_new_ref(PyObject_Repr(o.ref()));
     }
 
     inline object iter(const object &o) {
-        return new_ref(check_obj(PyObject_GetIter(o.ref())));
+        return check_new_ref(PyObject_GetIter(o.ref()));
     }
 
     inline nullable_object next(const object &o) {

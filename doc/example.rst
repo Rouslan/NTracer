@@ -37,7 +37,7 @@ The following is a breakdown of the code:
 .. code:: python
 
     import pygame
-    from ntracer import NTracer, Renderer, build_kdtree
+    from ntracer import NTracer, Renderer, build_composite_scene
     from ntracer import wavefront_obj
     
 First we import what we need.
@@ -80,11 +80,10 @@ We create a new camera which will be the view-port of our scene.
 
 We move the camera back 5 units. The vector by which to move the camera is
 created using the static method ``axis``, which takes an axis index (0-based)
-and a magnitude to create a vector perpendicular to the given axis with the
-given magnitude. We could have used
-:code:`camera.translate(ntracer.Vector(0,0,-5))` or even
-:code:`camera.translate((0,0,-5))` instead, but doing it this way makes the code
-dimension-agnostic.
+and a magnitude to create a vector parallel to the given axis with the given
+magnitude. We could have used :code:`camera.translate(ntracer.Vector(0,0,-5))`
+or even :code:`camera.translate((0,0,-5))` instead, but doing it this way makes
+the code dimension-agnostic.
 
 .. code:: python
 

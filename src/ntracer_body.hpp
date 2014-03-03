@@ -937,7 +937,7 @@ PyObject *kdnode_intersects(obj_KDNode *self,PyObject *args,PyObject *kwds) {
         if(tmp) t_far = from_pyobject<real>(tmp);
         
         tmp = ga(false);
-        auto source = tmp ? checked_py_cast<primitive<module_store> >(tmp) : nullptr;
+        auto source = tmp && tmp != Py_None ? checked_py_cast<primitive<module_store> >(tmp) : nullptr;
         ga.finished();
         
         check_origin_dir_compat(origin,direction);
