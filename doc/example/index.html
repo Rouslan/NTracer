@@ -85,7 +85,7 @@
 </div>
 <p>The following is a breakdown of the code:</p>
 <div class="code python highlight-python"><div class="highlight"><pre><span class="kn">import</span> <span class="nn">pygame</span>
-<span class="kn">from</span> <span class="nn">ntracer</span> <span class="kn">import</span> <span class="n">NTracer</span><span class="p">,</span> <span class="n">Renderer</span><span class="p">,</span> <span class="n">build_kdtree</span>
+<span class="kn">from</span> <span class="nn">ntracer</span> <span class="kn">import</span> <span class="n">NTracer</span><span class="p">,</span> <span class="n">Renderer</span><span class="p">,</span> <span class="n">build_composite_scene</span>
 <span class="kn">from</span> <span class="nn">ntracer</span> <span class="kn">import</span> <span class="n">wavefront_obj</span>
 </pre></div>
 </div>
@@ -119,11 +119,10 @@ geometry.</p>
 </div>
 <p>We move the camera back 5 units. The vector by which to move the camera is
 created using the static method <tt class="docutils literal"><span class="pre">axis</span></tt>, which takes an axis index (0-based)
-and a magnitude to create a vector perpendicular to the given axis with the
-given magnitude. We could have used
-<tt class="code docutils literal"><span class="pre">camera.translate(ntracer.Vector(0,0,-5))</span></tt> or even
-<tt class="code docutils literal"><span class="pre">camera.translate((0,0,-5))</span></tt> instead, but doing it this way makes the code
-dimension-agnostic.</p>
+and a magnitude to create a vector parallel to the given axis with the given
+magnitude. We could have used <tt class="code docutils literal"><span class="pre">camera.translate(ntracer.Vector(0,0,-5))</span></tt>
+or even <tt class="code docutils literal"><span class="pre">camera.translate((0,0,-5))</span></tt> instead, but doing it this way makes
+the code dimension-agnostic.</p>
 <div class="code python highlight-python"><div class="highlight"><pre><span class="n">scene</span><span class="o">.</span><span class="n">set_camera</span><span class="p">(</span><span class="n">camera</span><span class="p">)</span>
 </pre></div>
 </div>
