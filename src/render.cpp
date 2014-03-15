@@ -43,6 +43,7 @@ using namespace type_object_abbrev;
 
 
 const int FRAME_READY = SDL_USEREVENT;
+const int RENDER_CHUNK_SIZE = 32;
 
 
 class already_running_error : public std::exception {
@@ -118,7 +119,7 @@ struct renderer {
     std::vector<SDL_Thread*> workers;
     scene *sc;
     SDL_Surface *destination;
-    std::atomic<unsigned int> line;
+    std::atomic<unsigned int> chunk;
     PyObject *self;
     volatile enum {NORMAL,CANCEL,QUIT} state;
 
@@ -277,11 +278,6 @@ void draw_pixel(const scene *sc,byte *&dest,const SDL_Surface *surface,int x,int
 int worker(obj_Renderer *self) {
     renderer &r = self->base;
     
-    // to minimize locking, each line is buffered
-    std::unique_ptr<byte[]> buffer;
-    int buffer_size = -1;
-
-    
     if(!r.busy_threads) {
         scoped_lock lock(r.mut);
         
@@ -294,28 +290,26 @@ int worker(obj_Renderer *self) {
     }
 
     for(;;) {
-        int byte_width = r.destination->w * r.destination->format->BytesPerPixel;
-        if(buffer_size < byte_width) {
-            buffer.reset(new byte[byte_width]);
-            buffer_size = byte_width;
-        }
+        int chunks_x = (r.destination->w + RENDER_CHUNK_SIZE - 1) / RENDER_CHUNK_SIZE;
+        int chunks_y = (r.destination->h + RENDER_CHUNK_SIZE - 1) / RENDER_CHUNK_SIZE;
 
-        int y;
-        while((y = r.line.fetch_add(1)) < r.destination->h) {
-            byte *pixels = buffer.get();
-
-            for(int x = 0; x < r.destination->w; ++x) {
-                if(UNLIKELY(r.state != renderer::NORMAL)) goto finish;
-
-                draw_pixel(r.sc,pixels,r.destination,x,y);
+        for(;;) {
+            int chunk = r.chunk.fetch_add(1);
+            int start_y = chunk/chunks_x;
+            int start_x = chunk%chunks_x;
+            if(start_y > chunks_y) break;
+            start_x *= RENDER_CHUNK_SIZE;
+            start_y *= RENDER_CHUNK_SIZE;
+            
+            for(int y = start_y; y < std::min(start_y+RENDER_CHUNK_SIZE,r.destination->h); ++y) {
+                byte *pixels = reinterpret_cast<byte*>(r.destination->pixels) + y * r.destination->pitch + start_x * r.destination->format->BytesPerPixel;
+                
+                for(int x = start_x; x < std::min(start_x+RENDER_CHUNK_SIZE,r.destination->w); ++x) {
+                    if(UNLIKELY(r.state != renderer::NORMAL)) goto finish;
+                    
+                    draw_pixel(r.sc,pixels,r.destination,x,y);
+                }
             }
-
-            if(SDL_MUSTLOCK(r.destination)) SDL_LockSurface(r.destination);
-            memcpy(
-                reinterpret_cast<byte*>(r.destination->pixels) + y * r.destination->pitch,
-                buffer.get(),
-                byte_width);
-            if(SDL_MUSTLOCK(r.destination)) SDL_UnlockSurface(r.destination);
         }
 
     finish:
@@ -347,6 +341,7 @@ int worker(obj_Renderer *self) {
                        workers is harmless. */
                     r.barrier.signal_all();
                 }
+                if(SDL_MUSTLOCK(r.destination)) SDL_UnlockSurface(r.destination);
                 r.sc->unlock();
                 SDL_FreeSurface(r.destination);
                 Py_DECREF(self);
@@ -456,20 +451,27 @@ PyObject *obj_Renderer_begin_render(obj_Renderer *self,PyObject *args,PyObject *
             if(r.busy_threads) throw already_running_error();
             
             r.busy_threads = r.threads;
-            r.line.store(0,std::memory_order_relaxed);
+            r.chunk.store(0,std::memory_order_relaxed);
             ++r.job;
             r.sc = sc;
             sc->lock();
             try {
                 r.destination = PySurface_AsSurface(dest);
                 ++r.destination->refcount;
-                r.barrier.signal_all();
+                if(SDL_MUSTLOCK(r.destination)) SDL_LockSurface(r.destination);
+                try {
+                    r.barrier.signal_all();
+                } catch(...) {
+                    if(SDL_MUSTLOCK(r.destination)) SDL_UnlockSurface(r.destination);
+                    throw;
+                }
             } catch(...) {
                 r.sc->unlock();
                 throw;
             }
         } catch(...) {
             Py_DECREF(self);
+            throw;
         }
 
         Py_RETURN_NONE;

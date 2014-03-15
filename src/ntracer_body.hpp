@@ -1664,6 +1664,9 @@ PyObject *obj_Matrix_determinant(wrapped_type<n_matrix> *self,PyObject*) {
 PyObject *obj_Matrix_inverse(wrapped_type<n_matrix> *self,PyObject*) {
     try {
         return to_pyobject(self->get_base().inverse());
+    } catch(std::domain_error &e) {
+        PyErr_SetString(PyExc_ValueError,e.what());
+        return nullptr;
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
