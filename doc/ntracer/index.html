@@ -109,7 +109,7 @@ calculated.</p>
 
 <dl class="class">
 <dt id="ntracer.render.Material">
-<em class="property">class </em><tt class="descname">Material</tt><big>(</big><em>color</em><span class="optional">[</span>, <em>opacity=1</em>, <em>reflectivity=0</em><span class="optional">]</span><big>)</big><a class="headerlink" href="#ntracer.render.Material" title="Permalink to this definition">¶</a></dt>
+<em class="property">class </em><tt class="descname">Material</tt><big>(</big><em>color</em><span class="optional">[</span>, <em>opacity=1</em>, <em>reflectivity=0</em>, <em>specular_intensity=1</em>, <em>specular_exp=8</em>, <em>specular_color=(1</em>, <em>1</em>, <em>1)</em><span class="optional">]</span><big>)</big><a class="headerlink" href="#ntracer.render.Material" title="Permalink to this definition">¶</a></dt>
 <dd><p>Specifies how light will interact with a primitive.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -120,6 +120,11 @@ calculated.</p>
 numbers.</li>
 <li><strong>opacity</strong> (<em>number</em>) &#8211; A value between 0 and 1 specifying transparency.</li>
 <li><strong>reflectivity</strong> (<em>number</em>) &#8211; A value between 0 and 1 specifying reflectivity.</li>
+<li><strong>specular_intesity</strong> (<em>number</em>) &#8211; A value between 0 and 1 specifying the
+intensity of the specular highlight.</li>
+<li><strong>specular_exp</strong> (<em>number</em>) &#8211; The sharpness of the specular highlight.</li>
+<li><strong>specular_color</strong> &#8211; An instance of <a class="reference internal" href="#ntracer.render.Color" title="ntracer.render.Color"><tt class="xref py py-class docutils literal"><span class="pre">Color</span></tt></a> or a tuple with
+three numbers specifying the color of the specular highlight.</li>
 </ul>
 </td>
 </tr>
@@ -128,7 +133,8 @@ numbers.</li>
 <dl class="attribute">
 <dt id="ntracer.render.Material.color">
 <tt class="descname">color</tt><a class="headerlink" href="#ntracer.render.Material.color" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>The diffuse color of the object.</p>
+</dd></dl>
 
 <dl class="attribute">
 <dt id="ntracer.render.Material.opacity">
@@ -145,6 +151,29 @@ numbers.</li>
 the reflection is multiplied by <a class="reference internal" href="#ntracer.render.Material.color" title="ntracer.render.Material.color"><tt class="xref py py-attr docutils literal"><span class="pre">color</span></tt></a>, thus if
 <a class="reference internal" href="#ntracer.render.Material.color" title="ntracer.render.Material.color"><tt class="xref py py-attr docutils literal"><span class="pre">color</span></tt></a> is <tt class="docutils literal"><span class="pre">(1,0,0)</span></tt>, the reflection will always be in shades
 of red.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="ntracer.render.Material.specular_intensity">
+<tt class="descname">specular_intensity</tt><a class="headerlink" href="#ntracer.render.Material.specular_intensity" title="Permalink to this definition">¶</a></dt>
+<dd><p>A value between 0 and 1 specifying the maximum intensity of the specular
+highlight.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="ntracer.render.Material.specular_exp">
+<tt class="descname">specular_exp</tt><a class="headerlink" href="#ntracer.render.Material.specular_exp" title="Permalink to this definition">¶</a></dt>
+<dd><p>A value greater than 0 specifying the sharpness of the specular
+highlight.</p>
+<p>The higher the value, the smaller the highlight will be. A value of 0
+would cause the specular highlight to cover the entire surface of the
+object at maximum intensity.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="ntracer.render.Material.specular">
+<tt class="descname">specular</tt><a class="headerlink" href="#ntracer.render.Material.specular" title="Permalink to this definition">¶</a></dt>
+<dd><p>The color of the specular highlight.</p>
 </dd></dl>
 
 </dd></dl>
@@ -1318,6 +1347,13 @@ of the vector will be zero.</li>
 </dd></dl>
 
 <dl class="method">
+<dt id="ntracer.tracern.Vector.__div__">
+<tt class="descname">__div__</tt><big>(</big><em>b</em><big>)</big><a class="headerlink" href="#ntracer.tracern.Vector.__div__" title="Permalink to this definition">¶</a></dt>
+<dd><p>Divide every element of the vector by <tt class="docutils literal"><span class="pre">b</span></tt>.</p>
+<p><tt class="code docutils literal"><span class="pre">self.__div__(y)</span></tt> &lt;==&gt; <tt class="code docutils literal"><span class="pre">self/y</span></tt></p>
+</dd></dl>
+
+<dl class="method">
 <dt id="ntracer.tracern.Vector.__eq__">
 <tt class="descname">__eq__</tt><big>(</big><em>b</em><big>)</big><a class="headerlink" href="#ntracer.tracern.Vector.__eq__" title="Permalink to this definition">¶</a></dt>
 <dd><p><tt class="code docutils literal"><span class="pre">self.__eq__(y)</span></tt> &lt;==&gt; <tt class="code docutils literal"><span class="pre">self==y</span></tt></p>
@@ -1424,7 +1460,7 @@ returns a number.</td>
 <dt id="ntracer.tracern.Vector.unit">
 <tt class="descname">unit</tt><big>(</big><big>)</big> &rarr; Vector<a class="headerlink" href="#ntracer.tracern.Vector.unit" title="Permalink to this definition">¶</a></dt>
 <dd><p>Return the corresponding unit vector.</p>
-<p>Equivalent to: <tt class="code docutils literal"><span class="pre">self</span> <span class="pre">*</span> <span class="pre">(1/self.absolute())</span></tt></p>
+<p>Equivalent to: <tt class="code docutils literal"><span class="pre">self</span> <span class="pre">/</span> <span class="pre">self.absolute()</span></tt></p>
 </dd></dl>
 
 <dl class="staticmethod">
