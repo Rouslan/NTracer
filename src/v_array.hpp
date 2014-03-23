@@ -102,7 +102,7 @@ namespace impl {
         template<typename A,typename B> static auto assign(A &a,B b) -> decltype(a += b) {
             return a += b;
         }
-        template<typename T> static typename T::item_t reduce(T x) {
+        template<typename T> static auto reduce(T x) -> decltype(x.reduce_add()) {
             return x.reduce_add();
         }
         template<typename T> static constexpr T first() {
@@ -422,12 +422,12 @@ namespace impl {
         
         typename Store::template type<v_item_count,T> store;
     };
-    
+
     template<typename Op,typename T> struct v_reduce {
         typedef s_item_t<T> item_t;
         typedef v_item_t<T,simd::v_sizes<item_t>::value[0]> v_t;
         
-        static const int v_score = T::v_score - 1;
+        static const int v_score = T::v_score - (std::is_same<Op,op_add>::value && v_t::has_vec_reduce_add ? 1 : 5);
         
         v_t &r;
         item_t &r_small;
@@ -446,7 +446,7 @@ namespace impl {
         
         static constexpr size_t smallest_vec(int i=0) {
             typedef simd::v_sizes<item_t> sizes;
-            return sizes::value[i] == 1 || sizes::value[i+1] == 1 ? sizes::value[i] : smallest_vec(i+1);
+            return (sizes::value[i] == 1 || sizes::value[i+1] == 1) ? sizes::value[i] : smallest_vec(i+1);
         }
     };
     template<typename Op,typename T> inline s_item_t<T> reduce(const v_expr<T> &a) {

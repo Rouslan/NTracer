@@ -44,6 +44,7 @@ using namespace type_object_abbrev;
 
 const int FRAME_READY = SDL_USEREVENT;
 const int RENDER_CHUNK_SIZE = 32;
+const int DEFAULT_SPECULAR_EXP = 8;
 
 
 class already_running_error : public std::exception {
@@ -813,90 +814,94 @@ PyTypeObject color_obj_base::_pytype = make_type_object(
     tp_new = &obj_Color_new);
 
 
-PyObject *obj_Material_repr(material *self) {
-    PyObject *ret = nullptr;
-    char *cr;
-    char *cg = nullptr;
-    char *cb = nullptr;
-    char *o = nullptr;
-    char *r = nullptr;
-    
-    if((cr = PyOS_double_to_string(self->c.r,'r',0,0,nullptr))) {
-        if((cg = PyOS_double_to_string(self->c.g,'r',0,0,nullptr))) {
-            if((cb = PyOS_double_to_string(self->c.b,'r',0,0,nullptr))) {
-                if(self->reflectivity == 0 && self->opacity == 1) {
-                    ret = PYSTR(FromFormat)("Material((%s,%s,%s))",cr,cg,cb);
-                } else if((o = PyOS_double_to_string(self->opacity,'r',0,0,nullptr))) {
-                    if(self->reflectivity == 0) {
-                        ret = PYSTR(FromFormat)("Material((%s,%s,%s),%s)",cr,cg,cb,o);
-                    } else if((r = PyOS_double_to_string(self->reflectivity,'r',0,0,nullptr))) {
-                        ret = PYSTR(FromFormat)("Material((%s,%s,%s),%s,%s)",cr,cg,cb,o,r);
-                    }
-                }
-            }
-        }
+struct py_mem_deleter {
+    void operator()(char *x) {
+        PyMem_Free(x);
     }
-    
-    PyMem_Free(cr);
-    PyMem_Free(cg);
-    PyMem_Free(cb);
-    PyMem_Free(o);
-    PyMem_Free(r);
-    
-    return ret;
+};
+std::unique_ptr<char,py_mem_deleter> f_to_s(float x) {
+    char *r = PyOS_double_to_string(x,'r',0,0,nullptr);
+    if(!r) throw py_error_set();
+    return std::unique_ptr<char,py_mem_deleter>(r);
+}
+
+PyObject *obj_Material_repr(material *self) {
+    try {
+        return PYSTR(FromFormat)("Material((%s,%s,%s),%s,%s,%s,%s,(%s,%s,%s))",
+            f_to_s(self->c.r).get(),
+            f_to_s(self->c.g).get(),
+            f_to_s(self->c.b).get(),
+            f_to_s(self->opacity).get(),
+            f_to_s(self->reflectivity).get(),
+            f_to_s(self->specular_intensity).get(),
+            f_to_s(self->specular_exp).get(),
+            f_to_s(self->specular.r).get(),
+            f_to_s(self->specular.g).get(),
+            f_to_s(self->specular.b).get());
+    } PY_EXCEPT_HANDLERS(nullptr)
+}
+
+void read_color(color &to,PyObject *from,const char *field) {
+    if(PyTuple_Check(from)) {
+        if(PyTuple_GET_SIZE(from) != 3) {
+            PyErr_Format(PyExc_ValueError,"\"%s\" must have exactly 3 values",field);
+            throw py_error_set();
+        }
+        to.r = from_pyobject<float>(PyTuple_GET_ITEM(from,0));
+        to.g = from_pyobject<float>(PyTuple_GET_ITEM(from,1));
+        to.b = from_pyobject<float>(PyTuple_GET_ITEM(from,2));
+    } else {
+        to = get_base<color>(from);
+    }
 }
 
 PyObject *obj_Material_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
     try {
-        const char *names[] = {"color","opacity","reflectivity"};
+        const char *names[] = {"color","opacity","reflectivity","specular_intensity","specular_exp","specular_color"};
         get_arg ga(args,kwds,names,"Material.__new__");
         auto obj_c = ga(true);
         float o = 1;
         float r = 0;
+        float si = 1;
+        float se = DEFAULT_SPECULAR_EXP;
         auto temp = ga(false);
         if(temp) o = from_pyobject<float>(temp);
         temp = ga(false);
         if(temp) r = from_pyobject<float>(temp);
+        temp = ga(false);
+        if(temp) si = from_pyobject<float>(temp);
+        temp = ga(false);
+        if(temp) se = from_pyobject<float>(temp);
+        auto obj_s = ga(false);
         ga.finished();
         
         auto ptr = py::check_obj(type->tp_alloc(type,0));
         auto base = reinterpret_cast<material*>(ptr);
         
-        if(PyTuple_Check(obj_c)) {
-            if(PyTuple_GET_SIZE(obj_c) != 3) {
-                PyErr_SetString(PyExc_ValueError,"\"color\" must have exactly 3 values");
-                return nullptr;
-            }
-            base->c.r = from_pyobject<float>(PyTuple_GET_ITEM(obj_c,0));
-            base->c.g = from_pyobject<float>(PyTuple_GET_ITEM(obj_c,1));
-            base->c.b = from_pyobject<float>(PyTuple_GET_ITEM(obj_c,2));
-        } else {
-            base->c = get_base<color>(obj_c);
-        }
+        read_color(base->c,obj_c,"color");
+        if(obj_s) read_color(base->specular,obj_s,"specular_color");
+        else base->specular = color(1,1,1);
         
         base->opacity = o;
         base->reflectivity = r;
+        base->specular_intensity = si;
+        base->specular_exp = se;
         
         return ptr;
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
-int obj_Material_set_color(material *self,PyObject *arg,void*) {
-    try {
-        setter_no_delete(arg);
-        self->c = get_base<color>(arg);
-        return 0;
-    } PY_EXCEPT_HANDLERS(-1)
-}
-
 PyGetSetDef obj_Material_getset[] = {
-    {const_cast<char*>("color"),OBJ_GETTER(material,self->c),reinterpret_cast<setter>(&obj_Material_set_color),NULL,NULL},
+    {const_cast<char*>("color"),OBJ_GETTER(material,self->c),OBJ_BASE_SETTER(material,self->c),NULL,NULL},
+    {const_cast<char*>("specular"),OBJ_GETTER(material,self->specular),OBJ_BASE_SETTER(material,self->specular),NULL,NULL},
     {NULL}
 };
 
 PyMemberDef obj_Material_members[] = {
     {const_cast<char*>("opacity"),T_FLOAT,offsetof(material,opacity),0,NULL},
     {const_cast<char*>("reflectivity"),T_FLOAT,offsetof(material,reflectivity),0,NULL},
+    {const_cast<char*>("specular_intensity"),T_FLOAT,offsetof(material,reflectivity),0,NULL},
+    {const_cast<char*>("specular_exp"),T_FLOAT,offsetof(material,reflectivity),0,NULL},
     {NULL}
 };
 

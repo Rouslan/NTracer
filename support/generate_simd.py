@@ -54,6 +54,15 @@ reduce_meth = """        FORCE_INLINE {item_type} {extra}() const {{
             return {intr}(this->data.p);
         }}
 """
+
+have_vec_reduce_add = '        static constexpr bool has_vec_reduce_add = true;\n'
+reduce_add_meth = reduce_meth + have_vec_reduce_add
+reduce_add_meth_b = """        FORCE_INLINE single<{item_type}> reduce_add() const {{
+            auto r = {intr}(this->data.p,this->data.p);{more_steps}
+            return {intr}(r,r);
+        }}
+""" + have_vec_reduce_add
+
 load_meth = """        static FORCE_INLINE {wrap_type} {extra}(const {item_type} *source) {{
             return {intr}(reinterpret_cast<{iargs[0][type]}>(source));
         }}
@@ -66,6 +75,15 @@ store_meth = """        FORCE_INLINE void {extra}({item_type} *dest) const {{
 
 set1_meth = """        static FORCE_INLINE {wrap_type} {extra}({item_type} x) {{
             return {intr}(x);
+        }}
+"""
+
+broadcast_meth = """        static FORCE_INLINE {wrap_type} repeat(single<{item_type}> x) {{
+            return {intr}(x.data);
+        }}
+"""
+shuffle_meth = """        static FORCE_INLINE {wrap_type} repeat(single<{item_type}> x) {{
+            return {intr}(x.data{extra},_MM_SHUFFLE(0,0,0,0));
         }}
 """
 
@@ -131,25 +149,36 @@ def print_mask_function(output,swidth,pwidth,func,args,body,fallback,explicit_ca
 def mm_prefix(width):
     return '_mm{0}'.format(width if width > 128 else '')
 
-def generic_intrinsic_name(type,width,base):
-    return '{0}_{1}_{2}p{3}'.format(
+def generic_intrinsic_name(type,width,base,scalar=False):
+    return '{0}_{1}_{2}{3}{4}'.format(
         mm_prefix(width),
         base,
         '' if width == 64 or type.float == FLOAT else 'e',
+        's' if scalar else 'p',
         type.code)
 
+def int_log2(x):
+    r = 0
+    x >>= 1
+    while x:
+        r += 1
+        x >>= 1
+    return r
+
 class FTransform(object):
-    def __init__(self,base_name,template,extra=None,support=FLOAT|INTEGER):
+    def __init__(self,base_name,template,extra=None,support=FLOAT|INTEGER,prefer=None,scalar=False):
         self.base_name = base_name
         self.template = template
         self.extra = extra or base_name
         self.support = support
+        self.prefer = prefer
+        self.scalar = scalar
         
     def supported(self,type,width):
         return self.support & type.float and (width != 512 or type.size >= 32)
         
     def intrinsic(self,type,width):
-        return generic_intrinsic_name(type,width,self.base_name)
+        return generic_intrinsic_name(type,width,self.base_name,self.scalar)
     
     def output(self,type,width,intr):
         return self.template.format(
@@ -159,7 +188,52 @@ class FTransform(object):
             base_type=base_type(type,width),
             item_type=type.name,
             extra=self.extra)
+    
+    def antirequisite(self,type,width,intrinsics):
+        if self.prefer:
+            if self.prefer.supported(type,width):
+                r = intrinsics.get(self.prefer.intrinsic(type,width))
+                if r: return r['tech']
+            return self.prefer.antirequisite(type,width,intrinsics)
+        return None
+    
+class ShuffleTransform(FTransform):
+    def __init__(self,prefer=None):
+        super(ShuffleTransform,self).__init__('shuffle',shuffle_meth,prefer=prefer)
+    
+    def supported(self,type,width):
+        return width == 128 and type.size >= 32
 
+    def output(self,type,width,intr):
+        return self.template.format(
+            intr=intr['name'],
+            wrap_type=wrap_type(type,width),
+            item_type=type.name,
+            extra=',x.data' if type.float == FLOAT else '')
+
+class BroadcastTransform(FTransform):
+    def __init__(self):
+        super(BroadcastTransform,self).__init__(None,broadcast_meth)
+    
+    def intrinsic(self,type,width):
+        return generic_intrinsic_name(type,width,'broadcast' + {'int8_t':'b','int16_t':'w','int32_t':'d','int64_t':'q','float':'ss','double':'sd'}[type.name]) 
+
+class ReduceAddBTransform(FTransform):
+    def __init__(self,prefer=None):
+        super(ReduceAddBTransform,self).__init__('hadd',reduce_add_meth_b,prefer=prefer)
+    
+    def output(self,type,width,intr):
+        ms = int_log2(width/type.size) - 2
+        if ms:
+            ms = '\n            r = {0}(r,r);'.format(intr['name']) * ms
+        else:
+            ms = ''
+        
+        return self.template.format(
+            intr=intr['name'],
+            wrap_type=wrap_type(type,width),
+            item_type=type.name,
+            more_steps=ms)
 
 class AltIFTransform(FTransform):
     def intrinsic(self,type,width):
@@ -252,6 +326,9 @@ class MixedFTransformAdapter(FTransform):
 mixed_method_transforms = [
     CastTransform()]
 
+reduce_add = FTransform('reduce_add',reduce_add_meth)
+repeat_a = BroadcastTransform()
+
 method_transforms = [MixedFTransformAdapter(w,mmt) for w in widths for mmt in mixed_method_transforms] + [
     FTransform('add',binary_op,'+'),
     FTransform('sub',binary_op,'-'),
@@ -271,13 +348,16 @@ method_transforms = [MixedFTransformAdapter(w,mmt) for w in widths for mmt in mi
     FTransform('abs',unary_meth),
     FTransform('ceil',unary_meth,support=FLOAT),
     FTransform('floor',unary_meth,support=FLOAT),
-    FTransform('reduce_add',reduce_meth),
+    reduce_add,
+    ReduceAddBTransform(prefer=reduce_add),
     FTransform('reduce_max',reduce_meth),
     FTransform('reduce_min',reduce_meth),
     AltIFTransform('load',load_meth),
     AltIFTransform('loadu',load_meth),
     AltIFTransform('store',store_meth),
     AltIFTransform('storeu',store_meth),
+    repeat_a,
+    ShuffleTransform(prefer=repeat_a),
     RepeatTransform('set1',set1_meth,'repeat'),
     AltIFTransform('setzero',setzero_meth,'zeros')]
 
@@ -387,12 +467,21 @@ def base_type(type,width):
     elif type.float == INTEGER: suffix = 'i'
     return '__m{0}{1}'.format(width,suffix)
 
-def ifdef_support(req,indent=0):
-    return '{0}#ifdef SUPPORT_{1}'.format('    '*indent,macroize(req))
+def ifdef_support(req,antireq=None,indent=0):
+    indent = '    '*indent
+    if req and antireq:
+        return '{0}#if defined(SUPPORT_{1}) && !defined(SUPPORT_{2})'.format(indent,macroize(req),macroize(antireq))
+
+    extra = ''
+    if not req:
+        assert antireq
+        extra = 'n'
+        req = antireq
+    return '{0}#if{1}def SUPPORT_{2}'.format(indent,extra,macroize(req))
 
 def print_dependent(d_list,file,indent=0):
     for req,mt_list in d_list.items():
-        print(ifdef_support(req,indent),file=file)
+        print(ifdef_support(req[0],req[1],indent=indent),file=file)
             
         for trans,intr,type,width in mt_list:
             print(trans.output(type,width,intr),file=file)
@@ -491,17 +580,19 @@ def generate(data_file,template_file,output_file):
                 
                 dependent = {}
                 for mt in method_transforms:
-                    if not mt.supported(type,width): continue
-                
-                    intr = intrinsics.get(mt.intrinsic(type,width))
-                    if intr:
-                        req = intr['tech']
-                        if req in IMPLIED_REQ[type_req]:
-                            print(mt.output(type,width,intr),file=output)
-                        else:
-                            if req not in dependent:
-                                dependent[req] = []
-                            dependent[req].append((mt,intr,type,width))
+                    if mt.supported(type,width):
+                        intr = intrinsics.get(mt.intrinsic(type,width))
+                        if intr:
+                            req = intr['tech']
+                            antireq = mt.antirequisite(type,width,intrinsics)
+
+                            if antireq is None and req in IMPLIED_REQ[type_req]:
+                                print(mt.output(type,width,intr),file=output)
+                            elif antireq is None or antireq not in IMPLIED_REQ[type_req]:
+                                rs = (None if req in IMPLIED_REQ[type_req] else req,antireq)
+                                if rs not in dependent:
+                                    dependent[rs] = []
+                                dependent[rs].append((mt,intr,type,width))
                         
                 print_dependent(dependent,output,1)
             continue
@@ -516,10 +607,10 @@ def generate(data_file,template_file,output_file):
                         
                         intr = intrinsics.get(ft.intrinsic(type,width))
                         if intr:
-                            req = intr['tech']
-                            if req not in dependent:
-                                dependent[req] = []
-                            dependent[req].append((ft,intr,type,width))
+                            rs = (intr['tech'],ft.antirequisite(type,width,intrinsics))
+                            if rs not in dependent:
+                                dependent[rs] = []
+                            dependent[rs].append((ft,intr,type,width))
                         
             print_dependent(dependent,output)
             continue

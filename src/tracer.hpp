@@ -914,6 +914,17 @@ template<typename Store> struct aabb {
 };
 
 
+template<typename Store> struct point_light {
+    vector<Store> location;
+    color c;
+};
+
+template<typename Store> struct global_light {
+    vector<Store> direction;
+    color c;
+};
+
+
 template<typename Store> struct composite_scene : scene {
     bool locked;
     real fov;
@@ -938,6 +949,17 @@ template<typename Store> struct composite_scene : scene {
                 depth+1,
                 p) * m->reflectivity + r * (1 - m->reflectivity);
         }
+        
+        // Blinn-Phong model
+        if(m->specular_intensity) {
+            //float base = dot(normal.direction,(light_direction + target.direction) * -0.5);
+            float base = -sine;
+            if(base > 0) {
+                base = std::pow(base,m->specular_exp) * m->specular_intensity;
+                r = m->specular * base + r * (1 - base);
+            }
+        }
+        
         return r;
     }
     

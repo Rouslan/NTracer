@@ -19,62 +19,87 @@ ntracer Package
 .. py:class:: Color(r,g,b)
 
     A red-green-blue triplet specifying a color.
-    
+
     For each component, zero represents its minimum value and one represents its
     maximum value. Therefore, :code:`Color(0,0,0)` represents black,
     :code:`Color(1,1,1)` represents white and :code:`Color(0,0,0.5)` represents
     dark blue.
-    
+
     Although values outside of 0-1 are allowed, they are clipped to the normal
     range when drawn onto a `pygame.Surface
     <http://www.pygame.org/docs/ref/surface.html#pygame.Surface>`_ object. Such
     values will, however, affect how reflections and transparency are
     calculated.
-    
+
     Instances of this class are read-only.
-    
+
     :param number r: Red component
     :param number g: Green component
     :param number b: Blue component
-    
+
     .. py:attribute:: r
-    
+
         Red component
-    
+
     .. py:attribute:: g
-    
+
         Green component
-    
+
     .. py:attribute:: b
-    
+
         Blue component
 
 
-.. py:class:: Material(color,[opacity=1,reflectivity=0])
+.. py:class:: Material(color,[opacity=1,reflectivity=0,specular_intensity=1,specular_exp=8,specular_color=(1,1,1)])
 
     Specifies how light will interact with a primitive.
-    
+
     :param color: An instance of :py:class:`Color` or a tuple with three
         numbers.
     :param number opacity: A value between 0 and 1 specifying transparency.
     :param number reflectivity: A value between 0 and 1 specifying reflectivity.
-    
+    :param number specular_intesity: A value between 0 and 1 specifying the
+        intensity of the specular highlight.
+    :param number specular_exp: The sharpness of the specular highlight.
+    :param specular_color: An instance of :py:class:`Color` or a tuple with
+        three numbers specifying the color of the specular highlight.
+
     .. py:attribute:: color
-    
+
+        The diffuse color of the object.
+
     .. py:attribute:: opacity
-    
+
         A value between 0 and 1 specifying transparency.
-        
+
         0 mean completely transparent. 1 means completely opaque.
-    
+
     .. py:attribute:: reflectivity
-    
+
         A value between 0 and 1 specifying reflectivity.
-        
+
         0 means does not reflect at all. 1 means 100% reflective. The color of
         the reflection is multiplied by :py:attr:`color`, thus if
         :py:attr:`color` is ``(1,0,0)``, the reflection will always be in shades
         of red.
+
+    .. py:attribute:: specular_intensity
+
+        A value between 0 and 1 specifying the maximum intensity of the specular
+        highlight.
+
+    .. py:attribute:: specular_exp
+
+        A value greater than 0 specifying the sharpness of the specular
+        highlight.
+
+        The higher the value, the smaller the highlight will be. A value of 0
+        would cause the specular highlight to cover the entire surface of the
+        object at maximum intensity.
+
+    .. py:attribute:: specular
+
+        The color of the specular highlight.
 
 
 .. py:class:: Renderer([threads=0])
@@ -910,6 +935,12 @@ can't add a tuple and a :py:class:`Vector` together).
     .. py:method:: __add__(b)
 
         :code:`self.__add__(y)` <==> :code:`self+y`
+        
+    .. py:method:: __div__(b)
+    
+        Divide every element of the vector by ``b``.
+    
+        :code:`self.__div__(y)` <==> :code:`self/y`
 
     .. py:method:: __eq__(b)
 
@@ -992,7 +1023,7 @@ can't add a tuple and a :py:class:`Vector` together).
 
         Return the corresponding unit vector.
 
-        Equivalent to: :code:`self * (1/self.absolute())`
+        Equivalent to: :code:`self / self.absolute()`
 
     .. py:staticmethod:: axis(dimension,axis[,length=1]) -> Vector
 

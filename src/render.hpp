@@ -39,8 +39,8 @@ struct material {
     
     PyObject_HEAD
     
-    color c;
-    float opacity, reflectivity;
+    color c, specular;
+    float opacity, reflectivity, specular_intensity ,specular_exp;
 };
 
 #endif

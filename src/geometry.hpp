@@ -301,7 +301,7 @@ namespace impl {
         typedef simd::v_type<typename Store::item_t,Size> type;
     };
     template<typename Store> struct matrix_column : vector_expr<matrix_column<Store> > {
-        static const int v_score = 0;
+        static const int v_score = -1;
         static constexpr bool temporary = true;
         
         matrix<Store> &a;
@@ -347,7 +347,7 @@ namespace impl {
         typedef simd::v_type<typename Store::item_t,Size> type;
     };
     template<typename Store> struct const_matrix_column : vector_expr<const_matrix_column<Store> > {
-        static const int v_score = 0;
+        static const int v_score = -1;
         static constexpr bool temporary = true;
         
         const matrix<Store> &a;
@@ -402,8 +402,7 @@ template<class Store> struct matrix {
     
     void multiply(vector<Store> &RESTRICT r,const vector<Store> &b) const {
         assert(dimension() == b.dimension());
-        r.fill_with(0);
-        rep([&,this](int row,int col){ r[row] += (*this)[row][col] * b[col]; });
+        r.fill_with([&,this](int i){ return dot((*this)[i],b); });
     }
     
     void mult_transpose_(matrix<Store> &RESTRICT r,const matrix<Store> &b) const {

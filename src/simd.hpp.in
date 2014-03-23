@@ -84,8 +84,149 @@
     explicit T(scalar<S> b) { this->from_item(b.data); } \
     FORCE_INLINE T &operator=(T b) { this->data.p = b.data.p; return *this; }
 
+#define S_INIT_CODE(P) type() = default; \
+    FORCE_INLINE type(P _data) { data = _data; } \
+    FORCE_INLINE type &operator=(type b) { data = b.data; return *this; }
+
 
 namespace simd {
+    template<typename T> struct _single {};
+    
+#ifdef SUPPORT_SSE2
+    template<> struct _single<double> {
+        struct type {
+            S_INIT_CODE(__m128d)
+    #ifdef SUPPORT_AVX_512
+            FORCE_INLINE type(__m512d b) {
+                data = _mm512_castpd512_pd128(b);
+            }
+    #endif
+    #ifdef SUPPORT_AVX
+            FORCE_INLINE type(__m256d b) {
+                data = _mm256_castpd256_pd128(b);
+            }
+    #endif
+            
+            // TODO: add SIMD operations
+            
+            FORCE_INLINE operator double() const {
+                return _mm_cvtsd_f64(data);
+            }
+            
+            __m128d data;
+        };
+    };
+    template<> struct _single<int64_t> {
+        struct type {
+            S_INIT_CODE(__m128i)
+    #ifdef SUPPORT_AVX_512
+            FORCE_INLINE type(__m512i b) {
+                data = _mm512_castsi512_si128(b.data.p);
+            }
+    #endif
+    #ifdef SUPPORT_AVX2
+            FORCE_INLINE type(__m256i b) {
+                data = _mm256_castsi256_si128(b);
+            }
+    #endif
+            
+            // TODO: add SIMD operations
+            
+            FORCE_INLINE operator int64_t() const {
+                return _mm_cvtsi128_si64(data);
+            }
+            
+            __m128i data;
+        };
+    };
+    template<> struct _single<int32_t> {
+        struct type {
+            S_INIT_CODE(__m128i)
+    #ifdef SUPPORT_AVX_512
+            FORCE_INLINE type(__m512i b) {
+                data = _mm512_castsi512_si128(b.data.p);
+            }
+    #endif
+    #ifdef SUPPORT_AVX2
+            FORCE_INLINE type(__m256i b) {
+                data = _mm256_castsi256_si128(b);
+            }
+    #endif
+
+            // TODO: add SIMD operations
+            
+            FORCE_INLINE operator int32_t() const {
+                return _mm_cvtsi128_si32(data);
+            }
+            
+            __m128i data;
+        };
+    };
+    template<> struct _single<int16_t> {
+        struct type {
+            S_INIT_CODE(__m128i)
+    #ifdef SUPPORT_AVX2
+            FORCE_INLINE type(__m256i b) {
+                data = _mm256_castsi256_si128(b);
+            }
+    #endif
+
+            // TODO: add SIMD operations
+            
+            FORCE_INLINE operator int16_t() const {
+                return _mm_cvtsi128_si32(data) >> 16;
+            }
+            
+            __m128i data;
+        };
+    };
+    template<> struct _single<int8_t> {
+        struct type {
+            S_INIT_CODE(__m128i)
+    #ifdef SUPPORT_AVX2
+            FORCE_INLINE type(__m256i b) {
+                data = _mm256_castsi256_si128(b);
+            }
+    #endif
+
+            // TODO: add SIMD operations
+            
+            FORCE_INLINE operator int8_t() const {
+                return _mm_cvtsi128_si32(data) >> 24;
+            }
+            
+            __m128i data;
+        };
+    };
+#endif
+#ifdef SUPPORT_SSE
+    template<> struct _single<float> {
+        struct type {
+            S_INIT_CODE(__m128)
+    #ifdef SUPPORT_AVX_512
+            FORCE_INLINE type(__m512 b) {
+                data = _mm512_castps512_ps128(b);
+            }
+    #endif
+    #ifdef SUPPORT_AVX
+            FORCE_INLINE type(__m256 b) {
+                data = _mm256_castps256_ps128(b);
+            }
+    #endif
+
+            // TODO: add SIMD operations
+            
+            FORCE_INLINE operator float() const {
+                return _mm_cvtss_f32(data);
+            }
+            
+            __m128 data;
+        };
+    };
+#endif
+    
+    template<typename T> using single = typename _single<T>::type;
+    
     namespace impl {
         template<typename T> struct negation_mask;
         
@@ -129,6 +270,9 @@ namespace simd {
                 Item s[size];
             } data;
             
+            
+            static constexpr bool has_vec_reduce_add = false;
+            
             // fall-back implementations for missing SIMD functions
             T abs() const { return apply(static_cast<Item (*)(Item)>(&std::abs)); }
             Item reduce_max() const { return reduce(&std::max<Item>); }
@@ -140,14 +284,26 @@ namespace simd {
             FORCE_INLINE T operator*(Item b) const {
                 return *static_cast<const T*>(this) * T::repeat(b);
             }
+            FORCE_INLINE T operator*(single<Item> b) const {
+                return *static_cast<const T*>(this) * T::repeat(b);
+            }
             FORCE_INLINE T& operator*=(Item b) {
+                return *static_cast<T*>(this) *= T::repeat(b);
+            }
+            FORCE_INLINE T& operator*=(single<Item> b) {
                 return *static_cast<T*>(this) *= T::repeat(b);
             }
             
             FORCE_INLINE T operator/(Item b) const {
                 return *static_cast<const T*>(this) / T::repeat(b);
             }
+            FORCE_INLINE T operator/(single<Item> b) const {
+                return *static_cast<const T*>(this) / T::repeat(b);
+            }
             FORCE_INLINE T& operator/=(Item b) {
+                return *static_cast<T*>(this) /= T::repeat(b);
+            }
+            FORCE_INLINE T& operator/=(single<Item> b) {
                 return *static_cast<T*>(this) /= T::repeat(b);
             }
             
@@ -168,6 +324,9 @@ namespace simd {
         };
         
         template<typename T,typename Packed,typename Item> FORCE_INLINE T operator*(Item a,const common_real<T,Packed,Item> &b) {
+            return T::repeat(a) * static_cast<const T&>(b);
+        }
+        template<typename T,typename Packed,typename Item> FORCE_INLINE T operator*(typename T::single a,const common_real<T,Packed,Item> &b) {
             return T::repeat(a) * static_cast<const T&>(b);
         }
         
@@ -311,7 +470,6 @@ namespace simd {
     template<> struct _v_type<int32_t,1> { typedef scalar<int32_t> type; };
     template<> struct _v_type<int16_t,1> { typedef scalar<int16_t> type; };
     template<> struct _v_type<int8_t,1> { typedef scalar<int8_t> type; };
-    
     
 #ifdef SUPPORT_AVX_512    
     struct mask64_v_512 : impl::mask_common<mask64_v_512,8> {

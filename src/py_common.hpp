@@ -53,14 +53,17 @@
     } PY_EXCEPT_HANDLERS(NULL)                                          \
 }
 
-#define OBJ_SETTER(T,EXPR) [](PyObject *obj_self,PyObject *arg,void*) -> int { \
+#define _OBJ_SETTER(CONVERT,T,EXPR) [](PyObject *obj_self,PyObject *arg,void*) -> int { \
     try {                                                                      \
         setter_no_delete(arg);                                                 \
-        auto self = reinterpret_cast<T*>(obj_self);                                \
-        EXPR = from_pyobject<typename std::decay<decltype(EXPR)>::type>(arg);  \
+        auto self = reinterpret_cast<T*>(obj_self);                            \
+        EXPR = CONVERT<typename std::decay<decltype(EXPR)>::type>(arg);        \
         return 0;                                                              \
     } PY_EXCEPT_HANDLERS(-1)                                                   \
 }
+
+#define OBJ_SETTER(T,EXPR) _OBJ_SETTER(from_pyobject,T,EXPR)
+#define OBJ_BASE_SETTER(T,EXPR) _OBJ_SETTER(get_base,T,EXPR)
 
 
 // this value is taken from Python/pyarena.c of the CPython source
