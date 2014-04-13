@@ -29,6 +29,8 @@ typedef solid_prototype<module_store> n_solid_prototype;
 typedef triangle_prototype<module_store> n_triangle_prototype;
 typedef triangle_point<module_store> n_triangle_point;
 typedef aabb<module_store> n_aabb;
+typedef point_light<module_store> n_point_light;
+typedef global_light<module_store> n_global_light;
 
 
 Py_ssize_t check_dimension(int d) {
@@ -391,6 +393,43 @@ typedef py::obj_array_adapter<n_triangle_point,triangle_point_data_name,false,tr
 
 SIMPLE_WRAPPER(solid_prototype);
 
+SIMPLE_WRAPPER(point_light);
+SIMPLE_WRAPPER(global_light);
+
+template<typename T> struct cs_light_list : T {
+    static PySequenceMethods sequence_methods;
+    static PyMethodDef methods[];
+    
+    CONTAINED_PYTYPE_DEF
+    PY_MEM_NEW_DELETE
+    PyObject_HEAD
+    py::pyptr<obj_CompositeScene> parent;
+    
+    cs_light_list(obj_CompositeScene *parent) : parent(py::borrowed_ref(reinterpret_cast<PyObject*>(parent))) {
+        PyObject_Init(reinterpret_cast<PyObject*>(this),pytype());
+    }
+};
+
+struct point_light_list_base {
+    typedef n_point_light item_t;
+    
+    static const char *name;
+    static std::vector<item_t> &value(obj_CompositeScene *parent) {
+        return parent->cast_base().point_lights;
+    }
+};
+const char *point_light_list_base::name = MODULE_STR ".PointLightList";
+
+struct global_light_list_base {
+    typedef n_global_light item_t;
+    
+    static const char *name;
+    static std::vector<item_t> &value(obj_CompositeScene *parent) {
+        return parent->cast_base().global_lights;
+    }
+};
+const char *global_light_list_base::name = MODULE_STR ".GlobalLightList";
+
 
 template<> n_vector from_pyobject<n_vector>(PyObject *o) {
     if(PyTuple_Check(o)) {
@@ -535,27 +574,52 @@ PyObject *obj_CompositeScene_get_camera(obj_CompositeScene *self,PyObject *) {
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
-PyObject *obj_CompositeScene_set_fov(obj_CompositeScene *self,PyObject *arg) {
+PyObject *obj_CompositeScene_set_ambient(obj_CompositeScene *self,PyObject *arg) {
     try {
         ensure_unlocked(self);
-        self->get_base().fov = from_pyobject<real>(arg);
+        read_color(self->get_base().ambient,arg);
         Py_RETURN_NONE;
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
-PyObject *obj_CompositeScene_set_max_reflect_depth(obj_CompositeScene *self,PyObject *arg) {
+template<typename T> T &light_compat_check(const composite_scene<module_store> &scene,T &light) {
+    if(!compatible(scene,light)) THROW_PYERR_STRING(TypeError,"the light must have the same dimension as the scene");
+    return light;
+}
+
+PyObject *obj_CompositeScene_add_light(obj_CompositeScene *self,PyObject *arg) {
     try {
         ensure_unlocked(self);
-        self->get_base().max_reflect_depth = from_pyobject<int>(arg);
+        auto &base = self->get_base();
+        if(auto lobj = get_base_if_is_type<n_point_light>(arg)) base.point_lights.push_back(light_compat_check(base,*lobj));
+        else if(auto lobj = get_base_if_is_type<n_global_light>(arg)) base.global_lights.push_back(light_compat_check(base,*lobj));
+        else {
+            PyErr_SetString(PyExc_TypeError,"object must be an instance of PointLight or GlobalLight");
+            return nullptr;
+        }
+
         Py_RETURN_NONE;
     } PY_EXCEPT_HANDLERS(nullptr)
+}
+
+#define CS_SET_ATTR(ATTR) [](PyObject *_self,PyObject *arg) -> PyObject* { \
+    auto self = reinterpret_cast<obj_CompositeScene*>(_self); \
+    try { \
+        ensure_unlocked(self); \
+        self->get_base().ATTR = from_pyobject<typename std::decay<decltype(self->get_base().ATTR)>::type>(arg); \
+        Py_RETURN_NONE; \
+    } PY_EXCEPT_HANDLERS(nullptr) \
 }
 
 PyMethodDef obj_CompositeScene_methods[] = {
     {"set_camera",reinterpret_cast<PyCFunction>(&obj_CompositeScene_set_camera),METH_O,NULL},
     {"get_camera",reinterpret_cast<PyCFunction>(&obj_CompositeScene_get_camera),METH_NOARGS,NULL},
-    {"set_fov",reinterpret_cast<PyCFunction>(&obj_CompositeScene_set_fov),METH_O,NULL},
-    {"set_max_reflect_depth",reinterpret_cast<PyCFunction>(&obj_CompositeScene_set_max_reflect_depth),METH_O,NULL},
+    {"set_fov",CS_SET_ATTR(fov),METH_O,NULL},
+    {"set_max_reflect_depth",CS_SET_ATTR(max_reflect_depth),METH_O,NULL},
+    {"set_shadows",CS_SET_ATTR(shadows),METH_O,NULL},
+    {"set_camera_light",CS_SET_ATTR(camera_light),METH_O,NULL},
+    {"set_ambient_color",reinterpret_cast<PyCFunction>(&obj_CompositeScene_set_ambient),METH_O,NULL},
+    {"add_light",reinterpret_cast<PyCFunction>(&obj_CompositeScene_add_light),METH_O,NULL},
     {NULL}
 };
 
@@ -610,11 +674,20 @@ PyGetSetDef obj_CompositeScene_getset[] = {
     {const_cast<char*>("locked"),OBJ_GETTER(obj_CompositeScene,self->get_base().locked),NULL,NULL,NULL},
     {const_cast<char*>("fov"),OBJ_GETTER(obj_CompositeScene,self->get_base().fov),NULL,NULL,NULL},
     {const_cast<char*>("max_reflect_depth"),OBJ_GETTER(obj_CompositeScene,self->get_base().max_reflect_depth),NULL,NULL,NULL},
+    {const_cast<char*>("shadows"),OBJ_GETTER(obj_CompositeScene,self->get_base().shadows),NULL,NULL,NULL},
+    {const_cast<char*>("camera_light"),OBJ_GETTER(obj_CompositeScene,self->get_base().camera_light),NULL,NULL,NULL},
+    {const_cast<char*>("ambient_color"),OBJ_GETTER(obj_CompositeScene,self->get_base().ambient),NULL,NULL,NULL},
     {const_cast<char*>("aabb_min"),OBJ_GETTER(obj_CompositeScene,self->get_base().aabb_min),NULL,NULL,NULL},
     {const_cast<char*>("aabb_max"),OBJ_GETTER(obj_CompositeScene,self->get_base().aabb_max),NULL,NULL,NULL},
     {const_cast<char*>("root"),OBJ_GETTER(
         obj_CompositeScene,
         py::new_ref(new_obj_node(obj_self,self->get_base().root.get(),self->get_base().dimension()))),NULL,NULL,NULL},
+    {const_cast<char*>("point_lights"),OBJ_GETTER(
+        obj_CompositeScene,
+        py::new_ref(reinterpret_cast<PyObject*>(new cs_light_list<point_light_list_base>(self)))),NULL,NULL,NULL},
+    {const_cast<char*>("global_lights"),OBJ_GETTER(
+        obj_CompositeScene,
+        py::new_ref(reinterpret_cast<PyObject*>(new cs_light_list<global_light_list_base>(self)))),NULL,NULL,NULL},
     {NULL}
 };
 
@@ -651,6 +724,10 @@ PySequenceMethods obj_CameraAxes_sequence_methods = {
     },
     NULL,
     [](PyObject *self,Py_ssize_t index,PyObject *value) -> int {
+        if(!value) {
+            PyErr_SetString(PyExc_TypeError,"items of CameraAxes cannot be deleted");
+            return -1;
+        }
         try {
             auto &base = reinterpret_cast<obj_CameraAxes*>(self)->base->get_base();
             check_index(base,index);
@@ -919,12 +996,22 @@ PyTypeObject triangle_obj_common::_pytype = make_type_object(
     tp_free = &obj_Triangle::operator delete);
 
 
+size_t fill_ray_intersections(const ray_intersections<module_store> &hits,PyObject *list) {
+    auto data = hits.data();
+    size_t i = 0;
+    for(; i<hits.size(); ++i) PyList_SET_ITEM(
+        list,
+        i,
+        py::make_tuple(data[i].dist,data[i].normal.origin,data[i].normal.direction,reinterpret_cast<PyObject*>(data[i].p)).new_ref());
+    return i;
+}
+
 PyObject *kdnode_intersects(obj_KDNode *self,PyObject *args,PyObject *kwds) {
     try {
         assert(self->_data->type == LEAF || self->_data->type == BRANCH);
         
         const char *names[] = {"origin","direction","t_near","t_far","source"};
-        get_arg ga(args,kwds,names,self->_data->type == LEAF ? "KDLeaf.intersects" : "KDBranch.intersects");
+        get_arg ga(args,kwds,names,"KDNode.intersects");
         auto origin = from_pyobject<n_vector>(ga(true));
         auto direction = from_pyobject<n_vector>(ga(true));
         
@@ -952,15 +1039,9 @@ PyObject *kdnode_intersects(obj_KDNode *self,PyObject *args,PyObject *kwds) {
         if(dist) ++r_size;
         PyObject *r = PyList_New(r_size);
         if(!r) return nullptr;
-        
-        auto data = hits.data();
+
         try {
-            size_t i = 0;
-            for(; i<hits.size(); ++i) PyList_SET_ITEM(
-                r,
-                i,
-                py::make_tuple(data[i].dist,data[i].normal.origin,data[i].normal.direction,reinterpret_cast<PyObject*>(data[i].p)).new_ref());
-            
+            auto i = fill_ray_intersections(hits,r);
             if(dist) PyList_SET_ITEM(
                 r,
                 i,
@@ -974,9 +1055,57 @@ PyObject *kdnode_intersects(obj_KDNode *self,PyObject *args,PyObject *kwds) {
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
+PyObject *kdnode_occludes(obj_KDNode *self,PyObject *args,PyObject *kwds) {
+    try {
+        assert(self->_data->type == LEAF || self->_data->type == BRANCH);
+        
+        const char *names[] = {"origin","direction","distance","t_near","t_far","source"};
+        get_arg ga(args,kwds,names,"KDNode.occludes");
+        auto origin = from_pyobject<n_vector>(ga(true));
+        auto direction = from_pyobject<n_vector>(ga(true));
+        
+        real distance = std::numeric_limits<real>::max();
+        real t_near = std::numeric_limits<real>::lowest();
+        real t_far = std::numeric_limits<real>::max();
+        
+        auto tmp = ga(false);
+        if(tmp) distance = from_pyobject<real>(tmp);
+        tmp = ga(false);
+        if(tmp) t_near = from_pyobject<real>(tmp);
+        tmp = ga(false);
+        if(tmp) t_far = from_pyobject<real>(tmp);
+        
+        tmp = ga(false);
+        auto source = tmp && tmp != Py_None ? checked_py_cast<primitive<module_store> >(tmp) : nullptr;
+        ga.finished();
+        
+        check_origin_dir_compat(origin,direction);
+        
+        ray<module_store> target(origin,direction);
+        ray_intersections<module_store> hits;
+        
+        bool occ = self->_data->occludes(target,distance,source,hits,t_near,t_far);
+        
+        py::object b;
+        if(!occ) {
+            b = py::check_new_ref(PyList_New(hits.size()));
+            fill_ray_intersections(hits,b.ref());
+        }
+        
+        return py::make_tuple(occ,b).new_ref();
+    } PY_EXCEPT_HANDLERS(nullptr)
+}
+
+PyMethodDef obj_KDNode_methods[] = {
+    {"intersects",reinterpret_cast<PyCFunction>(&kdnode_intersects),METH_VARARGS|METH_KEYWORDS,NULL},
+    {"occludes",reinterpret_cast<PyCFunction>(&kdnode_occludes),METH_VARARGS|METH_KEYWORDS,NULL},
+    {NULL}
+};
+
 PyTypeObject obj_KDNode::_pytype = make_type_object(
     MODULE_STR ".KDNode",
     sizeof(obj_KDNode),
+    tp_methods = obj_KDNode_methods,
     tp_new = [](PyTypeObject *type,PyObject *args,PyObject *kwds) -> PyObject* {
         PyErr_SetString(PyExc_TypeError,"the KDNode type cannot be instantiated directly");
         return nullptr;
@@ -1006,11 +1135,6 @@ PySequenceMethods obj_KDLeaf_sequence_methods = {
     NULL,
     NULL,
     NULL
-};
-
-PyMethodDef obj_KDLeaf_methods[] = {
-    {"intersects",reinterpret_cast<PyCFunction>(&kdnode_intersects),METH_VARARGS|METH_KEYWORDS,NULL},
-    {NULL}
 };
 
 PyObject *obj_KDLeaf_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
@@ -1062,18 +1186,12 @@ PyTypeObject obj_KDLeaf::_pytype = make_type_object(
     tp_dealloc = destructor_dealloc<obj_KDLeaf>::value,
     tp_as_sequence = &obj_KDLeaf_sequence_methods,
     tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_CHECKTYPES|Py_TPFLAGS_HAVE_GC,
-    tp_methods = obj_KDLeaf_methods,
     tp_traverse = &kd_tree_item_traverse<obj_KDLeaf>,
     tp_clear = &kd_tree_item_clear<obj_KDLeaf>,
     tp_getset = obj_KDLeaf_getset,
     tp_base = obj_KDNode::pytype(),
     tp_new = &obj_KDLeaf_new);
 
-
-PyMethodDef obj_KDBranch_methods[] = {
-    {"intersects",reinterpret_cast<PyCFunction>(&kdnode_intersects),METH_VARARGS|METH_KEYWORDS,NULL},
-    {NULL}
-};
 
 obj_KDNode* acceptable_node(PyObject *obj) {
     if(!obj || obj == Py_None) return nullptr;
@@ -1147,7 +1265,6 @@ PyTypeObject obj_KDBranch::_pytype = make_type_object(
     sizeof(obj_KDBranch),
     tp_dealloc = destructor_dealloc<obj_KDBranch>::value,
     tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_CHECKTYPES|Py_TPFLAGS_HAVE_GC,
-    tp_methods = obj_KDBranch_methods,
     tp_traverse = &kd_tree_item_traverse<obj_KDBranch>,
     tp_clear = &kd_tree_item_clear<obj_KDBranch>,
     tp_getset = obj_KDBranch_getset,
@@ -2118,6 +2235,184 @@ PyTypeObject solid_prototype_obj_base::_pytype = make_type_object(
     tp_new = &obj_SolidPrototype_new);
 
 
+PyObject *obj_PointLight_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
+    auto ptr = type->tp_alloc(type,0);
+    if(!ptr) return nullptr;
+    
+    try {
+        try {
+            const char *names[] = {"position","color"};
+            get_arg ga(args,kwds,names,"PointLight.__new__");
+            auto position = from_pyobject<n_vector>(ga(true));
+            auto c = ga(false);
+            ga.finished();
+            
+            auto &base = reinterpret_cast<wrapped_type<n_point_light>*>(ptr)->alloc_base();
+            
+            new(&base.position) n_vector(position);
+            read_color(base.c,c,names[1]);
+            
+            return ptr;
+        } catch(...) {
+            Py_DECREF(ptr);
+            throw;
+        }
+    } PY_EXCEPT_HANDLERS(nullptr)
+}
+
+PyGetSetDef obj_PointLight_getset[] = {
+    {const_cast<char*>("position"),OBJ_GETTER(wrapped_type<n_point_light>,self->get_base().position),NULL,NULL,NULL},
+    {const_cast<char*>("color"),OBJ_GETTER(wrapped_type<n_point_light>,self->get_base().c),NULL,NULL,NULL},
+    {const_cast<char*>("dimension"),OBJ_GETTER(wrapped_type<n_point_light>,self->get_base().dimension()),NULL,NULL,NULL},
+    {NULL}
+};
+
+PyTypeObject point_light_obj_base::_pytype = make_type_object(
+    MODULE_STR ".PointLight",
+    sizeof(wrapped_type<n_point_light>),
+    tp_dealloc = destructor_dealloc<wrapped_type<n_point_light> >::value,
+//    tp_repr = &obj_PointLight_repr,
+    tp_getset = obj_PointLight_getset,
+    tp_new = &obj_PointLight_new);
+
+
+PyObject *obj_GlobalLight_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
+    auto ptr = type->tp_alloc(type,0);
+    if(!ptr) return nullptr;
+    
+    try {
+        try {
+            const char *names[] = {"direction","color"};
+            get_arg ga(args,kwds,names,"GlobalLight.__new__");
+            auto direction = from_pyobject<n_vector>(ga(true));
+            auto c = ga(false);
+            ga.finished();
+            
+            auto &base = reinterpret_cast<wrapped_type<n_global_light>*>(ptr)->alloc_base();
+            
+            new(&base.direction) n_vector(direction);
+            read_color(base.c,c,names[1]);
+            
+            return ptr;
+        } catch(...) {
+            Py_DECREF(ptr);
+            throw;
+        }
+    } PY_EXCEPT_HANDLERS(nullptr)
+}
+
+PyGetSetDef obj_GlobalLight_getset[] = {
+    {const_cast<char*>("direction"),OBJ_GETTER(wrapped_type<n_global_light>,self->get_base().direction),NULL,NULL,NULL},
+    {const_cast<char*>("color"),OBJ_GETTER(wrapped_type<n_global_light>,self->get_base().c),NULL,NULL,NULL},
+    {const_cast<char*>("dimension"),OBJ_GETTER(wrapped_type<n_global_light>,self->get_base().dimension()),NULL,NULL,NULL},
+    {NULL}
+};
+
+PyTypeObject global_light_obj_base::_pytype = make_type_object(
+    MODULE_STR ".GlobalLight",
+    sizeof(wrapped_type<n_global_light>),
+    tp_dealloc = destructor_dealloc<wrapped_type<n_global_light> >::value,
+//    tp_repr = &obj_GlobalLight_repr,
+    tp_getset = obj_GlobalLight_getset,
+    tp_new = &obj_GlobalLight_new);
+
+
+template<typename T> void check_index(const cs_light_list<T> *ll,Py_ssize_t index) {
+    if(index < 0 || size_t(index) >= T::value(ll->parent.get()).size()) THROW_PYERR_STRING(IndexError,"index out of range");
+}
+
+template<typename T> Py_ssize_t cs_light_list_len(cs_light_list<T> *self) {
+    return static_cast<Py_ssize_t>(T::value(self->parent.get()).size());
+}
+
+template<typename T> PyObject *cs_light_list_getitem(cs_light_list<T> *self,Py_ssize_t index) {
+    try {
+        check_index(self,index);
+        return to_pyobject(T::value(self->parent.get())[index]);
+    } PY_EXCEPT_HANDLERS(nullptr)
+}
+
+template<typename T> int cs_light_list_setitem(cs_light_list<T> *self,Py_ssize_t index,PyObject *value) {
+    try {
+        ensure_unlocked(self->parent);
+        check_index(self,index);
+        auto &vals = T::value(self->parent.get());
+        
+        if(value) {
+            vals[index] = light_compat_check(self->parent->cast_base(),get_base<typename T::item_t>(value));
+            return 0;
+        }
+        
+        if(index != Py_ssize_t(vals.size()) - 1) vals[index] = vals.back();
+        vals.pop_back();
+        return 0;
+    } PY_EXCEPT_HANDLERS(-1)
+}
+
+// Note: due to a bug in GCC 4.7, lambda functions cannot be used here
+template<typename T> PySequenceMethods cs_light_list<T>::sequence_methods = {
+    reinterpret_cast<lenfunc>(&cs_light_list_len<T>),
+    NULL,
+    NULL,
+    reinterpret_cast<ssizeargfunc>(&cs_light_list_getitem<T>),
+    NULL,
+    reinterpret_cast<ssizeobjargproc>(&cs_light_list_setitem<T>),
+    NULL,
+    NULL,
+    NULL,
+    NULL
+};
+
+template<typename T> PyObject *cs_light_list_append(cs_light_list<T> *self,PyObject *arg) {
+    try {
+        ensure_unlocked(self->parent);
+        T::value(self->parent.get()).push_back(light_compat_check(self->parent->cast_base(),get_base<typename T::item_t>(arg)));
+        Py_RETURN_NONE;
+    } PY_EXCEPT_HANDLERS(nullptr)
+}
+
+template<typename T> PyObject *cs_light_list_extend(cs_light_list<T> *self,PyObject *arg) {
+    try {
+        ensure_unlocked(self->parent);
+        
+        auto &vals = T::value(self->parent.get());
+        
+        Py_ssize_t hint = PyObject_LengthHint(arg,-2);
+        if(hint == -1) return nullptr;
+        if(hint > 0) vals.reserve(vals.size() + hint);
+        
+        auto &pbase = self->parent->cast_base();
+        auto itr = py::iter(arg);
+        while(auto v = py::next(itr))
+            vals.push_back(light_compat_check(pbase,get_base<typename T::item_t>(v.ref())));
+        
+        Py_RETURN_NONE;
+    } PY_EXCEPT_HANDLERS(nullptr)
+}
+
+// Note: due to a bug in GCC 4.7, lambda functions cannot be used here
+template<typename T> PyMethodDef cs_light_list<T>::methods[] = {
+    {"append",reinterpret_cast<PyCFunction>(&cs_light_list_append<T>),METH_O,NULL},
+    {"extend",reinterpret_cast<PyCFunction>(&cs_light_list_extend<T>),METH_O,NULL},
+    {NULL}
+};
+
+template<typename T> PyObject *cs_light_list_new(PyTypeObject*,PyObject*,PyObject*) {
+    PyErr_Format(PyExc_TypeError,"the %s type cannot be instantiated directly",T::name + sizeof(MODULE_STR));
+    return nullptr;
+}
+
+// Note: due to a bug in GCC 4.7, lambda functions cannot be used here
+template<typename T> PyTypeObject cs_light_list<T>::_pytype = make_type_object(
+    T::name,
+    sizeof(cs_light_list<T>),
+    tp_dealloc = destructor_dealloc<cs_light_list<T> >::value,
+    tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_CHECKTYPES,
+    tp_methods = cs_light_list<T>::methods,
+    tp_as_sequence = &cs_light_list<T>::sequence_methods,
+    tp_new = &cs_light_list_new<T>);
+
+
 PyObject *obj_dot(PyObject*,PyObject *args,PyObject *kwds) {
     try {
         const char *names[] = {"a","b"};
@@ -2167,6 +2462,9 @@ PyMethodDef func_table[] = {
 };
 
 
+const package_common *package_common_data = nullptr;
+
+
 PyTypeObject *classes[] = {
     obj_BoxScene::pytype(),
     obj_CompositeScene::pytype(),
@@ -2187,7 +2485,11 @@ PyTypeObject *classes[] = {
     obj_TrianglePrototype::pytype(),
     wrapped_type<n_triangle_point>::pytype(),
     obj_TrianglePointData::pytype(),
-    wrapped_type<n_solid_prototype>::pytype()};
+    wrapped_type<n_solid_prototype>::pytype(),
+    wrapped_type<n_point_light>::pytype(),
+    wrapped_type<n_global_light>::pytype(),
+    cs_light_list<point_light_list_base>::pytype(),
+    cs_light_list<global_light_list_base>::pytype()};
 
 
 PyTypeObject *get_pytype(py::object mod,const char *name) {
@@ -2224,7 +2526,7 @@ extern "C" SHARED(void) APPEND_MODULE_NAME(init)() {
     using namespace py;
 
     try {
-        object rmod = new_ref(check_obj(PyImport_ImportModule(PACKAGE_STR ".render")));
+        object rmod = check_new_ref(PyImport_ImportModule(PACKAGE_STR ".render"));
 
         auto stype = get_pytype(rmod,"Scene");
         obj_BoxScene::pytype()->tp_base = stype;
@@ -2232,6 +2534,9 @@ extern "C" SHARED(void) APPEND_MODULE_NAME(init)() {
 
         color_obj_base::_pytype = get_pytype(rmod,"Color");
         material::_pytype = get_pytype(rmod,"Material");
+
+        if(!(package_common_data = reinterpret_cast<const package_common*>(
+            PyCapsule_GetPointer(static_cast<object>(rmod.attr("_PACKAGE_COMMON")).ref(),"render._PACKAGE_COMMON")))) return INIT_ERR_VAL;
     } PY_EXCEPT_HANDLERS(INIT_ERR_VAL)
 
     for(auto &cls : classes) {

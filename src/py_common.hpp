@@ -35,6 +35,13 @@
         PyObject_HEAD_INIT(type) size,
 #endif
 
+#if PY_MAJOR_VERSION == 3 && PY_MINOR_VERSION == 3
+    // TODO: find the earliest version this was defined in
+    #define PyObject_LengthHint _PyObject_LengthHint
+#elif PY_MAJOR_VERSION < 3 || (PY_MARJOR_VERSION == 3 && PY_MINOR_VERSION < 3)
+    Py_ssize_t PyObject_LengthHint(PyObject *o,Py_ssize_t defaultlen);
+#endif
+
 #define PY_EXCEPT_HANDLERS(RET) catch(py_error_set&) {              \
         return RET;                                                 \
     } catch(std::bad_alloc&) {                                      \

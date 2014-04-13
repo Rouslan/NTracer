@@ -844,7 +844,8 @@ PyObject *obj_Material_repr(material *self) {
 void read_color(color &to,PyObject *from,const char *field) {
     if(PyTuple_Check(from)) {
         if(PyTuple_GET_SIZE(from) != 3) {
-            PyErr_Format(PyExc_ValueError,"\"%s\" must have exactly 3 values",field);
+            if(field) PyErr_Format(PyExc_ValueError,"\"%s\" must have exactly 3 values",field);
+            else PyErr_SetString(PyExc_ValueError,"object must have exactly 3 values");
             throw py_error_set();
         }
         to.r = from_pyobject<float>(PyTuple_GET_ITEM(from,0));
@@ -919,8 +920,12 @@ PyMethodDef func_table[] = {
     {NULL}
 };
 
+const package_common package_common_data = {
+    &read_color
+};
+
 #if PY_MAJOR_VERSION >= 3
-#define INIT_ERR_VAL NULL
+#define INIT_ERR_VAL nullptr
 
 struct PyModuleDef module_def = {
     PyModuleDef_HEAD_INIT,
@@ -965,6 +970,10 @@ extern "C" SHARED(void) initrender(void) {
     add_class(m,"Renderer",obj_Renderer::pytype());
     add_class(m,"Color",wrapped_type<color>::pytype());
     add_class(m,"Material",material::pytype());
+    
+    auto cap = PyCapsule_New(const_cast<package_common*>(&package_common_data),"render._PACKAGE_COMMON",nullptr);
+    if(!cap) return INIT_ERR_VAL;
+    PyModule_AddObject(m,"_PACKAGE_COMMON",cap);
     
     /* When PyGame shuts down, it destroys all surface objects regardless of
        reference counts, so any threads working with surfaces need to be stopped

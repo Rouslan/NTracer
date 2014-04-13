@@ -10,6 +10,17 @@ const char *init_on_derived_msg = "__init__ cannot be used directly on a derived
 const char *not_implemented_msg = "This method is not implemented";
 
 
+#if PY_MAJOR_VERSION < 3 || (PY_MARJOR_VERSION == 3 && PY_MINOR_VERSION < 3)
+Py_ssize_t PyObject_LengthHint(PyObject *o,Py_ssize_t defaultlen) {
+    Py_ssize_t r = PyObject_Size(o);
+    if(r >= 0) return r;
+    
+    if(!PyErr_ExceptionMatches(PyExc_TypeError)) return -1;
+    PyErr_Clear();
+    return defaultlen;
+}
+#endif
+
 get_arg::get_arg(PyObject *args,PyObject *kwds,Py_ssize_t arg_len,const char **names,const char *fname)
         : args(args), kwds(kwds), names(names), fname(fname), arg_index(0), tcount(0), kcount(0) {
     assert(args != NULL && PyTuple_Check(args));

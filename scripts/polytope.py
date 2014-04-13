@@ -332,7 +332,7 @@ class PolyTope:
         return self.parts[0].shape
         
     def propogate_faces(self,potentials):
-        new_p = set()
+        new_p = []
         
         for instance,p in potentials:
             dir = (instance.orientation * p.position).unit()
@@ -344,7 +344,7 @@ class PolyTope:
                 dir,
                 self.dihedral_s)
             
-            new_p |= self.add_face(Instance(
+            new_p += self.add_face(Instance(
                 instance.shape,
                 turn * instance.position,
                 fuzz_scale * turn * reflect * instance.orientation))
@@ -352,11 +352,11 @@ class PolyTope:
     
     def add_face(self,instance):
         for p in self.parts:
-            if almost_equal(instance.position,p.position): return set()
+            if almost_equal(instance.position,p.position): return []
 
         self.parts.append(instance)
         
-        return set((instance,p) for p in instance.shape.parts)
+        return [(instance,p) for p in instance.shape.parts]
     
     def star_tesselation(self):
         t = getattr(self,'_star_tesselation',None)

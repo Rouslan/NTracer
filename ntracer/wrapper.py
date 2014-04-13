@@ -132,6 +132,8 @@ class NTracer(object):
             'SolidPrototype',
             'Triangle',
             'TrianglePrototype',
+            'PointLight',
+            'GlobalLight',
             'dot',
             'cross']:
             setattr(obj,n,getattr(mod,n))

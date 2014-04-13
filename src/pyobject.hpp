@@ -101,13 +101,14 @@ namespace py {
     protected:
         PyObject *_ptr;
 
-        void reset(PyObject *b) {
-            Py_INCREF(b);
-
+        void reset_new(PyObject *b) {
             // cyclic garbage collection safety
             PyObject *tmp = _ptr;
             _ptr = b;
             Py_DECREF(tmp);
+        }
+        void reset(PyObject *b) {
+            reset_new(incref(b));
         }
 
         _object_base(PyObject *ptr) : _ptr(ptr) {}
@@ -124,7 +125,7 @@ namespace py {
         }
 
     public:
-        operator bool() const {
+        explicit operator bool() const {
             return PyObject_IsTrue(_ptr);
         }
 
@@ -162,12 +163,22 @@ namespace py {
 
     class object : public _object_base {
     public:
+        object() : _object_base(borrowed_ref(Py_None)) {}
         object(borrowed_ref r) : _object_base(r) {}
         object(py::new_ref r) : _object_base(r) {}
         object(const _object_base &b) : _object_base(b) {}
 
         object &operator=(const _object_base &b) {
             reset(b.ref());
+            return *this;
+        }
+        
+        object &operator=(borrowed_ref r) {
+            reset(r._ptr);
+            return *this;
+        }
+        object &operator=(py::new_ref r) {
+            reset_new(r._ptr);
             return *this;
         }
 
@@ -177,11 +188,11 @@ namespace py {
         inline object_iterator end() const;
     };
 
-    template<typename T> inline object make_object(const T &x) {
-        return object(new_ref(to_pyobject(x)));
+    template<typename T> inline typename std::enable_if<!std::is_base_of<_object_base,typename std::decay<T>::type>::value,object>::type make_object(T &&x) {
+        return object(new_ref(to_pyobject(std::forward<T>(x))));
     }
     
-    template<> inline object make_object<_object_base>(const _object_base &x) {
+    inline object make_object(const _object_base &x) {
         return x;
     }
 
@@ -820,9 +831,13 @@ namespace py {
     inline object repr(const object &o) {
         return check_new_ref(PyObject_Repr(o.ref()));
     }
+    
+    inline object iter(PyObject *o) {
+        return check_new_ref(PyObject_GetIter(o));
+    }
 
     inline object iter(const object &o) {
-        return check_new_ref(PyObject_GetIter(o.ref()));
+        return iter(o.ref());
     }
 
     inline nullable_object next(const object &o) {

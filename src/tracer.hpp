@@ -14,6 +14,10 @@
 const real ROUNDING_FUZZ = std::numeric_limits<real>::epsilon() * 10;
 const size_t QUICK_LIST_PREALLOC = 10;
 
+/* Checking if anything occludes a light is expensive, so if the light from a
+   point light is going to be dimmer than this, don't bother. */
+const real LIGHT_THRESHOLD = real(1)/512;
+
 
 template<typename Store> class ray {
 public:
@@ -504,6 +508,7 @@ template<typename Store> struct kd_node {
     node_type type;
     
     real intersects(const ray<Store> &target,ray<Store> &normal,primitive<Store> *&p,ray_intersections<Store> &hits,real t_near,real t_far) const;
+    real occludes(const ray<Store> &target,real ldistance,const primitive<Store> *source,ray_intersections<Store> &hits,real t_near,real t_far) const;
     
     void *operator new(size_t size) {
         return py::malloc(size);
@@ -589,6 +594,40 @@ template<typename Store> struct kd_branch : kd_node<Store> {
         auto node = (target.origin[axis] >= split ? right : left).get();
         return node ? node->intersects(target,normal,p,hits,t_near,t_far) : 0;
     }
+    
+    bool occludes(const ray<Store> &target,real ldistance,const primitive<Store> *source,ray_intersections<Store> &hits,real t_near,real t_far) const {
+        assert(target.dimension() == normal.dimension());
+        
+        if(target.direction[axis]) {
+            if(target.origin[axis] == split) {
+                auto node = (target.direction[axis] > 0 ? right : left).get();
+                return node ? node->occludes(target,ldistance,source,hits,t_near,t_far) : false;
+            }
+            
+            real t = (split - target.origin[axis]) / target.direction[axis];
+            
+            auto n_near = left.get();
+            auto n_far = right.get();
+            if(target.origin[axis] > split) {
+                n_near = right.get();
+                n_far = left.get();
+            }
+
+            if(t < 0 || t > t_far) return n_near ? n_near->occludes(target,ldistance,source,hits,t_near,t_far) : false;
+            if(t < t_near) return n_far ? n_far->occludes(target,ldistance,source,hits,t_near,t_far) : false;
+
+            if(n_near) {
+                if(n_near->occludes(target,ldistance,source,hits,t_near,t)) return true;
+                if(!n_far) return false;
+            }
+            
+            assert(n_far);
+            return t < ldistance ? n_far->occludes(target,ldistance,source,hits,t,t_far) : false;
+        }
+
+        auto node = (target.origin[axis] >= split ? right : left).get();
+        return node ? node->occludes(target,ldistance,source,hits,t_near,t_far) : false;
+    }
 };
 
 template<typename Store> struct kd_leaf : kd_node<Store>, flexible_struct<kd_leaf<Store>,py::pyptr<primitive<Store> > > {
@@ -656,6 +695,26 @@ template<typename Store> struct kd_leaf : kd_node<Store>, flexible_struct<kd_lea
         return dist;
     }
     
+    bool occludes(const ray<Store> &target,real ldistance,const primitive<Store> *source,ray_intersections<Store> &hits) const {
+        assert(dimension() == target.dimension() && dimension() == normal.dimension());
+
+        real dist;
+        ray<Store> normal(dimension());
+        for(size_t i=0; i<size; ++i) {
+            auto item = this->items()[i].get();
+            if(item != source) {
+                dist = item->intersects(target,normal);
+                
+                if(dist && dist < ldistance) {
+                    if(item->opaque()) return true;
+
+                    hits.add({dist,item,normal});
+                }
+            }
+        }
+        return false;
+    }
+    
     int dimension() const {
         assert(size);
         return this->items()[0]->dimension();
@@ -670,6 +729,13 @@ template<typename Store> real kd_node<Store>::intersects(const ray<Store> &targe
     
     assert(type == BRANCH);
     return static_cast<const kd_branch<Store>*>(this)->intersects(target,normal,p,hits,t_near,t_far);
+}
+
+template<typename Store> real kd_node<Store>::occludes(const ray<Store> &target,real ldistance,const primitive<Store> *source,ray_intersections<Store> &hits,real t_near,real t_far) const {
+    if(type == LEAF) return static_cast<const kd_leaf<Store>*>(this)->occludes(target,ldistance,source,hits);
+    
+    assert(type == BRANCH);
+    return static_cast<const kd_branch<Store>*>(this)->occludes(target,ldistance,source,hits,t_near,t_far);
 }
 
 template<typename Store> inline void kd_node_deleter<Store>::operator()(kd_node<Store> *ptr) const {
@@ -915,52 +981,139 @@ template<typename Store> struct aabb {
 
 
 template<typename Store> struct point_light {
-    vector<Store> location;
+    vector<Store> position;
     color c;
+    
+    int dimension() const {
+        return position.dimension();
+    }
+    
+    real strength(real distance) const {
+        return 1/std::pow(distance,dimension()-1);
+    }
 };
 
 template<typename Store> struct global_light {
     vector<Store> direction;
     color c;
+    
+    int dimension() const {
+        return direction.dimension();
+    }
 };
+
+
+template<typename Store> void append_specular(color &c,float &a,const material *m,const color &light_c,const vector<Store> &target,const vector<Store> &normal,const vector<Store> &light_dir) {
+    // Blinn-Phong model
+    float base = std::pow(dot(normal,(light_dir - target).unit()),m->specular_exp) * m->specular_intensity;
+    c += m->specular * light_c * base * (1 - a);
+    a += base * (1 - a);
+    c *= a;
+}
 
 
 template<typename Store> struct composite_scene : scene {
     bool locked;
+    bool shadows;
+    bool camera_light;
     real fov;
     int max_reflect_depth;
+    color ambient;
     camera<Store> cam;
     vector<Store> aabb_min, aabb_max;
     std::unique_ptr<kd_node<Store>,kd_node_deleter<Store> > root;
+    std::vector<point_light<Store> > point_lights;
+    std::vector<global_light<Store> > global_lights;
 
     composite_scene(const vector<Store> &aabb_min,const vector<Store> &aabb_max,kd_node<Store> *data)
-        : locked(false), fov(0.8), max_reflect_depth(4), cam(aabb_min.dimension()), aabb_min(aabb_min), aabb_max(aabb_max), root(data) {
+        : locked(false), shadows(false), camera_light(true), fov(0.8), max_reflect_depth(4), ambient(0,0,0), cam(aabb_min.dimension()), aabb_min(aabb_min), aabb_max(aabb_max), root(data) {
         assert(aabb_min.dimension() == aabb_max.dimension());
+    }
+    
+    bool light_reaches(const ray<Store> &target,real ldistance,const primitive<Store> *source,color &filtered) const {
+        ray_intersections<Store> transparent_hits;
+
+        if(root->occludes(target,ldistance,source,transparent_hits,0,std::numeric_limits<real>::max())) return false;
+        
+        if(transparent_hits) {
+            transparent_hits.sort_and_unique();
+            
+            auto data = transparent_hits.data();
+            for(auto itr = data + (transparent_hits.size()-1); itr >= data; --itr) {
+                assert(itr->p->m->opacity != 1);
+                filtered *= 1 - itr->p->m->opacity;
+            }
+        }
+        
+        return true;
     }
     
     color base_color(const ray<Store> &target,const ray<Store> &normal,primitive<Store> *p,int depth) const {
         auto m = p->m.get();
-        real sine = dot(target.direction,normal.direction);
-        auto r = (sine <= 0 ? -sine : real(0)) * m->c;
         
-        if(m->reflectivity && depth < max_reflect_depth) {
-            r = m->c * ray_color(
-                ray<Store>(normal.origin,target.direction - normal.direction * (2 * sine)),
-                depth+1,
-                p) * m->reflectivity + r * (1 - m->reflectivity);
+        auto light = color(0,0,0);
+        
+        auto specular = color(0,0,0);
+        float spec_a = 0;
+        
+        for(auto &pl : point_lights) {
+            vector<Store> lv = normal.origin - pl.position;
+            real dist = lv.absolute();
+            lv /= dist;
+            
+            real sine = dot(normal.direction,lv);
+            if(sine > 0) {
+                real strength = pl.strength(dist);
+                if(shadows) {
+                    if(std::max(pl.c.r,std::max(pl.c.g,pl.c.b)) * strength * sine > LIGHT_THRESHOLD) {
+                        color filtered = pl.c;
+                        if(light_reaches(ray<Store>(normal.origin,lv),dist,p,filtered)) {
+                            filtered *= strength;
+                            light += filtered * sine;
+                            if(m->specular_intensity) append_specular(specular,spec_a,m,filtered,target.direction,normal.direction,lv);
+                        }
+                    }
+                } else {
+                    light += pl.c * strength * sine;
+                }
+            }
         }
-        
-        // Blinn-Phong model
-        if(m->specular_intensity) {
-            //float base = dot(normal.direction,(light_direction + target.direction) * -0.5);
-            float base = -sine;
-            if(base > 0) {
-                base = std::pow(base,m->specular_exp) * m->specular_intensity;
-                r = m->specular * base + r * (1 - base);
+        for(auto &gl : global_lights) {
+            real sine = -dot(normal.direction,gl.direction);
+            if(sine > 0) {
+                if(shadows) {
+                    color filtered = gl.c;
+                    if(light_reaches(ray<Store>(normal.origin,-gl.direction),std::numeric_limits<real>::max(),p,filtered)) {
+                        light += filtered * sine;
+                        if(m->specular_intensity) append_specular<Store>(specular,spec_a,m,filtered,target.direction,normal.direction,-gl.direction);
+                    }
+                } else {
+                    light += gl.c * sine;
+                }
             }
         }
         
-        return r;
+        real sine = -dot(target.direction,normal.direction);
+        if(camera_light && sine > 0) {
+            light += color(sine,sine,sine);
+            if(m->specular_intensity) {
+                float base = std::pow(sine,m->specular_exp) * m->specular_intensity;
+                specular += m->specular * base * (1 - spec_a);
+                spec_a += base * (1 - spec_a);
+                specular *= spec_a;
+            }
+        }
+        
+        auto r = ambient + m->c * light;
+        
+        if(m->reflectivity && depth < max_reflect_depth) {
+            r = m->c * ray_color(
+                ray<Store>(normal.origin,target.direction - normal.direction * (-2 * sine)),
+                depth+1,
+                p) * m->reflectivity + r * (1 - m->reflectivity);
+        }
+
+        return specular + r * (1 - spec_a);
     }
     
     color ray_color(const ray<Store> &target,int depth=0,primitive<Store> *source=nullptr) const {

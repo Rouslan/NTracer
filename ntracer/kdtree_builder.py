@@ -17,7 +17,7 @@ DUMP_ASY_REPR = False
 MAX_DEPTH = 20
 
 # only split nodes if there are more than this many primitives
-SPLIT_THRESHHOLD = 3
+SPLIT_THRESHHOLD = 2
 
 
 # TODO: find optimum values for these. COST_INTERSECTION almost certainly

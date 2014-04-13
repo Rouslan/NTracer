@@ -43,4 +43,16 @@ struct material {
     float opacity, reflectivity, specular_intensity ,specular_exp;
 };
 
+struct package_common {
+    void (*read_color)(color&,PyObject*,const char*);
+};
+
+#ifndef RENDER_MODULE
+extern const package_common *package_common_data;
+
+inline void read_color(color &to,PyObject *from,const char *field=nullptr) {
+    package_common_data->read_color(to,from,field);
+}
+#endif
+
 #endif

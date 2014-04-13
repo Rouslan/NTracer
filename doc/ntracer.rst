@@ -387,26 +387,58 @@ can't add a tuple and a :py:class:`Vector` together).
     :param vector aabb_max: The maximum extent of the axis-aligned bounding-box
         that encloses all the primitives of the scene.
     :param KDNode data: The root node of a k-d tree.
+    
+    .. py:method:: add_light(light)
+    
+        Add a light to the scene.
+        
+        The light will be added to :py:attr:`global_lights` or
+        :py:attr:`point_lights` according to its type.
+    
+        If the scene has been locked by a :py:class:`.render.Renderer`, this
+        method will raise an exception instead.
+        
+        :param light: An instance of :py:class:`GlobalLight` or
+            :py:class:`PointLight`.
 
     .. py:method:: get_camera() -> Camera
 
         Return a copy of the scene's camera.
+    
+    .. py:method:: set_ambient_color(color)
+    
+        Set the value of :py:attr:`ambient_color`
+        
+        If the scene has been locked by a :py:class:`.render.Renderer`, this
+        method will raise an exception instead.
+
+        :param color: An instance of :py:class:`.render.Color` or a tuple with
+            three numbers.
 
     .. py:method:: set_camera(camera)
 
         Set the scene's camera to a copy of the provided value.
 
         If the scene has been locked by a :py:class:`.render.Renderer`, this
-        function will raise an exception instead.
+        method will raise an exception instead.
 
         :param camera: An instance of :py:class:`Camera`.
+    
+    .. py:method:: set_camera_light(camera_light)
+    
+        Set the value of :py:attr:`camera_light`
+        
+        If the scene has been locked by a :py:class:`.render.Renderer`, this
+        method will raise an exception instead.
+
+        :param boolean camera_light: The new value.
 
     .. py:method:: set_fov(fov)
 
         Set the field of vision.
 
         If the scene has been locked by a :py:class:`.render.Renderer`, this
-        function will raise an exception instead.
+        method will raise an exception instead.
 
         :param number fov: The new field of vision in radians.
         
@@ -415,9 +447,18 @@ can't add a tuple and a :py:class:`Vector` together).
         Set the value of :py:attr:`max_reflect_depth`.
 
         If the scene has been locked by a :py:class:`.render.Renderer`, this
-        function will raise an exception instead.
+        method will raise an exception instead.
 
         :param integer depth: The new value.
+    
+    .. py:method:: set_shadows(shadows)
+    
+        Set the value of :py:attr:`shadows`
+        
+        If the scene has been locked by a :py:class:`.render.Renderer`, this
+        method will raise an exception instead.
+
+        :param boolean shadows: The new value.
         
     .. py:attribute:: aabb_max
     
@@ -432,6 +473,32 @@ can't add a tuple and a :py:class:`Vector` together).
         the primitives of the scene.
         
         This attribute is read-only.
+        
+    .. py:attribute:: ambient_color
+    
+        The color of the ambient light.
+        
+        This light reaches all geometry unconditionally.
+        
+        The default value is ``Color(0,0,0)``.
+        
+        This attribute is read-only. To modify the value, use
+        :py:meth:`set_ambient_color`.
+        
+    .. py:attribute:: camera_light
+    
+        A boolean specifying whether surfaces will be lit if they face the
+        camera.
+        
+        This is equivalent to having an instance of :py:class:`GlobalLight` with
+        :py:attr:`GlobalLight.color` set to ``Color(1,1,1)`` and
+        :py:attr:`GlobalLight.direction` set to the direction that the camera is
+        facing, except this light never casts shadows.
+        
+        The default value is ``True``.
+        
+        This attribute is read-only. To modify the value, use
+        :py:meth:`set_camera_light`.
 
     .. py:attribute:: fov
 
@@ -439,6 +506,12 @@ can't add a tuple and a :py:class:`Vector` together).
 
         This attribute is read-only. To modify the value, use
         :py:meth:`set_fov`.
+    
+    .. py:attribute:: global_lights
+    
+        A list-like object containing intances of :py:class:`GlobalLight`.
+        
+        See :py:class:`GlobalLightList` for details.
 
     .. py:attribute:: locked
 
@@ -458,12 +531,30 @@ can't add a tuple and a :py:class:`Vector` together).
 
         This attribute is read-only. To modify the value, use
         :py:meth:`set_fov`.
+    
+    .. py:attribute:: point_lights
+    
+        A list-like object containing instances of :py:class:`PointLight`.
+        
+        See :py:class:`PointLightList` for details.
         
     .. py:attribute:: root
     
         The root node of a k-d tree.
         
         This attribute is read-only.
+    
+    .. py:attribute:: shadows
+    
+        A boolean specifying whether objects will cast shadows.
+        
+        Note: this only applies to lights explicitly added, not the default
+        camera light (see :py:attr:`camera_light`).
+        
+        The default value is ``False``.
+        
+        This attribute is read-only. To modify the value, use
+        :py:meth:`set_shadows`.
 
 
 .. py:class:: FrozenVectorView
@@ -478,7 +569,67 @@ can't add a tuple and a :py:class:`Vector` together).
 
     .. py:method:: __len__()
 
-        :code:`self.__len__()` <==> :code:`len(x)`
+        :code:`self.__len__()` <==> :code:`len(self)`
+
+
+.. py:class:: GlobalLight(direction,color)
+
+    A light whose source is infinitely far from the scene's origin.
+    
+    This is an approximation of a distant light source such as the sun.
+    
+    :param vector direction: The direction that the light's rays travel (i.e.
+        the light will be located at :math:`-\text{direction} \times \infty`).
+    :param color: The light's color. This can be an instance of
+        :py:class:`.render.Color` or a tuple with three numbers.
+    
+    .. py:attribute:: color
+    
+        The light's color.
+    
+    .. py:attribute:: dimension
+    
+        The dimension of :py:attr:`direction`.
+    
+    .. py:attribute:: direction
+    
+        The direction that the light's rays travel (i.e. the light source will 
+        be located at :math:`-\text{direction} \times \infty`).
+
+
+.. py:class:: GlobalLightList
+
+    An array of :py:class:`GlobalLight` objects.
+    
+    An instance of this class is tied to a specific :py:class:`CompositeScene`
+    instance. Any attempt to modify an instance of this class while the scene is
+    locked will cause an exception to be raised.
+    
+    Since the order of lights is not important, when deleting an element,
+    instead of shifting all subsequent elements back, the gap is filled with the
+    last element (unless the last element is the one being deleted).
+    
+    This class cannot be instantiated directly in Python code.
+    
+    .. py:method:: __getitem__(index)
+
+        :code:`self.__getitem__(i)` <==> :code:`self[i]`
+
+    .. py:method:: __len__()
+
+        :code:`self.__len__()` <==> :code:`len(self)`
+    
+    .. py:method:: __setitem__(index,value)
+
+        :code:`self.__setitem__(i,v)` <==> :code:`self[i]=v`
+    
+    .. py:method:: append(light)
+    
+        Add a light.
+        
+    .. py:method:: extend(lights)
+    
+        Add lights from an iterable object.
 
 
 .. py:class:: KDBranch(axis,split[,left=None,right=None])
@@ -564,6 +715,28 @@ can't add a tuple and a :py:class:`Vector` together).
 
         :param vector origin: The origin of the ray.
         :param vector direction: The direction of the ray.
+        :param number t_near:
+        :param number t_far:
+        :param KDNode source: A node that will not be considered for
+            intersection.
+    
+    .. py:method:: occludes(origin,direction[,distance,t_near,t_far,source]) -> tuple
+
+        Test if :code:`origin + direction*distance` is occluded by any
+        primitives.
+        
+        If an opaque object exists at any point along ``distance``, the return
+        value is :code:`(True,None)`. Otherwise the return value is a tuple
+        containing ``False`` and an array that for every non-opaque primitive
+        found along ``distance``, contains a tuple with the distance between
+        ``origin`` and the intersection, the point of intersection, the normal
+        of the surface intersected and the intersected primitive itself. The
+        elements will be in an arbitrary order and may contain duplicates (this
+        can happen when a primitive crosses a split pane).
+
+        :param vector origin: The origin of the ray.
+        :param vector direction: The direction of the ray.
+        :param number distance: How far out to check for intersections.
         :param number t_near:
         :param number t_far:
         :param KDNode source: A node that will not be considered for
@@ -684,6 +857,73 @@ can't add a tuple and a :py:class:`Vector` together).
     .. py:method:: __len__()
 
         :code:`self.__len__()` <==> :code:`len(self)`
+
+
+.. py:class:: PointLight(position,color)
+
+    A light source that emits light uniformly in every direction from a given
+    point.
+    
+    :py:attr:`color` represents not only the light's color, but its brightness,
+    too, thus its ``r`` ``g`` ``b`` components may be much greater than 1.
+    
+    The intensity of the light at a given point depends on the distance from
+    :py:attr:`position` and is given by the formula:
+    
+    .. math::
+    
+        \text{color} \times \frac{1}{\text{distance}^{\text{dimension} - 1}}
+    
+    :param vector position: The position of the light.
+    :param color: The light's color multiplied by its brightness. This can be an
+        instance of :py:class:`.render.Color` or a tuple with three numbers.
+    
+    .. py:attribute:: color
+    
+        The light's color multiplied by its brightness.
+    
+    .. py:attribute:: dimension
+    
+        The dimension of :py:attr:`position`.
+    
+    .. py:attribute:: position
+    
+        The position of the light.
+
+
+.. py:class:: PointLightList
+
+    An array of :py:class:`PointLight` objects.
+    
+    An instance of this class is tied to a specific :py:class:`CompositeScene`
+    instance. Any attempt to modify an instance of this class while the scene is
+    locked will cause an exception to be raised.
+    
+    Since the order of lights is not important, when deleting an element,
+    instead of shifting all subsequent elements back, the gap is filled with the
+    last element (unless the last element is the one being deleted).
+    
+    This class cannot be instantiated directly in Python code.
+    
+    .. py:method:: __getitem__(index)
+
+        :code:`self.__getitem__(i)` <==> :code:`self[i]`
+
+    .. py:method:: __len__()
+
+        :code:`self.__len__()` <==> :code:`len(self)`
+    
+    .. py:method:: __setitem__(index,value)
+
+        :code:`self.__setitem__(i,v)` <==> :code:`self[i]=v`
+    
+    .. py:method:: append(light)
+    
+        Add a light.
+        
+    .. py:method:: extend(lights)
+    
+        Add lights from an iterable object.
 
 
 .. py:class:: Primitive
