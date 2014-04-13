@@ -7,7 +7,7 @@
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     
-    <title>ntracer Package &mdash; NTracer 0.3 documentation</title>
+    <title>ntracer Package &mdash; NTracer 0.4 documentation</title>
     
     <link rel="stylesheet" href="../_static/nature.css" type="text/css" />
     <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
@@ -15,7 +15,7 @@
     <script type="text/javascript">
       var DOCUMENTATION_OPTIONS = {
         URL_ROOT:    '../',
-        VERSION:     '0.3',
+        VERSION:     '0.4',
         COLLAPSE_INDEX: false,
         FILE_SUFFIX: '',
         HAS_SOURCE:  true
@@ -24,7 +24,7 @@
     <script type="text/javascript" src="../_static/jquery.js"></script>
     <script type="text/javascript" src="../_static/underscore.js"></script>
     <script type="text/javascript" src="../_static/doctools.js"></script>
-    <link rel="top" title="NTracer 0.3 documentation" href="../" />
+    <link rel="top" title="NTracer 0.4 documentation" href="../" />
     <link rel="prev" title="Basic Usage" href="../example/" /> 
   </head>
   <body>
@@ -40,7 +40,7 @@
         <li class="right" >
           <a href="../example/" title="Basic Usage"
              accesskey="P">previous</a> |</li>
-        <li><a href="../">NTracer 0.3 documentation</a> &raquo;</li> 
+        <li><a href="../">NTracer 0.4 documentation</a> &raquo;</li> 
       </ul>
     </div>  
 
@@ -564,9 +564,45 @@ that encloses all the primitives of the scene.</li>
 </tbody>
 </table>
 <dl class="method">
+<dt id="ntracer.tracern.CompositeScene.add_light">
+<tt class="descname">add_light</tt><big>(</big><em>light</em><big>)</big><a class="headerlink" href="#ntracer.tracern.CompositeScene.add_light" title="Permalink to this definition">¶</a></dt>
+<dd><p>Add a light to the scene.</p>
+<p>The light will be added to <a class="reference internal" href="#ntracer.tracern.CompositeScene.global_lights" title="ntracer.tracern.CompositeScene.global_lights"><tt class="xref py py-attr docutils literal"><span class="pre">global_lights</span></tt></a> or
+<a class="reference internal" href="#ntracer.tracern.CompositeScene.point_lights" title="ntracer.tracern.CompositeScene.point_lights"><tt class="xref py py-attr docutils literal"><span class="pre">point_lights</span></tt></a> according to its type.</p>
+<p>If the scene has been locked by a <a class="reference internal" href="#ntracer.render.Renderer" title="ntracer.render.Renderer"><tt class="xref py py-class docutils literal"><span class="pre">render.Renderer</span></tt></a>, this
+method will raise an exception instead.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>light</strong> &#8211; An instance of <a class="reference internal" href="#ntracer.tracern.GlobalLight" title="ntracer.tracern.GlobalLight"><tt class="xref py py-class docutils literal"><span class="pre">GlobalLight</span></tt></a> or
+<a class="reference internal" href="#ntracer.tracern.PointLight" title="ntracer.tracern.PointLight"><tt class="xref py py-class docutils literal"><span class="pre">PointLight</span></tt></a>.</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
 <dt id="ntracer.tracern.CompositeScene.get_camera">
 <tt class="descname">get_camera</tt><big>(</big><big>)</big> &rarr; Camera<a class="headerlink" href="#ntracer.tracern.CompositeScene.get_camera" title="Permalink to this definition">¶</a></dt>
 <dd><p>Return a copy of the scene&#8217;s camera.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ntracer.tracern.CompositeScene.set_ambient_color">
+<tt class="descname">set_ambient_color</tt><big>(</big><em>color</em><big>)</big><a class="headerlink" href="#ntracer.tracern.CompositeScene.set_ambient_color" title="Permalink to this definition">¶</a></dt>
+<dd><p>Set the value of <a class="reference internal" href="#ntracer.tracern.CompositeScene.ambient_color" title="ntracer.tracern.CompositeScene.ambient_color"><tt class="xref py py-attr docutils literal"><span class="pre">ambient_color</span></tt></a></p>
+<p>If the scene has been locked by a <a class="reference internal" href="#ntracer.render.Renderer" title="ntracer.render.Renderer"><tt class="xref py py-class docutils literal"><span class="pre">render.Renderer</span></tt></a>, this
+method will raise an exception instead.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>color</strong> &#8211; An instance of <a class="reference internal" href="#ntracer.render.Color" title="ntracer.render.Color"><tt class="xref py py-class docutils literal"><span class="pre">render.Color</span></tt></a> or a tuple with
+three numbers.</td>
+</tr>
+</tbody>
+</table>
 </dd></dl>
 
 <dl class="method">
@@ -574,7 +610,7 @@ that encloses all the primitives of the scene.</li>
 <tt class="descname">set_camera</tt><big>(</big><em>camera</em><big>)</big><a class="headerlink" href="#ntracer.tracern.CompositeScene.set_camera" title="Permalink to this definition">¶</a></dt>
 <dd><p>Set the scene&#8217;s camera to a copy of the provided value.</p>
 <p>If the scene has been locked by a <a class="reference internal" href="#ntracer.render.Renderer" title="ntracer.render.Renderer"><tt class="xref py py-class docutils literal"><span class="pre">render.Renderer</span></tt></a>, this
-function will raise an exception instead.</p>
+method will raise an exception instead.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
@@ -586,11 +622,27 @@ function will raise an exception instead.</p>
 </dd></dl>
 
 <dl class="method">
+<dt id="ntracer.tracern.CompositeScene.set_camera_light">
+<tt class="descname">set_camera_light</tt><big>(</big><em>camera_light</em><big>)</big><a class="headerlink" href="#ntracer.tracern.CompositeScene.set_camera_light" title="Permalink to this definition">¶</a></dt>
+<dd><p>Set the value of <a class="reference internal" href="#ntracer.tracern.CompositeScene.camera_light" title="ntracer.tracern.CompositeScene.camera_light"><tt class="xref py py-attr docutils literal"><span class="pre">camera_light</span></tt></a></p>
+<p>If the scene has been locked by a <a class="reference internal" href="#ntracer.render.Renderer" title="ntracer.render.Renderer"><tt class="xref py py-class docutils literal"><span class="pre">render.Renderer</span></tt></a>, this
+method will raise an exception instead.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>camera_light</strong> (<em>boolean</em>) &#8211; The new value.</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
 <dt id="ntracer.tracern.CompositeScene.set_fov">
 <tt class="descname">set_fov</tt><big>(</big><em>fov</em><big>)</big><a class="headerlink" href="#ntracer.tracern.CompositeScene.set_fov" title="Permalink to this definition">¶</a></dt>
 <dd><p>Set the field of vision.</p>
 <p>If the scene has been locked by a <a class="reference internal" href="#ntracer.render.Renderer" title="ntracer.render.Renderer"><tt class="xref py py-class docutils literal"><span class="pre">render.Renderer</span></tt></a>, this
-function will raise an exception instead.</p>
+method will raise an exception instead.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
@@ -606,12 +658,28 @@ function will raise an exception instead.</p>
 <tt class="descname">set_max_reflect_depth</tt><big>(</big><em>depth</em><big>)</big><a class="headerlink" href="#ntracer.tracern.CompositeScene.set_max_reflect_depth" title="Permalink to this definition">¶</a></dt>
 <dd><p>Set the value of <a class="reference internal" href="#ntracer.tracern.CompositeScene.max_reflect_depth" title="ntracer.tracern.CompositeScene.max_reflect_depth"><tt class="xref py py-attr docutils literal"><span class="pre">max_reflect_depth</span></tt></a>.</p>
 <p>If the scene has been locked by a <a class="reference internal" href="#ntracer.render.Renderer" title="ntracer.render.Renderer"><tt class="xref py py-class docutils literal"><span class="pre">render.Renderer</span></tt></a>, this
-function will raise an exception instead.</p>
+method will raise an exception instead.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
 <tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>depth</strong> (<em>integer</em>) &#8211; The new value.</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="ntracer.tracern.CompositeScene.set_shadows">
+<tt class="descname">set_shadows</tt><big>(</big><em>shadows</em><big>)</big><a class="headerlink" href="#ntracer.tracern.CompositeScene.set_shadows" title="Permalink to this definition">¶</a></dt>
+<dd><p>Set the value of <a class="reference internal" href="#ntracer.tracern.CompositeScene.shadows" title="ntracer.tracern.CompositeScene.shadows"><tt class="xref py py-attr docutils literal"><span class="pre">shadows</span></tt></a></p>
+<p>If the scene has been locked by a <a class="reference internal" href="#ntracer.render.Renderer" title="ntracer.render.Renderer"><tt class="xref py py-class docutils literal"><span class="pre">render.Renderer</span></tt></a>, this
+method will raise an exception instead.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>shadows</strong> (<em>boolean</em>) &#8211; The new value.</td>
 </tr>
 </tbody>
 </table>
@@ -634,11 +702,42 @@ the primitives of the scene.</p>
 </dd></dl>
 
 <dl class="attribute">
+<dt id="ntracer.tracern.CompositeScene.ambient_color">
+<tt class="descname">ambient_color</tt><a class="headerlink" href="#ntracer.tracern.CompositeScene.ambient_color" title="Permalink to this definition">¶</a></dt>
+<dd><p>The color of the ambient light.</p>
+<p>This light reaches all geometry unconditionally.</p>
+<p>The default value is <tt class="docutils literal"><span class="pre">Color(0,0,0)</span></tt>.</p>
+<p>This attribute is read-only. To modify the value, use
+<a class="reference internal" href="#ntracer.tracern.CompositeScene.set_ambient_color" title="ntracer.tracern.CompositeScene.set_ambient_color"><tt class="xref py py-meth docutils literal"><span class="pre">set_ambient_color()</span></tt></a>.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="ntracer.tracern.CompositeScene.camera_light">
+<tt class="descname">camera_light</tt><a class="headerlink" href="#ntracer.tracern.CompositeScene.camera_light" title="Permalink to this definition">¶</a></dt>
+<dd><p>A boolean specifying whether surfaces will be lit if they face the
+camera.</p>
+<p>This is equivalent to having an instance of <a class="reference internal" href="#ntracer.tracern.GlobalLight" title="ntracer.tracern.GlobalLight"><tt class="xref py py-class docutils literal"><span class="pre">GlobalLight</span></tt></a> with
+<a class="reference internal" href="#ntracer.tracern.GlobalLight.color" title="ntracer.tracern.GlobalLight.color"><tt class="xref py py-attr docutils literal"><span class="pre">GlobalLight.color</span></tt></a> set to <tt class="docutils literal"><span class="pre">Color(1,1,1)</span></tt> and
+<a class="reference internal" href="#ntracer.tracern.GlobalLight.direction" title="ntracer.tracern.GlobalLight.direction"><tt class="xref py py-attr docutils literal"><span class="pre">GlobalLight.direction</span></tt></a> set to the direction that the camera is
+facing, except this light never casts shadows.</p>
+<p>The default value is <tt class="docutils literal"><span class="pre">True</span></tt>.</p>
+<p>This attribute is read-only. To modify the value, use
+<a class="reference internal" href="#ntracer.tracern.CompositeScene.set_camera_light" title="ntracer.tracern.CompositeScene.set_camera_light"><tt class="xref py py-meth docutils literal"><span class="pre">set_camera_light()</span></tt></a>.</p>
+</dd></dl>
+
+<dl class="attribute">
 <dt id="ntracer.tracern.CompositeScene.fov">
 <tt class="descname">fov</tt><a class="headerlink" href="#ntracer.tracern.CompositeScene.fov" title="Permalink to this definition">¶</a></dt>
 <dd><p>The scene&#8217;s horizontal field of vision in radians.</p>
 <p>This attribute is read-only. To modify the value, use
 <a class="reference internal" href="#ntracer.tracern.CompositeScene.set_fov" title="ntracer.tracern.CompositeScene.set_fov"><tt class="xref py py-meth docutils literal"><span class="pre">set_fov()</span></tt></a>.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="ntracer.tracern.CompositeScene.global_lights">
+<tt class="descname">global_lights</tt><a class="headerlink" href="#ntracer.tracern.CompositeScene.global_lights" title="Permalink to this definition">¶</a></dt>
+<dd><p>A list-like object containing intances of <a class="reference internal" href="#ntracer.tracern.GlobalLight" title="ntracer.tracern.GlobalLight"><tt class="xref py py-class docutils literal"><span class="pre">GlobalLight</span></tt></a>.</p>
+<p>See <a class="reference internal" href="#ntracer.tracern.GlobalLightList" title="ntracer.tracern.GlobalLightList"><tt class="xref py py-class docutils literal"><span class="pre">GlobalLightList</span></tt></a> for details.</p>
 </dd></dl>
 
 <dl class="attribute">
@@ -661,10 +760,28 @@ A value of 0 disables reflections altogether.</p>
 </dd></dl>
 
 <dl class="attribute">
+<dt id="ntracer.tracern.CompositeScene.point_lights">
+<tt class="descname">point_lights</tt><a class="headerlink" href="#ntracer.tracern.CompositeScene.point_lights" title="Permalink to this definition">¶</a></dt>
+<dd><p>A list-like object containing instances of <a class="reference internal" href="#ntracer.tracern.PointLight" title="ntracer.tracern.PointLight"><tt class="xref py py-class docutils literal"><span class="pre">PointLight</span></tt></a>.</p>
+<p>See <a class="reference internal" href="#ntracer.tracern.PointLightList" title="ntracer.tracern.PointLightList"><tt class="xref py py-class docutils literal"><span class="pre">PointLightList</span></tt></a> for details.</p>
+</dd></dl>
+
+<dl class="attribute">
 <dt id="ntracer.tracern.CompositeScene.root">
 <tt class="descname">root</tt><a class="headerlink" href="#ntracer.tracern.CompositeScene.root" title="Permalink to this definition">¶</a></dt>
 <dd><p>The root node of a k-d tree.</p>
 <p>This attribute is read-only.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="ntracer.tracern.CompositeScene.shadows">
+<tt class="descname">shadows</tt><a class="headerlink" href="#ntracer.tracern.CompositeScene.shadows" title="Permalink to this definition">¶</a></dt>
+<dd><p>A boolean specifying whether objects will cast shadows.</p>
+<p>Note: this only applies to lights explicitly added, not the default
+camera light (see <a class="reference internal" href="#ntracer.tracern.CompositeScene.camera_light" title="ntracer.tracern.CompositeScene.camera_light"><tt class="xref py py-attr docutils literal"><span class="pre">camera_light</span></tt></a>).</p>
+<p>The default value is <tt class="docutils literal"><span class="pre">False</span></tt>.</p>
+<p>This attribute is read-only. To modify the value, use
+<a class="reference internal" href="#ntracer.tracern.CompositeScene.set_shadows" title="ntracer.tracern.CompositeScene.set_shadows"><tt class="xref py py-meth docutils literal"><span class="pre">set_shadows()</span></tt></a>.</p>
 </dd></dl>
 
 </dd></dl>
@@ -683,7 +800,90 @@ A value of 0 disables reflections altogether.</p>
 <dl class="method">
 <dt id="ntracer.tracern.FrozenVectorView.__len__">
 <tt class="descname">__len__</tt><big>(</big><big>)</big><a class="headerlink" href="#ntracer.tracern.FrozenVectorView.__len__" title="Permalink to this definition">¶</a></dt>
-<dd><p><tt class="code docutils literal"><span class="pre">self.__len__()</span></tt> &lt;==&gt; <tt class="code docutils literal"><span class="pre">len(x)</span></tt></p>
+<dd><p><tt class="code docutils literal"><span class="pre">self.__len__()</span></tt> &lt;==&gt; <tt class="code docutils literal"><span class="pre">len(self)</span></tt></p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="ntracer.tracern.GlobalLight">
+<em class="property">class </em><tt class="descname">GlobalLight</tt><big>(</big><em>direction</em>, <em>color</em><big>)</big><a class="headerlink" href="#ntracer.tracern.GlobalLight" title="Permalink to this definition">¶</a></dt>
+<dd><p>A light whose source is infinitely far from the scene&#8217;s origin.</p>
+<p>This is an approximation of a distant light source such as the sun.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>direction</strong> (<em>vector</em>) &#8211; The direction that the light&#8217;s rays travel (i.e.
+the light will be located at <img class="math" src="../_images/math/640e80cd1920954352800d6f592fee885cacfcf0.png" alt="-\text{direction} \times \infty"/>).</li>
+<li><strong>color</strong> &#8211; The light&#8217;s color. This can be an instance of
+<a class="reference internal" href="#ntracer.render.Color" title="ntracer.render.Color"><tt class="xref py py-class docutils literal"><span class="pre">render.Color</span></tt></a> or a tuple with three numbers.</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+<dl class="attribute">
+<dt id="ntracer.tracern.GlobalLight.color">
+<tt class="descname">color</tt><a class="headerlink" href="#ntracer.tracern.GlobalLight.color" title="Permalink to this definition">¶</a></dt>
+<dd><p>The light&#8217;s color.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="ntracer.tracern.GlobalLight.dimension">
+<tt class="descname">dimension</tt><a class="headerlink" href="#ntracer.tracern.GlobalLight.dimension" title="Permalink to this definition">¶</a></dt>
+<dd><p>The dimension of <a class="reference internal" href="#ntracer.tracern.GlobalLight.direction" title="ntracer.tracern.GlobalLight.direction"><tt class="xref py py-attr docutils literal"><span class="pre">direction</span></tt></a>.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="ntracer.tracern.GlobalLight.direction">
+<tt class="descname">direction</tt><a class="headerlink" href="#ntracer.tracern.GlobalLight.direction" title="Permalink to this definition">¶</a></dt>
+<dd><p>The direction that the light&#8217;s rays travel (i.e. the light source will
+be located at <img class="math" src="../_images/math/640e80cd1920954352800d6f592fee885cacfcf0.png" alt="-\text{direction} \times \infty"/>).</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="ntracer.tracern.GlobalLightList">
+<em class="property">class </em><tt class="descname">GlobalLightList</tt><a class="headerlink" href="#ntracer.tracern.GlobalLightList" title="Permalink to this definition">¶</a></dt>
+<dd><p>An array of <a class="reference internal" href="#ntracer.tracern.GlobalLight" title="ntracer.tracern.GlobalLight"><tt class="xref py py-class docutils literal"><span class="pre">GlobalLight</span></tt></a> objects.</p>
+<p>An instance of this class is tied to a specific <a class="reference internal" href="#ntracer.tracern.CompositeScene" title="ntracer.tracern.CompositeScene"><tt class="xref py py-class docutils literal"><span class="pre">CompositeScene</span></tt></a>
+instance. Any attempt to modify an instance of this class while the scene is
+locked will cause an exception to be raised.</p>
+<p>Since the order of lights is not important, when deleting an element,
+instead of shifting all subsequent elements back, the gap is filled with the
+last element (unless the last element is the one being deleted).</p>
+<p>This class cannot be instantiated directly in Python code.</p>
+<dl class="method">
+<dt id="ntracer.tracern.GlobalLightList.__getitem__">
+<tt class="descname">__getitem__</tt><big>(</big><em>index</em><big>)</big><a class="headerlink" href="#ntracer.tracern.GlobalLightList.__getitem__" title="Permalink to this definition">¶</a></dt>
+<dd><p><tt class="code docutils literal"><span class="pre">self.__getitem__(i)</span></tt> &lt;==&gt; <tt class="code docutils literal"><span class="pre">self[i]</span></tt></p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ntracer.tracern.GlobalLightList.__len__">
+<tt class="descname">__len__</tt><big>(</big><big>)</big><a class="headerlink" href="#ntracer.tracern.GlobalLightList.__len__" title="Permalink to this definition">¶</a></dt>
+<dd><p><tt class="code docutils literal"><span class="pre">self.__len__()</span></tt> &lt;==&gt; <tt class="code docutils literal"><span class="pre">len(self)</span></tt></p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ntracer.tracern.GlobalLightList.__setitem__">
+<tt class="descname">__setitem__</tt><big>(</big><em>index</em>, <em>value</em><big>)</big><a class="headerlink" href="#ntracer.tracern.GlobalLightList.__setitem__" title="Permalink to this definition">¶</a></dt>
+<dd><p><tt class="code docutils literal"><span class="pre">self.__setitem__(i,v)</span></tt> &lt;==&gt; <tt class="code docutils literal"><span class="pre">self[i]=v</span></tt></p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ntracer.tracern.GlobalLightList.append">
+<tt class="descname">append</tt><big>(</big><em>light</em><big>)</big><a class="headerlink" href="#ntracer.tracern.GlobalLightList.append" title="Permalink to this definition">¶</a></dt>
+<dd><p>Add a light.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ntracer.tracern.GlobalLightList.extend">
+<tt class="descname">extend</tt><big>(</big><em>lights</em><big>)</big><a class="headerlink" href="#ntracer.tracern.GlobalLightList.extend" title="Permalink to this definition">¶</a></dt>
+<dd><p>Add lights from an iterable object.</p>
 </dd></dl>
 
 </dd></dl>
@@ -802,6 +1002,38 @@ no intersection occurs, the return value will be an empty list.</p>
 <tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
 <li><strong>origin</strong> (<em>vector</em>) &#8211; The origin of the ray.</li>
 <li><strong>direction</strong> (<em>vector</em>) &#8211; The direction of the ray.</li>
+<li><strong>t_near</strong> (<em>number</em>) &#8211; </li>
+<li><strong>t_far</strong> (<em>number</em>) &#8211; </li>
+<li><strong>source</strong> (<em>KDNode</em>) &#8211; A node that will not be considered for
+intersection.</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="ntracer.tracern.KDNode.occludes">
+<tt class="descname">occludes</tt><big>(</big><em>origin</em>, <em>direction</em><span class="optional">[</span>, <em>distance</em>, <em>t_near</em>, <em>t_far</em>, <em>source</em><span class="optional">]</span><big>)</big> &rarr; tuple<a class="headerlink" href="#ntracer.tracern.KDNode.occludes" title="Permalink to this definition">¶</a></dt>
+<dd><p>Test if <tt class="code docutils literal"><span class="pre">origin</span> <span class="pre">+</span> <span class="pre">direction*distance</span></tt> is occluded by any
+primitives.</p>
+<p>If an opaque object exists at any point along <tt class="docutils literal"><span class="pre">distance</span></tt>, the return
+value is <tt class="code docutils literal"><span class="pre">(True,None)</span></tt>. Otherwise the return value is a tuple
+containing <tt class="docutils literal"><span class="pre">False</span></tt> and an array that for every non-opaque primitive
+found along <tt class="docutils literal"><span class="pre">distance</span></tt>, contains a tuple with the distance between
+<tt class="docutils literal"><span class="pre">origin</span></tt> and the intersection, the point of intersection, the normal
+of the surface intersected and the intersected primitive itself. The
+elements will be in an arbitrary order and may contain duplicates (this
+can happen when a primitive crosses a split pane).</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>origin</strong> (<em>vector</em>) &#8211; The origin of the ray.</li>
+<li><strong>direction</strong> (<em>vector</em>) &#8211; The direction of the ray.</li>
+<li><strong>distance</strong> (<em>number</em>) &#8211; How far out to check for intersections.</li>
 <li><strong>t_near</strong> (<em>number</em>) &#8211; </li>
 <li><strong>t_far</strong> (<em>number</em>) &#8211; </li>
 <li><strong>source</strong> (<em>KDNode</em>) &#8211; A node that will not be considered for
@@ -974,6 +1206,93 @@ axis.</p>
 <dt id="ntracer.tracern.MatrixProxy.__len__">
 <tt class="descname">__len__</tt><big>(</big><big>)</big><a class="headerlink" href="#ntracer.tracern.MatrixProxy.__len__" title="Permalink to this definition">¶</a></dt>
 <dd><p><tt class="code docutils literal"><span class="pre">self.__len__()</span></tt> &lt;==&gt; <tt class="code docutils literal"><span class="pre">len(self)</span></tt></p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="ntracer.tracern.PointLight">
+<em class="property">class </em><tt class="descname">PointLight</tt><big>(</big><em>position</em>, <em>color</em><big>)</big><a class="headerlink" href="#ntracer.tracern.PointLight" title="Permalink to this definition">¶</a></dt>
+<dd><p>A light source that emits light uniformly in every direction from a given
+point.</p>
+<p><a class="reference internal" href="#ntracer.tracern.PointLight.color" title="ntracer.tracern.PointLight.color"><tt class="xref py py-attr docutils literal"><span class="pre">color</span></tt></a> represents not only the light&#8217;s color, but its brightness,
+too, thus its <tt class="docutils literal"><span class="pre">r</span></tt> <tt class="docutils literal"><span class="pre">g</span></tt> <tt class="docutils literal"><span class="pre">b</span></tt> components may be much greater than 1.</p>
+<p>The intensity of the light at a given point depends on the distance from
+<a class="reference internal" href="#ntracer.tracern.PointLight.position" title="ntracer.tracern.PointLight.position"><tt class="xref py py-attr docutils literal"><span class="pre">position</span></tt></a> and is given by the formula:</p>
+<div class="math">
+<p><img src="../_images/math/d66c09d69fa61f6bd2da96d14bdece783fbf2944.png" alt="\text{color} \times \frac{1}{\text{distance}^{\text{dimension} - 1}}"/></p>
+</div><table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>position</strong> (<em>vector</em>) &#8211; The position of the light.</li>
+<li><strong>color</strong> &#8211; The light&#8217;s color multiplied by its brightness. This can be an
+instance of <a class="reference internal" href="#ntracer.render.Color" title="ntracer.render.Color"><tt class="xref py py-class docutils literal"><span class="pre">render.Color</span></tt></a> or a tuple with three numbers.</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+<dl class="attribute">
+<dt id="ntracer.tracern.PointLight.color">
+<tt class="descname">color</tt><a class="headerlink" href="#ntracer.tracern.PointLight.color" title="Permalink to this definition">¶</a></dt>
+<dd><p>The light&#8217;s color multiplied by its brightness.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="ntracer.tracern.PointLight.dimension">
+<tt class="descname">dimension</tt><a class="headerlink" href="#ntracer.tracern.PointLight.dimension" title="Permalink to this definition">¶</a></dt>
+<dd><p>The dimension of <a class="reference internal" href="#ntracer.tracern.PointLight.position" title="ntracer.tracern.PointLight.position"><tt class="xref py py-attr docutils literal"><span class="pre">position</span></tt></a>.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="ntracer.tracern.PointLight.position">
+<tt class="descname">position</tt><a class="headerlink" href="#ntracer.tracern.PointLight.position" title="Permalink to this definition">¶</a></dt>
+<dd><p>The position of the light.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="ntracer.tracern.PointLightList">
+<em class="property">class </em><tt class="descname">PointLightList</tt><a class="headerlink" href="#ntracer.tracern.PointLightList" title="Permalink to this definition">¶</a></dt>
+<dd><p>An array of <a class="reference internal" href="#ntracer.tracern.PointLight" title="ntracer.tracern.PointLight"><tt class="xref py py-class docutils literal"><span class="pre">PointLight</span></tt></a> objects.</p>
+<p>An instance of this class is tied to a specific <a class="reference internal" href="#ntracer.tracern.CompositeScene" title="ntracer.tracern.CompositeScene"><tt class="xref py py-class docutils literal"><span class="pre">CompositeScene</span></tt></a>
+instance. Any attempt to modify an instance of this class while the scene is
+locked will cause an exception to be raised.</p>
+<p>Since the order of lights is not important, when deleting an element,
+instead of shifting all subsequent elements back, the gap is filled with the
+last element (unless the last element is the one being deleted).</p>
+<p>This class cannot be instantiated directly in Python code.</p>
+<dl class="method">
+<dt id="ntracer.tracern.PointLightList.__getitem__">
+<tt class="descname">__getitem__</tt><big>(</big><em>index</em><big>)</big><a class="headerlink" href="#ntracer.tracern.PointLightList.__getitem__" title="Permalink to this definition">¶</a></dt>
+<dd><p><tt class="code docutils literal"><span class="pre">self.__getitem__(i)</span></tt> &lt;==&gt; <tt class="code docutils literal"><span class="pre">self[i]</span></tt></p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ntracer.tracern.PointLightList.__len__">
+<tt class="descname">__len__</tt><big>(</big><big>)</big><a class="headerlink" href="#ntracer.tracern.PointLightList.__len__" title="Permalink to this definition">¶</a></dt>
+<dd><p><tt class="code docutils literal"><span class="pre">self.__len__()</span></tt> &lt;==&gt; <tt class="code docutils literal"><span class="pre">len(self)</span></tt></p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ntracer.tracern.PointLightList.__setitem__">
+<tt class="descname">__setitem__</tt><big>(</big><em>index</em>, <em>value</em><big>)</big><a class="headerlink" href="#ntracer.tracern.PointLightList.__setitem__" title="Permalink to this definition">¶</a></dt>
+<dd><p><tt class="code docutils literal"><span class="pre">self.__setitem__(i,v)</span></tt> &lt;==&gt; <tt class="code docutils literal"><span class="pre">self[i]=v</span></tt></p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ntracer.tracern.PointLightList.append">
+<tt class="descname">append</tt><big>(</big><em>light</em><big>)</big><a class="headerlink" href="#ntracer.tracern.PointLightList.append" title="Permalink to this definition">¶</a></dt>
+<dd><p>Add a light.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ntracer.tracern.PointLightList.extend">
+<tt class="descname">extend</tt><big>(</big><em>lights</em><big>)</big><a class="headerlink" href="#ntracer.tracern.PointLightList.extend" title="Permalink to this definition">¶</a></dt>
+<dd><p>Add lights from an iterable object.</p>
 </dd></dl>
 
 </dd></dl>
@@ -1648,7 +1967,7 @@ interchangeable with each other.</p>
         <li class="right" >
           <a href="../example/" title="Basic Usage"
              >previous</a> |</li>
-        <li><a href="../">NTracer 0.3 documentation</a> &raquo;</li> 
+        <li><a href="../">NTracer 0.4 documentation</a> &raquo;</li> 
       </ul>
     </div>
     <div class="footer">
