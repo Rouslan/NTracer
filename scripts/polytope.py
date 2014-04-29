@@ -11,7 +11,8 @@ import sys
 import subprocess
 import time
 from itertools import combinations,islice
-from ntracer import NTracer,Material,Renderer,build_composite_scene,CUBE
+from ntracer import NTracer,Material,ImageFormat,Channel,BlockingRenderer,build_composite_scene,CUBE
+from ntracer.pygame_render import PygameRenderer
 
 
 ROT_SENSITIVITY = 0.005
@@ -366,17 +367,21 @@ class PolyTope:
             planes = [Plane(co_nt,co_nt.Vector(islice(part.position,co_nt.dimension))) for part in self.parts]
             las = self.line_apothem_square()
             for pgroup in combinations(planes,co_nt.dimension-1):
-                line = plane_line_intersection(co_nt,pgroup)
-                if line:
-                    for lineb in lines:
-                        if almost_equal(line.p0,lineb.p0) and almost_equal(line.v,lineb.v):
-                            lineb.planes |= line.planes
-                            break
-                    else:
-                        outer_dist = line.dist_square(co_nt.Vector()) - las
-                        if outer_dist < 0.1:
-                            line.outer = outer_dist > -0.1
-                            lines.append(line)
+                try:
+                    line = plane_line_intersection(co_nt,pgroup)
+                except ValueError:
+                    pass
+                else:
+                    if line:
+                        for lineb in lines:
+                            if almost_equal(line.p0,lineb.p0) and almost_equal(line.v,lineb.v):
+                                lineb.planes |= line.planes
+                                break
+                        else:
+                            outer_dist = line.dist_square(co_nt.Vector()) - las
+                            if outer_dist < 0.1:
+                                line.outer = outer_dist > -0.1
+                                lines.append(line)
 
             pmap = {}
             for line in lines:
@@ -415,9 +420,7 @@ class PolyTope:
             self._star_tesselation = t
             for n in islice(graph.nodes,0,len(graph.nodes)-co_nt.dimension):
                 for cycle in n.find_cycles(co_nt.dimension):
-                    t.append(map(
-                        (lambda x: nt.Vector(tuple(x.pos) + (0,) * (nt.dimension-co_nt.dimension))),
-                        cycle) + [nt.Vector()])
+                    t.append([nt.Vector(tuple(x.pos) + (0,) * (nt.dimension-co_nt.dimension)) for x in cycle] + [nt.Vector()])
                 n.detach()
 
         return t
@@ -517,49 +520,41 @@ time spent on all cores, making the reported time spent rendering, much higher
 than the actual time''',file=sys.stderr)
 
 
-def rotating_scene_loop(surf,before=None,after=None):
-    _timer = lambda: 0
-    if args.benchmark:
-        _timer = timer
-    
-    incr = 2*math.pi / args.frames
+class RotatingCamera(object):
+    incr = 2 * math.pi / args.frames
     h = 1/math.sqrt(nt.dimension-1)
     
-    frame = 0
-    if before: before(frame)
-    total_time = 0
-    t = _timer()
-
-    render.begin_render(surf,scene)
-
-    while True:
-        e = pygame.event.wait()
-        if e.type == pygame.USEREVENT:
-            total_time += _timer() - t
-
-            if after: after(frame)
-            frame += 1
-            if frame >= args.frames: break
-            
-            a2 = camera.axes[0]*h + camera.axes[1]*h
-            for i in range(nt.dimension-3): a2 += camera.axes[i+3]*h
-            camera.transform(nt.Matrix.rotation(camera.axes[2],a2,incr))
-            camera.normalize()
-            camera.origin = camera.axes[2] * cam_distance
-            scene.set_camera(camera)
-            
-            if before: before(frame)
-            
-            t = _timer()
-            render.begin_render(surf,scene)
-        elif e.type == pygame.QUIT:
-            render.abort_render()
-            return
+    _timer = staticmethod(timer if args.benchmark else (lambda: 0))
     
-    if total_time:
-        print('''rendered {0} frame(s) in {1} seconds
+    def __enter__(self):
+        self.frame = 0
+        self.total_time = 0
+        return self
+    
+    def __exit__(self,type,value,tb):
+        if type is None and self.total_time:
+            print('''rendered {0} frame(s) in {1} seconds
 time per frame: {2} seconds
-frames per second: {3}'''.format(frame,total_time,total_time/frame,frame/total_time))
+frames per second: {3}'''.format(self.frame,self.total_time,self.total_time/self.frame,self.frame/self.total_time))
+    
+    def start_timer(self):
+        self.t = self._timer()
+    
+    def end_timer(self):
+        self.total_time += self._timer() - self.t
+    
+    def advance_camera(self):
+        self.frame += 1
+        if self.frame >= args.frames: return False
+            
+        a2 = camera.axes[0]*self.h + camera.axes[1]*self.h
+        for i in range(nt.dimension-3): a2 += camera.axes[i+3]*self.h
+        camera.transform(nt.Matrix.rotation(camera.axes[2],a2,self.incr))
+        camera.normalize()
+        camera.origin = camera.axes[2] * cam_distance
+        scene.set_camera(camera)
+        
+        return True
 
 
 if nt.dimension >= 3 and args.schlafli[0] == 4 and all(c == 3 for c in args.schlafli[1:]):
@@ -593,20 +588,25 @@ camera.translate(nt.Vector.axis(2,cam_distance) + jitter)
 scene.set_camera(camera)
 scene.set_fov(args.fov)
 
-render = Renderer()
-
-pygame.display.init()
 
 if args.output is not None:
-    kwds = {'depth':24}
     if args.type != 'png':
-        kwds['masks'] = (0xff,0xff00,0xff0000,0)
+        render = BlockingRenderer()
+        format = ImageFormat(
+            args.screen[0],
+            args.screen[1],
+            [Channel(16,1,0,0),
+             Channel(16,0,1,0),
+             Channel(16,0,0,1)])
+        
+        surf = bytearray(args.screen[0]*args.screen[1]*format.bytes_per_pixel)
+        
         pipe = subprocess.Popen(['ffmpeg',
                 '-y',
                 '-f','rawvideo',
                 '-vcodec','rawvideo',
                 '-s','{0}x{1}'.format(*args.screen),
-                '-pix_fmt','rgb24',
+                '-pix_fmt','rgb48be',
                 '-r','60',
                 '-i','-',
                 '-an',
@@ -614,39 +614,76 @@ if args.output is not None:
                 '-crf','10',
                 args.output],
             stdin=subprocess.PIPE)
-
-    try:
-        surf = pygame.Surface(args.screen,**kwds)
-
-        def announce_frame(frame):
-            if args.type == 'png':
-                print('drawing frame {0}/{1}'.format(frame+1,args.frames))
         
-        def process_frame(frame):
-            if args.type != 'png':
-                print(
-                    buffer(surf.get_buffer()),
-                    file=pipe.stdin,
-                    sep='',
-                    end='')
-            else:
+        try:
+            with RotatingCamera() as rc:
+                while True:
+                    rc.start_timer()
+                    render.render(surf,format,scene)
+                    rc.end_timer()
+
+                    print(surf,file=pipe.stdin,sep='',end='')
+                    
+                    if not rc.advance_camera(): break
+
+        finally:
+            pipe.stdin.close()
+            r = pipe.wait()
+        sys.exit(r)
+
+
+    pygame.display.init()
+    render = PygameRenderer()
+    surf = pygame.Surface(args.screen,depth=24)
+
+    def announce_frame(frame):
+        print('drawing frame {0}/{1}'.format(frame+1,args.frames))
+    
+    with RotatingCamera() as rc:
+        announce_frame(0)
+        rc.start_timer()
+        render.begin_render(surf,scene)
+        while True:
+            e = pygame.event.wait()
+            if e.type == pygame.USEREVENT:
+                rc.end_timer()
+                
                 pygame.image.save(
                     surf,
-                    os.path.join(args.output,'frame{0:04}.png'.format(frame)))
-        
-        rotating_scene_loop(surf,announce_frame,process_frame)
+                    os.path.join(args.output,'frame{0:04}.png'.format(rc.frame)))
 
-    finally:
-        if args.type != 'png':
-            pipe.stdin.close()
-    
-    if args.type != 'png':
-        sys.exit(pipe.wait())
+                if not rc.advance_camera(): break
+                
+                announce_frame(rc.frame)
+                rc.start_timer()
+                render.begin_render(surf,scene)
+            elif e.type == pygame.QUIT:
+                render.abort_render()
+                break
+
 else:
+    pygame.display.init()
+    render = PygameRenderer()
     screen = pygame.display.set_mode(args.screen)
     
     if args.benchmark:
-        rotating_scene_loop(screen,after=(lambda frame: pygame.display.flip()))
+        with RotatingCamera() as rc:
+            rc.start_timer()
+            render.begin_render(screen,scene)
+            while True:
+                e = pygame.event.wait()
+                if e.type == pygame.USEREVENT:
+                    rc.end_timer()
+                    
+                    pygame.display.flip()
+
+                    if not rc.advance_camera(): break
+                    
+                    rc.start_timer()
+                    render.begin_render(screen,scene)
+                elif e.type == pygame.QUIT:
+                    render.abort_render()
+                    break
     else:
         running = False
         run()

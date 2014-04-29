@@ -23,8 +23,11 @@ def get_version(base_dir):
         except Exception:
             warnings.warn('cannot determine package version')
         else:
-            # calling str here is needed for Python 3 and harmless in Python 2
-            version = str(version).strip().split('-')
+            # needed for Python 3
+            if not isinstance(version,str):
+                version = str(version,'utf-8')
+            
+            version = version.strip().split('-')
             del version[2] # get rid of the revision hash
             assert version[0][0] == 'v'
             version[0] = version[0][1:] # get rid of the leading "v"

@@ -1,50 +1,44 @@
 
-#if defined(_WIN32) || defined(__WIN32__)
-    #define THREAD_WIN
-#elif defined(linux) || defined(__linux) || defined(__linux__) || defined(sun) || defined(__sun) || defined(_AIX)
-    #define THREAD_LINUX
-#elif defined(__FreeBSD__) || defined(__MACOSX__) || defined(__APPLE__) || defined(__NetBSD__) || defined(__OpenBSD__)
-    #define THREAD_BSD
-#elif defined(hpux) || defined(_hpux) || defined(__hpux)
-    #define THEAD_HPUX
-#elif defined(sgi) || defined(__sgi)
-    #define THREAD_IRIX
-#endif
-
 #include <Python.h>
-
-#if defined(THREAD_WIN)
-#include <windows.h>
-#elif defined(THREAD_LINUX) || defined(THREAD_IRIX)
-#include <unistd.h>
-#elif defined(THREAD_BSD)
-#include <sys/param.h>
-#include <sys/sysctl.h>
-#elif defined(THREAD_HPUX)
-#include <sys/mpctl.h>
-#endif
-
 #include <structmember.h>
 #include <exception>
 #include <assert.h>
 #include <vector>
-#include <forward_list>
-#include <SDL_thread.h>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
 #include <atomic>
 #include <memory>
-#include <pygame/pygame.h>
 
 #include "pyobject.hpp"
 #define RENDER_MODULE
 #include "render.hpp"
 
 
+#define SIMPLE_WRAPPER(ROOT) \
+struct ROOT ## _obj_base { \
+    CONTAINED_PYTYPE_DEF \
+    PyObject_HEAD \
+}; \
+template<> struct _wrapped_type<ROOT> { \
+    typedef simple_py_wrapper<ROOT,ROOT ## _obj_base> type; \
+}
+
+
 using namespace type_object_abbrev;
 
+typedef char py_bool;
+typedef unsigned char byte;
 
-const int FRAME_READY = SDL_USEREVENT;
+
 const int RENDER_CHUNK_SIZE = 32;
 const int DEFAULT_SPECULAR_EXP = 8;
+
+/* this is number of bits of the largest number that can be stored in a long
+   across all platforms */
+const byte MAX_BITSIZE = 31;
+
+const byte MAX_PIXELSIZE = 16;
 
 
 class already_running_error : public std::exception {
@@ -54,78 +48,259 @@ public:
     }
 };
 
-class sdl_error : public std::exception {
-public:
-    const char *what() const throw() {
-        return SDL_GetError();
+
+struct channel {
+    float f_r, f_g, f_b, f_c;
+    byte bit_size;
+    py_bool tfloat;
+};
+
+SIMPLE_WRAPPER(channel);
+
+PyMemberDef obj_Channel_members[] = {
+    {const_cast<char*>("f_r"),T_FLOAT,offsetof(wrapped_type<channel>,base.f_r),READONLY,NULL},
+    {const_cast<char*>("f_g"),T_FLOAT,offsetof(wrapped_type<channel>,base.f_g),READONLY,NULL},
+    {const_cast<char*>("f_b"),T_FLOAT,offsetof(wrapped_type<channel>,base.f_b),READONLY,NULL},
+    {const_cast<char*>("f_c"),T_FLOAT,offsetof(wrapped_type<channel>,base.f_c),READONLY,NULL},
+    {const_cast<char*>("bit_size"),T_UBYTE,offsetof(wrapped_type<channel>,base.bit_size),READONLY,NULL},
+    {const_cast<char*>("tfloat"),T_BOOL,offsetof(wrapped_type<channel>,base.tfloat),READONLY,NULL},
+    {NULL}
+};
+
+PyTypeObject channel_obj_base::_pytype = make_type_object(
+    "render.Channel",
+    sizeof(wrapped_type<channel>),
+    tp_dealloc = destructor_dealloc<wrapped_type<channel> >::value,
+    tp_members = obj_Channel_members,
+    tp_new = [](PyTypeObject *type,PyObject *args,PyObject *kwds) -> PyObject* {
+        try {
+            auto ptr = py::check_obj(type->tp_alloc(type,0));
+            try {
+                auto &val = reinterpret_cast<wrapped_type<channel>*>(ptr)->alloc_base();
+                
+                const char *names[] = {"bit_size","f_r","f_g","f_b","f_c","tfloat"};
+                get_arg ga(args,kwds,names,"Channel.__new__");
+                int bit_size = from_pyobject<int>(ga(true));
+                val.f_r = from_pyobject<float>(ga(true));
+                val.f_g = from_pyobject<float>(ga(true));
+                val.f_b = from_pyobject<float>(ga(true));
+                val.f_c = 0;
+                val.tfloat = 0;
+            
+                auto tmp = ga(false);
+                if(tmp) val.f_c = from_pyobject<float>(tmp);
+            
+                tmp = ga(false);
+                if(tmp) val.tfloat = char(from_pyobject<bool>(tmp));
+
+                if(val.tfloat) {
+                    if(bit_size != sizeof(float)*8) {
+                        PyErr_Format(PyExc_ValueError,"if \"tfloat\" is true, \"bit_size\" can only be %d",sizeof(float)*8);
+                        throw py_error_set();
+                    }
+                } else {
+                    if(bit_size > MAX_BITSIZE) {
+                        static_assert(MAX_BITSIZE < sizeof(float)*8,"the error message here doesn't make sense unless MAX_BITSIZE is smaller than 32");
+                        PyErr_Format(PyExc_ValueError,"\"bit_size\" cannot be greater than %d (unless \"tfloat\" is true)",MAX_BITSIZE);
+                        throw py_error_set();
+                    } else if(bit_size < 1) THROW_PYERR_STRING(ValueError,"\"bit_size\" cannot be less than 1");
+                }
+                val.bit_size = bit_size;
+            
+                ga.finished();
+            } catch(...) {
+                Py_DECREF(ptr);
+                throw;
+            }
+            
+            return ptr;
+        } PY_EXCEPT_HANDLERS(nullptr)
+    });
+
+
+struct image_format {
+    size_t width, height, pitch;
+    std::vector<channel> channels;
+    byte bytes_per_pixel;
+    py_bool reversed;
+};
+
+SIMPLE_WRAPPER(image_format);
+
+struct obj_ChannelList {
+    CONTAINED_PYTYPE_DEF
+    PY_MEM_NEW_DELETE
+    PyObject_HEAD
+    py::pyptr<wrapped_type<image_format> > parent;
+    
+    obj_ChannelList(wrapped_type<image_format> *parent) : parent(py::borrowed_ref(reinterpret_cast<PyObject*>(parent))) {
+        PyObject_Init(reinterpret_cast<PyObject*>(this),pytype());
     }
 };
 
-class mutex {
-    friend class scoped_lock;
+void im_check_buffer_size(const image_format &im,const Py_buffer &buff) {
+    if(im.pitch < im.width * im.bytes_per_pixel) THROW_PYERR_STRING(ValueError,"invalid image format: \"pitch\" must be at least \"width\" times the pixel size in bytes");
+    if(size_t(buff.len) < im.pitch * im.height) THROW_PYERR_STRING(ValueError,"the buffer is too small for an image with the given dimensions");
+}
+
+void im_set_channels(image_format &im,PyObject *arg) {
+    auto channels_obj = py::iter(arg);
+    std::vector<channel> channels;
     
-    SDL_mutex *ptr;
-public:
-    mutex() : ptr(SDL_CreateMutex()) {}
-    mutex(const mutex&) = delete;
-    ~mutex() noexcept { SDL_DestroyMutex(ptr); }
+    long bits = 0;
+    while(auto item = py::next(channels_obj)) {
+        auto &c = get_base<channel>(item.ref());
+        bits += c.bit_size;
+        channels.push_back(c);
+    }
+    if(bits > MAX_PIXELSIZE * 8) {
+        PyErr_Format(PyExc_ValueError,"Too many bytes per pixel. The maximum is %d.",MAX_PIXELSIZE);
+        throw py_error_set();
+    }
     
-    mutex &operator=(const mutex&) = delete;
+    im.channels = std::move(channels);
+    im.bytes_per_pixel = (bits + 7) / 8;
+}
+
+PyObject *obj_ImageFormat_set_channels(wrapped_type<image_format> *self,PyObject *arg) {
+    try{
+        im_set_channels(self->get_base(),arg);
+        
+        Py_RETURN_NONE;
+    } PY_EXCEPT_HANDLERS(nullptr)
+}
+
+PyMethodDef obj_ImageFormat_methods[] = {
+    {"set_channels",reinterpret_cast<PyCFunction>(&obj_ImageFormat_set_channels),METH_O,NULL},
+    {NULL}
 };
 
-class scoped_lock {
-    friend class condition;
-    
-    SDL_mutex *mut;
-public:
-    scoped_lock(const mutex &m) : mut(m.ptr) {
-        if(SDL_mutexP(mut)) throw sdl_error();
-    }
-    ~scoped_lock() noexcept {
-#ifdef NDEBUG
-        SDL_mutexV(mut);
-#else
-        assert(!SDL_mutexV(mut));
-#endif
-    }
-    
-    scoped_lock &operator=(const scoped_lock&) = delete;
+PyGetSetDef obj_ImageFormat_getset[] = {
+    {const_cast<char*>("channels"),OBJ_GETTER(
+        wrapped_type<image_format>,
+        reinterpret_cast<PyObject*>(new obj_ChannelList(self))),NULL,NULL,NULL},
+    {NULL}
 };
 
-class condition {
-    SDL_cond *ptr;
-public:
-    condition() : ptr(SDL_CreateCond()) {}
-    condition(const condition&) = delete;
-    ~condition() noexcept { SDL_DestroyCond(ptr); }
-    
-    condition &operator=(const condition&) = delete;
-
-    void wait(const scoped_lock &lock) const {
-        if(SDL_CondWait(ptr,lock.mut)) throw sdl_error();
-    }
-
-    void signal_all() const {
-        if(SDL_CondBroadcast(ptr)) throw sdl_error();
-    }
+PyMemberDef obj_ImageFormat_members[] = {
+    {const_cast<char*>("width"),member_macro<size_t>::value,offsetof(wrapped_type<image_format>,base.width),0,NULL},
+    {const_cast<char*>("height"),member_macro<size_t>::value,offsetof(wrapped_type<image_format>,base.height),0,NULL},
+    {const_cast<char*>("pitch"),member_macro<size_t>::value,offsetof(wrapped_type<image_format>,base.pitch),0,NULL},
+    {const_cast<char*>("reversed"),T_BOOL,offsetof(wrapped_type<image_format>,base.reversed),0,NULL},
+    {const_cast<char*>("bytes_per_pixel"),T_UBYTE,offsetof(wrapped_type<image_format>,base.bytes_per_pixel),READONLY,NULL},
+    {NULL}
 };
+
+PyTypeObject image_format_obj_base::_pytype = make_type_object(
+    "render.ImageFormat",
+    sizeof(wrapped_type<image_format>),
+    tp_dealloc = destructor_dealloc<wrapped_type<image_format> >::value,
+    tp_members = obj_ImageFormat_members,
+    tp_getset = obj_ImageFormat_getset,
+    tp_methods = obj_ImageFormat_methods,
+    tp_new = [](PyTypeObject *type,PyObject *args,PyObject *kwds) -> PyObject* {
+        try {
+            auto ptr = py::check_obj(type->tp_alloc(type,0));
+            try {
+                auto &val = reinterpret_cast<wrapped_type<image_format>*>(ptr)->alloc_base();
+                new(&val) image_format();
+            
+                const char *names[] = {"width","height","channels","pitch","reversed"};
+                get_arg ga(args,kwds,names,"ImageFormat.__new__");
+                val.width = from_pyobject<size_t>(ga(true));
+                val.height = from_pyobject<size_t>(ga(true));
+                auto channels = ga(true);
+                val.pitch = 0;
+                val.reversed = 0;
+            
+                auto tmp = ga(false);
+                if(tmp) val.pitch = from_pyobject<size_t>(tmp);
+            
+                tmp = ga(false);
+                if(tmp) val.reversed = from_pyobject<bool>(tmp) ? 1 : 0;
+            
+                ga.finished();
+            
+                im_set_channels(val,channels);
+            
+                if(val.pitch) {
+                    if(val.pitch < val.width * val.bytes_per_pixel) THROW_PYERR_STRING(ValueError,"\"pitch\" must be at least \"width\" times the size of one pixel in bytes");
+                } else val.pitch = val.width * val.bytes_per_pixel;
+            } catch(...) {
+                Py_DECREF(ptr);
+                throw;
+            }
+            
+            return ptr;
+        } PY_EXCEPT_HANDLERS(nullptr)
+    });
+
+
+void check_index(const obj_ChannelList *cl,Py_ssize_t index) {
+    if(index < 0 || size_t(index) >= cl->parent->get_base().channels.size()) THROW_PYERR_STRING(IndexError,"index out of range");
+}
+
+Py_ssize_t obj_ChannelList_len(obj_ChannelList *self) {
+    return static_cast<Py_ssize_t>(self->parent->get_base().channels.size());
+}
+
+PyObject *obj_ChannelList_getitem(obj_ChannelList *self,Py_ssize_t index) {
+    try {
+        check_index(self,index);
+        return to_pyobject(self->parent->get_base().channels[index]);
+    } PY_EXCEPT_HANDLERS(nullptr)
+}
+
+PySequenceMethods obj_ChannelList_sequence_methods = {
+    reinterpret_cast<lenfunc>(&obj_ChannelList_len),
+    NULL,
+    NULL,
+    reinterpret_cast<ssizeargfunc>(&obj_ChannelList_getitem),
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL
+};
+
+PyTypeObject obj_ChannelList::_pytype = make_type_object(
+    "render.ChannelList",
+    sizeof(obj_ChannelList),
+    tp_dealloc = destructor_dealloc<obj_ChannelList>::value,
+    tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_CHECKTYPES,
+    tp_as_sequence = &obj_ChannelList_sequence_methods,
+    tp_new = [](PyTypeObject*,PyObject*,PyObject*) -> PyObject* {
+        PyErr_SetString(PyExc_TypeError,"the ChannelList type cannot be instantiated directly");
+        return nullptr;
+    });
 
 
 struct renderer {
-    unsigned int threads;
     volatile unsigned int busy_threads;
     volatile unsigned int job;
-    condition barrier;
-    mutex mut;
-    std::vector<SDL_Thread*> workers;
+    image_format format;
+    std::mutex mut;
+    std::vector<std::thread> workers;
     scene *sc;
-    SDL_Surface *destination;
+    Py_buffer buffer;
     std::atomic<unsigned int> chunk;
-    PyObject *self;
     volatile enum {NORMAL,CANCEL,QUIT} state;
 
-    renderer(PyObject *self,unsigned int threads=0);
-    ~renderer();
+protected:
+    renderer() : busy_threads(0), job(0), state(NORMAL) {}
+    ~renderer() {}
+};
+
+struct callback_renderer_obj_base;
+template<typename Base> struct obj_Renderer;
+
+struct callback_renderer : renderer {
+    std::condition_variable barrier;
+    PyObject *callback;
+
+    callback_renderer(obj_Renderer<callback_renderer_obj_base> *self,unsigned int threads=0);
+    ~callback_renderer();
 };
 
 
@@ -144,12 +319,17 @@ template<> struct _wrapped_type<scene> {
     typedef obj_Scene type;
 };
 
-struct obj_Renderer {
+struct callback_renderer_obj_base {
+    typedef callback_renderer type;
+    
     CONTAINED_PYTYPE_DEF
+};
+
+template<typename Base> struct obj_Renderer : Base {
     PyObject_HEAD
     storage_mode mode;
     
-    renderer base;
+    typename Base::type base;
     
     PyObject *idict;
     PyObject *weaklist;
@@ -159,10 +339,10 @@ struct obj_Renderer {
         if(weaklist) PyObject_ClearWeakRefs(reinterpret_cast<PyObject*>(this));
     }
     
-    renderer &cast_base() {
+    typename Base::type &cast_base() {
         return base;
     }
-    renderer &get_base() {
+    typename Base::type &get_base() {
         switch(mode) {
         case CONTAINS:
             return base;
@@ -171,119 +351,89 @@ struct obj_Renderer {
             throw py_error_set();
         }
     }
-    
-    static std::forward_list<obj_Renderer*> instances;
-    static void abort_all();
 };
-std::forward_list<obj_Renderer*> obj_Renderer::instances;
 
-template<> struct _wrapped_type<renderer> {
-    typedef obj_Renderer type;
+typedef obj_Renderer<callback_renderer_obj_base> obj_CallbackRenderer;
+
+template<> struct _wrapped_type<callback_renderer> {
+    typedef obj_CallbackRenderer type;
 };
 
 
-inline PySurfaceObject *py_to_surface(PyObject *obj) {
-    if(!PySurface_Check(obj)) {
-        PyErr_SetString(PyExc_TypeError,"object is not an instance of pygame.Surface");
-        throw py_error_set();
-    }
-    return reinterpret_cast<PySurfaceObject*>(obj);
-}
+void worker_draw(renderer &r) {
+    size_t chunks_x = (r.format.width + RENDER_CHUNK_SIZE - 1) / RENDER_CHUNK_SIZE;
+    size_t chunks_y = (r.format.height + RENDER_CHUNK_SIZE - 1) / RENDER_CHUNK_SIZE;
 
-
-template<typename T> inline T trunc(T n,T max) { return n > max ? max : n; }
-typedef unsigned char byte;
-byte to_byte(float val) {
-    return byte(trunc(val,1.0f) * 255);
-}
-
-
-unsigned int non_neg(int x) {
-    return x >= 0 ? static_cast<unsigned int>(x) : 0;
-}
-
-template<typename T> struct py_deleter {
-    void operator()(T *ptr) const {
-        py::free(ptr);
-    }
-};
-
-unsigned int cpu_cores() {
-#if defined(THREAD_WIN)
+    for(;;) {
+        int chunk = r.chunk.fetch_add(1);
+        size_t start_y = chunk/chunks_x;
+        size_t start_x = chunk%chunks_x;
+        if(start_y > chunks_y) break;
+        start_x *= RENDER_CHUNK_SIZE;
+        start_y *= RENDER_CHUNK_SIZE;
         
-    SYSTEM_INFO sysinfo;
-    GetSystemInfo(&sysinfo);
+        for(size_t y = start_y; y < std::min(start_y+RENDER_CHUNK_SIZE,r.format.height); ++y) {
+            byte *pixels = reinterpret_cast<byte*>(r.buffer.buf) + y * r.format.pitch + start_x * r.format.bytes_per_pixel;
+            
+            for(size_t x = start_x; x < std::min(start_x+RENDER_CHUNK_SIZE,r.format.width); ++x) {
+                if(UNLIKELY(r.state != renderer::NORMAL)) return;
 
-    return sysinfo.dwNumberOfProcessors;
+                color c = r.sc->calculate_color(x,y,r.format.width,r.format.height);
+                int b_offset = 0;
+                long temp[MAX_PIXELSIZE / sizeof(long)] = {0};
+                for(auto &ch : r.format.channels) {
+                    union {
+                        float f;
+                        uint32_t i;
+                    } val;
+                    
+                    val.f = ch.f_r*c.r + ch.f_g*c.g + ch.f_b*c.b + ch.f_c;
+                    if(val.f > 1) val.f = 1;
+                    else if(val.f < 0) val.f = 0;
+                    
+                    unsigned long ival;
+                    
+                    if(ch.tfloat) {
+                        assert(ch.bit_size == 32);
+                        static_assert(sizeof(float) == 4,"A float is assumed to be 32 bits");
+                        
+                        ival = val.i;
+                    } else {
+                        assert(ch.bit_size < 32);
+                        ival = std::round(val.f * (0xffffffffu >> (32 - ch.bit_size)));
+                    }
 
-#elif defined(THREAD_LINUX)
+                    int o = b_offset / (sizeof(long)*8);
+                    int rm = b_offset % (sizeof(long)*8);
+                    int s = sizeof(long)*8 - rm - ch.bit_size;
+                    temp[o] |= s >= 0 ? ival << s : ival >> -s;
+                    
+                    if(rm + ch.bit_size > int(sizeof(long)*8))
+                        temp[o+1] = ival << (sizeof(long)*16 - rm - ch.bit_size);
+                    
+                    b_offset += ch.bit_size;
+                }
 
-    return non_neg(sysconf(_SC_NPROCESSORS_ONLN));
-
-#elif defined(THREAD_BSD)
-
-    int cores;
-    int mib[4];
-    size_t len = sizeof(cores); 
-
-    mib[0] = CTL_HW;
-    mib[1] = HW_AVAILCPU;
-    sysctl(mib,2,&cores,&len,NULL,0);
-
-    if(numCPU < 1) {
-         mib[1] = HW_NCPU;
-         sysctl(mib,2,&cores,&len,NULL,0);
-
-         if(cores < 1) cores = 1;
+                if(r.format.reversed) {
+                    for(int i = r.format.bytes_per_pixel-1; i >= 0; --i)
+                        *pixels++ = (temp[i/sizeof(long)] >> ((sizeof(long) - 1 - (i % sizeof(long))) * 8)) & 0xff;
+                } else {
+                    for(int i = 0; i < r.format.bytes_per_pixel; ++i)
+                        *pixels++ = (temp[i/sizeof(long)] >> ((sizeof(long) - 1 - (i % sizeof(long))) * 8)) & 0xff;
+                }
+            }
+        }
     }
-
-    return static_cast<unsigned int>(cores);
-
-#elif defined(THREAD_HPUX)
-    
-    return non_neg(mpctl(MPC_GETNUMSPUS,NULL,NULL));
-
-#elif defined(THREAD_IRIX)
-    
-    return non_neg(sysconf(_SC_NPROC_ONLN));
-    
-#else
-#warning "don't know how to determine number of CPU cores"
-
-    return 0;
-
-#endif
 }
 
-void draw_pixel(const scene *sc,byte *&dest,const SDL_Surface *surface,int x,int y) {
-    color c = sc->calculate_color(x,y,surface->w,surface->h);
-
-    Uint32 pval = SDL_MapRGB(surface->format,to_byte(c.r),to_byte(c.g),to_byte(c.b));
-    switch(surface->format->BytesPerPixel) {
-    case 4:
-        *reinterpret_cast<Uint32*>(dest) = pval;
-        break;
-    case 3:
-        dest[2] = (pval >> 16) & 0xff;
-    case 2:
-        dest[1] = (pval >> 8) & 0xff;
-    case 1:
-        dest[0] = pval & 0xff;
-        break;
-    default:
-        assert(false);
-    }
-    dest += surface->format->BytesPerPixel;
-}
-
-int worker(obj_Renderer *self) {
-    renderer &r = self->base;
+void callback_worker(obj_CallbackRenderer *self) {
+    callback_renderer &r = self->base;
     
     if(!r.busy_threads) {
-        scoped_lock lock(r.mut);
+        std::unique_lock<std::mutex> lock(r.mut);
         
         do {
-            if(UNLIKELY(r.state == renderer::QUIT)) return 0;
+            if(UNLIKELY(r.state == renderer::QUIT)) return;
 
             // wait for the first job
             r.barrier.wait(lock);
@@ -291,46 +441,31 @@ int worker(obj_Renderer *self) {
     }
 
     for(;;) {
-        int chunks_x = (r.destination->w + RENDER_CHUNK_SIZE - 1) / RENDER_CHUNK_SIZE;
-        int chunks_y = (r.destination->h + RENDER_CHUNK_SIZE - 1) / RENDER_CHUNK_SIZE;
+        worker_draw(r);
 
-        for(;;) {
-            int chunk = r.chunk.fetch_add(1);
-            int start_y = chunk/chunks_x;
-            int start_x = chunk%chunks_x;
-            if(start_y > chunks_y) break;
-            start_x *= RENDER_CHUNK_SIZE;
-            start_y *= RENDER_CHUNK_SIZE;
-            
-            for(int y = start_y; y < std::min(start_y+RENDER_CHUNK_SIZE,r.destination->h); ++y) {
-                byte *pixels = reinterpret_cast<byte*>(r.destination->pixels) + y * r.destination->pitch + start_x * r.destination->format->BytesPerPixel;
-                
-                for(int x = start_x; x < std::min(start_x+RENDER_CHUNK_SIZE,r.destination->w); ++x) {
-                    if(UNLIKELY(r.state != renderer::NORMAL)) goto finish;
-                    
-                    draw_pixel(r.sc,pixels,r.destination,x,y);
-                }
-            }
-        }
-
-    finish:
         {
-            scoped_lock lock(r.mut);
+            std::unique_lock<std::mutex> lock(r.mut);
+            
+            /* This needs to be set before calling the callback, in case the
+               callback calls start_render. */
+            unsigned int finished = r.job;
 
             if(--r.busy_threads == 0) {
                 // when all the workers are finished
                 
+                r.sc->unlock();
+                
                 PyGILState_STATE gilstate = PyGILState_Ensure();
+                
+                PyBuffer_Release(&r.buffer);
                 
                 if(LIKELY(r.state == renderer::NORMAL)) {
                     // notify the main thread
                     try {
-                        SDL_Event e;
-                        py::dict attr;
-                        py::object pye(py::new_ref(py::check_obj(PyEvent_New2(FRAME_READY,attr.ref()))));
-                        attr["source"] = py::borrowed_ref(reinterpret_cast<PyObject*>(self));
-                        if(PyEvent_FillUserEvent(reinterpret_cast<PyEventObject*>(pye.ref()),&e)) throw py_error_set();
-                        SDL_PushEvent(&e);
+                        // in case the callback calls start_render/abort_render
+                        lock.unlock();
+                        py::object(py::borrowed_ref(r.callback))(self);
+                        lock.lock();
                     } catch(py_error_set&) {
                         PyErr_Print();
                     } catch(std::exception &e) {
@@ -340,78 +475,59 @@ int worker(obj_Renderer *self) {
                     /* If the job is being canceled, abort_render is waiting on 
                        this condition. The side-effect of waking the other 
                        workers is harmless. */
-                    r.barrier.signal_all();
+                    r.barrier.notify_all();
                 }
-                if(SDL_MUSTLOCK(r.destination)) SDL_UnlockSurface(r.destination);
-                r.sc->unlock();
-                SDL_FreeSurface(r.destination);
+
+                Py_DECREF(r.callback);
                 Py_DECREF(self);
                 
                 PyGILState_Release(gilstate);
             }
-
-            unsigned int finished;
-            do {
-                if(UNLIKELY(r.state == renderer::QUIT)) return 0;
-                finished = r.job;
+            
+            while(finished == r.job) {
+                if(UNLIKELY(r.state == renderer::QUIT)) return;
 
                 // wait for the next job
                 r.barrier.wait(lock);
-            } while(finished == r.job);
+            }
         }
     }
 }
 
-renderer::renderer(PyObject *self,unsigned int _threads) : threads(_threads), busy_threads(0), job(0), self(self), state(NORMAL) {
+callback_renderer::callback_renderer(obj_CallbackRenderer *self,unsigned int threads) {
     if(threads == 0) {
-        threads = cpu_cores();
+        threads = std::thread::hardware_concurrency();
         if(threads == 0) threads = 1;
     }
     workers.reserve(threads);
-    for(unsigned int i=0; i<threads; ++i) workers.push_back(SDL_CreateThread(reinterpret_cast<int (*)(void*)>(&worker),self));
+    for(unsigned int i=0; i<threads; ++i) workers.push_back(std::thread(callback_worker,self));
 }
 
-renderer::~renderer() {
-    /* we don't have to worry about a worker needing the GIL, because an extra
-       reference to "self" will prevent the destructor from being called while
-       a job is being processed */
-    assert(!busy_threads);
-    
+callback_renderer::~callback_renderer() {
     {
-        //py::AllowThreads _;
-        scoped_lock lock(mut);
+        py::allow_threads _;
+        std::lock_guard<std::mutex> lock(mut);
         state = QUIT;
-        //barrier.signal_all();
-     }
-    barrier.signal_all();
+        barrier.notify_all();
+    }
     
-    for(unsigned int i=0; i<threads; ++i) SDL_WaitThread(workers[i],NULL);
+    for(auto &w : workers) w.join();
 }
 
-
-PyObject *obj_Scene_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
-    PyErr_SetString(PyExc_TypeError,"the Scene type cannot be instantiated directly");
-    return nullptr;
-}
 
 PyTypeObject obj_Scene::_pytype = make_type_object(
     "render.Scene",
     sizeof(obj_Scene),
-    tp_new = &obj_Scene_new);
+    tp_new = [](PyTypeObject *type,PyObject *args,PyObject *kwds) -> PyObject* {
+        PyErr_SetString(PyExc_TypeError,"the Scene type cannot be instantiated directly");
+        return nullptr;
+    });
 
 
-void obj_Renderer_dealloc(obj_Renderer *self) {
-    auto last = obj_Renderer::instances.before_begin();
-    for(auto itr = obj_Renderer::instances.begin(); itr != obj_Renderer::instances.end(); last=itr++) {
-        if(*itr == self) {
-            obj_Renderer::instances.erase_after(last);
-            break;
-        }
-    }
-    
+template<typename T> void obj_Renderer_dealloc(wrapped_type<T> *self) {
     switch(self->mode) {
     case CONTAINS:
-        self->~obj_Renderer();
+        self->~wrapped_type<T>();
         break;
 
     default:
@@ -422,56 +538,68 @@ void obj_Renderer_dealloc(obj_Renderer *self) {
     Py_TYPE(self)->tp_free(reinterpret_cast<PyObject*>(self));
 }
 
-int obj_Renderer_traverse(obj_Renderer *self,visitproc visit,void *arg) {
-    Py_VISIT(self->idict);
-
-    return 0;
-}
-
-int obj_Renderer_clear(obj_Renderer *self) {
-    Py_CLEAR(self->idict);
-
-    return 0;
-}
-
-PyObject *obj_Renderer_begin_render(obj_Renderer *self,PyObject *args,PyObject *kwds) {
-    try {
-        renderer &r = self->get_base();
+void get_writable_buffer(PyObject *obj,Py_buffer &buff) {
+    if(PyObject_GetBuffer(obj,&buff,PyBUF_WRITABLE))
+#if PY_MAJOR_VERSION >= 3
+        throw py_error_set();
+#else
+    {
+        if(!PyErr_ExceptionMatches(PyExc_TypeError)) throw py_error_set();
         
-        const char *names[] = {"dest","scene"};
-        get_arg ga(args,kwds,names,"Renderer.begin_render");
-        PySurfaceObject *dest = py_to_surface(ga(true));
-        scene *sc = &get_base<scene>(ga(true));
+        // try the old buffer protocol
+        
+        PyErr_Clear();
+        
+        void *bufptr;
+        Py_ssize_t bufsize;
+        
+        if(PyObject_AsWriteBuffer(obj,&bufptr,&bufsize)) throw py_error_set();
+        if(PyBuffer_FillInfo(&buff,obj,bufptr,bufsize,0,0)) throw py_error_set();
+    }
+#endif
+}
+
+PyObject *obj_CallbackRenderer_begin_render(obj_CallbackRenderer *self,PyObject *args,PyObject *kwds) {
+    try {
+        callback_renderer &r = self->get_base();
+        
+        const char *names[] = {"dest","format","scene","callback"};
+        get_arg ga(args,kwds,names,"CallbackRenderer.begin_render");
+        auto dest = ga(true);
+        auto &format = get_base<image_format>(ga(true));
+        auto &sc = get_base<scene>(ga(true));
+        auto callback = ga(true);
         ga.finished();
         
+        Py_buffer view;
+        get_writable_buffer(dest,view);
+        
         Py_INCREF(self);
+        Py_INCREF(callback);
+        
         try {
-            py::AllowThreads _; // without this, a dead-lock can occur
-            scoped_lock lock(r.mut);
+            im_check_buffer_size(format,view);
+            
+            py::allow_threads _; // without this, a dead-lock can occur
+            std::lock_guard<std::mutex> lock(r.mut);
             
             if(r.busy_threads) throw already_running_error();
             
-            r.busy_threads = r.threads;
+            assert(r.state == renderer::NORMAL);
+
+            r.format = format;
+            r.buffer = view;
+            r.callback = callback;
+            r.busy_threads = r.workers.size();
             r.chunk.store(0,std::memory_order_relaxed);
+            r.sc = &sc;
+            sc.lock();
+            r.barrier.notify_all();
             ++r.job;
-            r.sc = sc;
-            sc->lock();
-            try {
-                r.destination = PySurface_AsSurface(dest);
-                ++r.destination->refcount;
-                if(SDL_MUSTLOCK(r.destination)) SDL_LockSurface(r.destination);
-                try {
-                    r.barrier.signal_all();
-                } catch(...) {
-                    if(SDL_MUSTLOCK(r.destination)) SDL_UnlockSurface(r.destination);
-                    throw;
-                }
-            } catch(...) {
-                r.sc->unlock();
-                throw;
-            }
         } catch(...) {
+            Py_DECREF(callback);
             Py_DECREF(self);
+            PyBuffer_Release(&view);
             throw;
         }
 
@@ -479,17 +607,17 @@ PyObject *obj_Renderer_begin_render(obj_Renderer *self,PyObject *args,PyObject *
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
-PyObject *obj_Renderer_abort_render(obj_Renderer *self,PyObject*) {
+PyObject *obj_CallbackRenderer_abort_render(obj_CallbackRenderer *self,PyObject*) {
     try {
-        renderer &r = self->get_base();
+        callback_renderer &r = self->get_base();
         
         {
-            py::AllowThreads _; // without this, a dead-lock can occur
-            scoped_lock lock(r.mut);
+            py::allow_threads _; // without this, a dead-lock can occur
+            std::unique_lock<std::mutex> lock(r.mut);
             
             if(r.busy_threads) {
                 r.state = renderer::CANCEL;
-                r.barrier.signal_all();
+                r.barrier.notify_all();
                 do {
                     r.barrier.wait(lock);
                 } while(r.busy_threads);
@@ -501,45 +629,16 @@ PyObject *obj_Renderer_abort_render(obj_Renderer *self,PyObject*) {
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
-PyObject *obj_Renderer_render_sync(PyObject*,PyObject *args,PyObject *kwds) {
-    try {
-        const char *names[] = {"dest","scene"};
-        get_arg ga(args,kwds,names,"Renderer.render_sync");
-        PySurfaceObject *dest = py_to_surface(ga(true));
-        scene *sc = &get_base<scene>(ga(true));
-        ga.finished();
-        
-        SDL_Surface *surface = PySurface_AsSurface(dest);
-        
-        {
-            py::AllowThreads _;
-            
-            if(SDL_MUSTLOCK(surface)) SDL_LockSurface(surface);
-            for(int y=0; y<surface->h; ++y) {
-                auto line = reinterpret_cast<byte*>(surface->pixels) + y*surface->pitch;
-                
-                for(int x=0; x<surface->w; ++x) {
-                    draw_pixel(sc,line,surface,x,y);
-                }
-            }
-            if(SDL_MUSTLOCK(surface)) SDL_UnlockSurface(surface);
-        }
-        
-        Py_RETURN_NONE;
-    } PY_EXCEPT_HANDLERS(nullptr)
-}
-
-PyMethodDef obj_Renderer_methods[] = {
-    {"begin_render",reinterpret_cast<PyCFunction>(&obj_Renderer_begin_render),METH_VARARGS|METH_KEYWORDS,NULL},
-    {"abort_render",reinterpret_cast<PyCFunction>(&obj_Renderer_abort_render),METH_NOARGS,NULL},
-    {"render_sync",reinterpret_cast<PyCFunction>(&obj_Renderer_render_sync),METH_STATIC|METH_VARARGS|METH_KEYWORDS,NULL},
+PyMethodDef obj_CallbackRenderer_methods[] = {
+    {"begin_render",reinterpret_cast<PyCFunction>(&obj_CallbackRenderer_begin_render),METH_VARARGS|METH_KEYWORDS,NULL},
+    {"abort_render",reinterpret_cast<PyCFunction>(&obj_CallbackRenderer_abort_render),METH_NOARGS,NULL},
     {NULL}
 };
 
-int obj_Renderer_init(obj_Renderer *self,PyObject *args,PyObject *kwds) {
+int obj_CallbackRenderer_init(obj_CallbackRenderer *self,PyObject *args,PyObject *kwds) {
     switch(self->mode) {
     case CONTAINS:
-        self->base.~renderer();
+        self->base.~callback_renderer();
         break;
     default:
         assert(self->mode == UNINITIALIZED);
@@ -549,49 +648,221 @@ int obj_Renderer_init(obj_Renderer *self,PyObject *args,PyObject *kwds) {
     
     try {
         const char *names[] = {"threads"};
-        get_arg ga(args,kwds,names,"Renderer.__init__");
+        get_arg ga(args,kwds,names,"CallbackRenderer.__init__");
         PyObject *temp = ga(false);
         unsigned int threads = temp ? from_pyobject<unsigned int>(temp) : 0;
         ga.finished();
-        new(&self->base) renderer(reinterpret_cast<PyObject*>(self),threads);
+        new(&self->base) callback_renderer(self,threads);
     } PY_EXCEPT_HANDLERS(-1)
     
     return 0;
 }
 
-PyTypeObject obj_Renderer::_pytype = make_type_object(
-    "render.Renderer",
-    sizeof(obj_Renderer),
-    tp_dealloc = reinterpret_cast<destructor>(&obj_Renderer_dealloc),
+PyTypeObject callback_renderer_obj_base::_pytype = make_type_object(
+    "render.CallbackRenderer",
+    sizeof(obj_CallbackRenderer),
+    tp_dealloc = &obj_Renderer_dealloc<callback_renderer>,
     tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE|Py_TPFLAGS_CHECKTYPES|Py_TPFLAGS_HAVE_GC,
-    tp_traverse = &obj_Renderer_traverse,
-    tp_clear = &obj_Renderer_clear,
-    tp_weaklistoffset = offsetof(obj_Renderer,weaklist),
-    tp_methods = obj_Renderer_methods,
-    tp_dictoffset = offsetof(obj_Renderer,idict),
-    tp_init = &obj_Renderer_init,
-    
-    tp_new = [](PyTypeObject *type,PyObject *args,PyObject *kwds) -> PyObject* {
-        auto r = type->tp_alloc(type,0);
-        if(!r) return nullptr;
-        try {
-            obj_Renderer::instances.push_front(reinterpret_cast<obj_Renderer*>(r));
-        } catch(std::bad_alloc&) {
-            Py_DECREF(r);
-            PyErr_NoMemory();
-            return nullptr;
-        }
-        return r;
-    });
+    tp_traverse = &traverse_idict<obj_CallbackRenderer>,
+    tp_clear = &clear_idict<obj_CallbackRenderer>,
+    tp_weaklistoffset = offsetof(obj_CallbackRenderer,weaklist),
+    tp_methods = obj_CallbackRenderer_methods,
+    tp_dictoffset = offsetof(obj_CallbackRenderer,idict),
+    tp_init = &obj_CallbackRenderer_init);
 
-void obj_Renderer::abort_all() {
-    for(auto inst : instances) {
-        if(inst->mode == CONTAINS) {
-            auto r = obj_Renderer_abort_render(inst,nullptr);
-            if(r) Py_DECREF(r);
+
+struct blocking_renderer : renderer {
+    std::condition_variable start_cond, finish_cond;
+
+    blocking_renderer(int threads=-1);
+    ~blocking_renderer();
+};
+
+struct blocking_renderer_obj_base {
+    typedef blocking_renderer type;
+    
+    CONTAINED_PYTYPE_DEF
+};
+
+typedef obj_Renderer<blocking_renderer_obj_base> obj_BlockingRenderer;
+
+template<> struct _wrapped_type<blocking_renderer> {
+    typedef obj_BlockingRenderer type;
+};
+
+bool wait_for_job(blocking_renderer &r,std::unique_lock<std::mutex> &lock) {
+    unsigned int finished;
+    do {
+        if(UNLIKELY(r.state == renderer::QUIT)) return false;
+        finished = r.job;
+
+        r.start_cond.wait(lock);
+    } while(finished == r.job);
+    
+    return true;
+}
+
+void blocking_worker(blocking_renderer &r) {
+    if(!r.busy_threads) {
+        std::unique_lock<std::mutex> lock(r.mut);
+        if(!wait_for_job(r,lock)) return;
+    }
+
+    for(;;) {
+        worker_draw(r);
+
+        {
+            std::unique_lock<std::mutex> lock(r.mut);
+
+            if(--r.busy_threads == 0) {
+                // when all the workers are finished, notify the main thread
+                try {
+                    r.finish_cond.notify_one();
+                } catch(std::exception &e) {
+                    PyGILState_STATE gilstate = PyGILState_Ensure();
+                    PySys_WriteStderr("error: %.500s\n",e.what());
+                    PyGILState_Release(gilstate);
+                }
+            }
+            
+            if(!wait_for_job(r,lock)) return;
         }
     }
 }
+
+blocking_renderer::blocking_renderer(int threads) : renderer() {
+    if(threads < 0) {
+        threads = int(std::thread::hardware_concurrency()) - 1;
+        if(threads < 0) threads = 0;
+    }
+    if(threads) {
+        workers.reserve(threads);
+        for(int i=0; i<threads; ++i) workers.push_back(std::thread(blocking_worker,std::ref(*this)));
+    }
+}
+
+blocking_renderer::~blocking_renderer() {
+    if(!workers.empty()) {
+        {
+            py::allow_threads _;
+            std::lock_guard<std::mutex> lock(mut);
+            state = QUIT;
+            start_cond.notify_all();
+        }
+        
+        for(auto &w : workers) w.join();
+    }
+}
+
+PyObject *obj_BlockingRenderer_render(obj_BlockingRenderer *self,PyObject *args,PyObject *kwds) {
+    try {
+        auto &r = self->get_base();
+        
+        const char *names[] = {"dest","format","scene"};
+        get_arg ga(args,kwds,names,"BlockingRenderer.render");
+        auto dest = ga(true);
+        auto &fmt = get_base<image_format>(ga(true));
+        auto &sc = get_base<scene>(ga(true));
+        ga.finished();
+
+        struct buffer {
+            Py_buffer data;
+            buffer(PyObject *dest) { get_writable_buffer(dest,data); }
+            ~buffer() { PyBuffer_Release(&data); }
+        } buff(dest);
+        
+        im_check_buffer_size(fmt,buff.data);
+        
+        bool finished;
+
+        {
+            py::allow_threads _;
+            
+            {
+                std::lock_guard<std::mutex> lock(r.mut);
+                
+                if(r.busy_threads) throw already_running_error();
+                
+                r.format = fmt;
+                r.buffer = buff.data;
+                r.state = renderer::NORMAL;
+                r.busy_threads = r.workers.size();
+                r.chunk.store(0,std::memory_order_relaxed);
+                r.sc = &sc;
+                sc.lock();
+                r.start_cond.notify_all();
+                ++r.job;
+            }
+        
+            worker_draw(r);
+            
+            {
+                std::unique_lock<std::mutex> lock(r.mut);
+                
+                while(r.busy_threads) r.finish_cond.wait(lock);
+                finished = r.state == renderer::NORMAL;
+                sc.unlock();
+            }
+        }
+
+        return to_pyobject(finished);
+    } PY_EXCEPT_HANDLERS(nullptr)
+}
+
+PyObject *obj_BlockingRenderer_signal_abort(obj_BlockingRenderer *self,PyObject*) {
+    try {
+        auto &r = self->get_base();
+        
+        {
+            py::allow_threads _;
+            std::lock_guard<std::mutex> lock(r.mut);
+            r.state = renderer::CANCEL;
+        }
+        
+        Py_RETURN_NONE;
+    } PY_EXCEPT_HANDLERS(nullptr)
+}
+
+PyMethodDef obj_BlockingRenderer_methods[] = {
+    {"render",reinterpret_cast<PyCFunction>(&obj_BlockingRenderer_render),METH_VARARGS|METH_KEYWORDS,NULL},
+    {"signal_abort",reinterpret_cast<PyCFunction>(&obj_BlockingRenderer_signal_abort),METH_NOARGS,NULL},
+    {NULL}
+};
+
+int obj_BlockingRenderer_init(obj_BlockingRenderer *self,PyObject *args,PyObject *kwds) {
+    switch(self->mode) {
+    case CONTAINS:
+        self->base.~blocking_renderer();
+        break;
+    default:
+        assert(self->mode == UNINITIALIZED);
+        self->mode = CONTAINS;
+        break;
+    }
+    
+    try {
+        const char *names[] = {"threads"};
+        get_arg ga(args,kwds,names,"BlockingRenderer.__init__");
+        PyObject *temp = ga(false);
+        int threads = temp ? from_pyobject<int>(temp) : -1;
+        ga.finished();
+        new(&self->base) blocking_renderer(threads);
+    } PY_EXCEPT_HANDLERS(-1)
+    
+    return 0;
+}
+
+PyTypeObject blocking_renderer_obj_base::_pytype = make_type_object(
+    "render.BlockingRenderer",
+    sizeof(obj_BlockingRenderer),
+    tp_dealloc = &obj_Renderer_dealloc<blocking_renderer>,
+    tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE|Py_TPFLAGS_CHECKTYPES|Py_TPFLAGS_HAVE_GC,
+    tp_traverse = &traverse_idict<obj_BlockingRenderer>,
+    tp_clear = &clear_idict<obj_BlockingRenderer>,
+    tp_weaklistoffset = offsetof(obj_BlockingRenderer,weaklist),
+    tp_methods = obj_BlockingRenderer_methods,
+    tp_dictoffset = offsetof(obj_BlockingRenderer,idict),
+    tp_init = &obj_BlockingRenderer_init);
 
 
 PyObject *obj_Color_repr(wrapped_type<color> *self) {
@@ -924,6 +1195,16 @@ const package_common package_common_data = {
     &read_color
 };
 
+PyTypeObject *classes[] = {
+    obj_Scene::pytype(),
+    wrapped_type<channel>::pytype(),
+    wrapped_type<image_format>::pytype(),
+    obj_CallbackRenderer::pytype(),
+    obj_BlockingRenderer::pytype(),
+    wrapped_type<color>::pytype(),
+    material::pytype()};
+
+
 #if PY_MAJOR_VERSION >= 3
 #define INIT_ERR_VAL nullptr
 
@@ -945,19 +1226,13 @@ extern "C" SHARED(PyObject) * PyInit_render(void) {
 
 extern "C" SHARED(void) initrender(void) {
 #endif
-    import_pygame_base();
-    if(PyErr_Occurred()) return INIT_ERR_VAL;
 
-    import_pygame_surface();
-    if(PyErr_Occurred()) return INIT_ERR_VAL;
+    obj_CallbackRenderer::pytype()->tp_new = PyType_GenericNew;
+    obj_BlockingRenderer::pytype()->tp_new = PyType_GenericNew;
 
-    import_pygame_event();
-    if(PyErr_Occurred()) return INIT_ERR_VAL;
-        
-    if(UNLIKELY(PyType_Ready(obj_Scene::pytype()) < 0)) return INIT_ERR_VAL;
-    if(UNLIKELY(PyType_Ready(obj_Renderer::pytype()) < 0)) return INIT_ERR_VAL;
-    if(UNLIKELY(PyType_Ready(wrapped_type<color>::pytype()) < 0)) return INIT_ERR_VAL;
-    if(UNLIKELY(PyType_Ready(material::pytype()) < 0)) return INIT_ERR_VAL;
+    for(auto cls : classes) {
+        if(UNLIKELY(PyType_Ready(cls) < 0)) return INIT_ERR_VAL;
+    }
 
 #if PY_MAJOR_VERSION >= 3
     PyObject *m = PyModule_Create(&module_def);
@@ -966,19 +1241,13 @@ extern "C" SHARED(void) initrender(void) {
 #endif
     if(UNLIKELY(!m)) return INIT_ERR_VAL;
 
-    add_class(m,"Scene",obj_Scene::pytype());
-    add_class(m,"Renderer",obj_Renderer::pytype());
-    add_class(m,"Color",wrapped_type<color>::pytype());
-    add_class(m,"Material",material::pytype());
+    for(auto cls : classes) {
+        add_class(m,cls->tp_name + sizeof("render"),cls);
+    }
     
     auto cap = PyCapsule_New(const_cast<package_common*>(&package_common_data),"render._PACKAGE_COMMON",nullptr);
     if(!cap) return INIT_ERR_VAL;
     PyModule_AddObject(m,"_PACKAGE_COMMON",cap);
-    
-    /* When PyGame shuts down, it destroys all surface objects regardless of
-       reference counts, so any threads working with surfaces need to be stopped
-       first. */
-    PyGame_RegisterQuit(&obj_Renderer::abort_all);
 
 #if PY_MAJOR_VERSION >= 3
     return m;

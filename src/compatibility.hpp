@@ -36,6 +36,8 @@ namespace std {
   #define LIKELY(X) __builtin_expect(static_cast<bool>(X),1)
   #define UNLIKELY(X) __builtin_expect(static_cast<bool>(X),0)
 
+  #define ASSUME(X) if(__builtin_expect(!(X),0)) __builtin_unreachable()
+
   #define RESTRICT __restrict__
 
   #if defined(__GNUC_GNU_INLINE__) && !defined(__clang__)
@@ -46,6 +48,8 @@ namespace std {
 #else
   #define LIKELY(X) X
   #define UNLIKELY(X) X
+
+  #define ASSUME(X) (void)0
 
   #define RESTRICT
 

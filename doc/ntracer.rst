@@ -16,6 +16,145 @@ ntracer Package
 
 .. py:module:: ntracer.render
 
+.. py:class:: BlockingRenderer([threads=-1])
+
+    A synchronous scene renderer.
+
+    By default, this class uses as many threads are the are processing cores.
+    The scene can be drawn on any writable object supporting the buffer
+    protocol. :py:meth:`signal_abort` can be called from another thread to quit
+    drawing early.
+
+    :param integer threads: The number of threads to use *in addition* to the
+        thread from which it's called. If -1, the number of extra threads will
+        be one minus the number of processing cores of the machine.
+
+    .. py:method:: signal_abort()
+
+        Signal for the renderer to quit and return immediately.
+
+        If the renderer isn't running, this does nothing.
+
+    .. py:method:: render(dest,scene) -> boolean
+
+        Render ``scene`` onto ``dest``.
+
+        If the renderer is already running on another thread, an exception is
+        thrown instead. Upon starting, the scene will be locked for writing.
+        
+        The return value will be ``True`` unless the renderer quit before
+        finishing because of a call to :py:meth:`signal_abort`, in which case
+        the return value will be ``False``.
+
+        :param dest: An object supporting the buffer protocol to draw onto.
+        :param format: The dimensions and pixel format of ``dest``.
+        :param scene: The scene to draw.
+        :type format: :py:class:`ImageFormat`
+        :type scene: :py:class:`Scene`
+
+
+.. py:class:: CallbackRenderer([threads=0])
+
+    An asynchronous scene renderer.
+
+    By default, this class uses as many threads are the are processing cores.
+    The scene can be drawn on any writable object supporting the buffer protocol
+    (such as ``bytearray``) and a callback function is invoked when finished.
+
+    :param integer threads: The number of threads to use. If zero, the number of
+        threads will equal the number of processing cores of the machine.
+
+    .. py:method:: abort_render()
+
+        Signal for the renderer to quit and wait until all drawing has stopped
+        and the scene has been unlocked.
+        
+        The callback function passed to :py:meth:`begin_render` will not be
+        called if the renderer doesn't finish drawing.
+
+        If the renderer isn't running, this does nothing.
+
+    .. py:method:: begin_render(dest,format,scene,callback)
+
+        Begin rendering ``scene`` onto ``dest``.
+
+        If the renderer is already running, an exception is thrown instead. Upon
+        starting, the scene will be locked for writing.
+
+        :param dest: An object supporting the buffer protocol to draw onto.
+        :param format: The dimensions and pixel format of ``dest``.
+        :param scene: The scene to draw.
+        :param callback: A function taking one parameter to call when rendering
+            is done. The parameter will be the renderer itself.
+        :type format: :py:class:`ImageFormat`
+        :type scene: :py:class:`Scene`
+
+
+.. py:class:: Channel(bit_size,f_r,f_g,f_b[,f_c=0,tfloat=False])
+
+    A representation of a color channel.
+    
+    This is used by :py:class:`ImageFormat` to specify how pixels are stored.
+    
+    All colors are computed internally using three 32-bit floating point
+    numbers, representing red, green and blue. An instance of ``Channel``
+    specifies how to convert a color to a component of the destination format.
+    For a given color "c", the output will be :code:`f_r*c.r + f_g*c.g + f_b*c.b
+    + f_c` and is clamped between 0 and 1. If ``tfloat`` is false, the value is
+    multiplied by 2\ :sup:`bit_size`\ −1 and converted to an integer.
+    
+    Instances of this class are read-only.
+    
+    :param integer bit_size: The number of bits the channel takes up. If
+        ``tfloat`` is false, it can be between 1 and 31. If ``tfloat`` is true
+        it must be 32.
+    :param number f_r: The red factor.
+    :param number f_g: The green factor.
+    :param number f_b: The blue factor.
+    :param number f_c: A constant to add.
+    :param boolean tfloat: Whether the channel is stored as an integer or
+        floating point number.
+    
+    .. py:attribute:: bit_size
+    
+        The number of bits the channel takes up.
+    
+    .. py:attribute:: f_r
+    
+        The red factor.
+    
+    .. py:attribute:: f_g
+    
+        The green factor.
+    
+    .. py:attribute:: f_b
+    
+        The blue factor.
+    
+    .. py:attribute:: f_c
+    
+        A constant to add.
+    
+    .. py:attribute:: tfloat
+    
+        Whether the channel is stored as an integer or floating point number.
+
+
+.. py:class:: ChannelList
+
+    The channels of an :py:class:`ImageFormat` object.
+
+    This class can not be instantiated directly in Python code.
+
+    .. py:method:: __getitem__(index)
+
+        :code:`self.__getitem__(i)` <==> :code:`self[i]`
+
+    .. py:method:: __len__()
+
+        :code:`self.__len__()` <==> :code:`len(self)`
+
+
 .. py:class:: Color(r,g,b)
 
     A red-green-blue triplet specifying a color.
@@ -26,10 +165,8 @@ ntracer Package
     dark blue.
 
     Although values outside of 0-1 are allowed, they are clipped to the normal
-    range when drawn onto a `pygame.Surface
-    <http://www.pygame.org/docs/ref/surface.html#pygame.Surface>`_ object. Such
-    values will, however, affect how reflections and transparency are
-    calculated.
+    range when finally drawn. Such values will, however, affect how reflections
+    and transparency are calculated.
 
     Instances of this class are read-only.
 
@@ -50,7 +187,101 @@ ntracer Package
         Blue component
 
 
-.. py:class:: Material(color,[opacity=1,reflectivity=0,specular_intensity=1,specular_exp=8,specular_color=(1,1,1)])
+.. py:class:: ImageFormat(width,height,channels[,pitch=0,reversed=False])
+
+    The dimensions and pixel format of an image.
+    
+    The pixel format is specified by one or more instances of
+    :py:class:`Channel`. Each channel describes how to convert a red-green-blue
+    triplet into the associated pixel component and has a bit size. When drawing
+    a pixel, a renderer will write each component, one after the other without
+    leaving any gaps. However, each pixel will start on a new byte. If the last
+    byte is not completely covered by the channels, the remaining bits will be
+    set to zero.
+    
+    The size of a pixel may not exceed 16 bytes (128 bits).
+    
+    Some examples of pixel formats and their associated channel sequences:
+    
+    +----------------------------+---------------------------------------------+
+    |24-bit RGB                  |:code:`[Channel(8,1,0,0),                    |
+    |                            |Channel(8,0,1,0),                            |
+    |                            |Channel(8,0,0,1)]`                           |
+    +----------------------------+---------------------------------------------+
+    |32-bit RGBA with full alpha |:code:`[Channel(8,1,0,0),                    |
+    |                            |Channel(8,0,1,0),                            |
+    |                            |Channel(8,0,0,1),                            |
+    |                            |Channel(8,0,0,0,1)]`                         |
+    +----------------------------+---------------------------------------------+
+    |16-bit 5-5-5 RGB (the last  |:code:`[Channel(5,1,0,0),                    |
+    |bit is unused)              |Channel(5,0,1,0),                            |
+    |                            |Channel(5,0,0,1)]`                           |
+    +----------------------------+---------------------------------------------+
+    |16-bit 5-6-5 RGB            |:code:`[Channel(5,1,0,0),                    |
+    |                            |Channel(6,0,1,0),                            |
+    |                            |Channel(5,0,0,1)]`                           |
+    +----------------------------+---------------------------------------------+
+    |the native internal         |:code:`[Channel(32,1,0,0,0,True),            |
+    |representation              |Channel(32,0,1,0,0,True),                    |
+    |                            |Channel(32,0,0,1,0,True)]`                   |
+    +----------------------------+---------------------------------------------+
+    |digital |YCrCb| (ITU-R      |:code:`[Channel(8,0.299,0.587,0.114,0.0625), |
+    |BT.601 conversion)          |Channel(8,-0.147,-0.289,0.436,0.5),          |
+    |                            |Channel(8,0.615,-0.515,-0.1,0.5)]`           |
+    +----------------------------+---------------------------------------------+
+    |16-bit brightness only      |:code:`[Channel(16,0.299,0.587,0.114)]`      |
+    +----------------------------+---------------------------------------------+
+    
+    .. |YCrCb| replace:: YC\ :sub:`R`\ C\ :sub:`B`
+    
+    :param integer width: The width of the image in pixels.
+    :param integer height: The height of the image in pixels.
+    :param channels: An iterable containing one or more instances of
+        :py:class:`Channel`, describing the bit layout of a pixel.
+    :param integer pitch: The number of bytes per row. If zero is passed, it
+        will be set to ``width`` times the byte width of one pixel (calculated
+        from ``channels``).
+    :param boolean reversed: If true, the bytes of each pixel will be written in
+        reverse order. This is needed if storing pixels as little-endian words
+        and the channels don't fit neatly into bytes.
+    
+    .. py:method:: set_channels(new_channels)
+    
+        Replace the contents of :py:attr:`channels`.
+    
+        :param channels: An iterable containing one or more instances of
+            :py:class:`Channel`, describing the bit layout of a pixel.
+    
+    .. py:attribute:: width
+    
+        The width of the image in pixels.
+        
+    .. py:attribute:: height
+    
+        The height of the image in pixels.
+        
+    .. py:attribute:: channels
+    
+        An read-only list-like object containing one or more instances of
+        :py:class:`Channel`, describing the bit layout of a pixel.
+        
+    .. py:attribute:: pitch
+    
+        The number of bytes per row.
+    
+    .. py:attribute:: reversed
+    
+        If true, the bytes of each pixel will be written in reverse order (like
+        a little-endian word).
+        
+    .. py:attribute:: bytes_per_pixel
+    
+        The byte size of one pixel.
+        
+        This is the sum of the bit sizes of the channels, rounded up.
+
+
+.. py:class:: Material(color[,opacity=1,reflectivity=0,specular_intensity=1,specular_exp=8,specular_color=(1,1,1)])
 
     Specifies how light will interact with a primitive.
 
@@ -102,50 +333,6 @@ ntracer Package
         The color of the specular highlight.
 
 
-.. py:class:: Renderer([threads=0])
-
-    A multi-threaded scene renderer.
-
-    By default, this class uses as many threads are the are processing cores.
-    The scene is drawn onto a `pygame.Surface
-    <http://www.pygame.org/docs/ref/surface.html#pygame.Surface>`_ object and
-    upon completion, sends a ``pygame.USEREVENT`` message with a ``source``
-    attribute set to the instance of the renderer.
-
-    Note, the renderer does not honor clipping areas or subsurface boundaries
-    and will always draw onto the entire surface.
-
-    :param integer threads: The number of threads to use. If zero, the number of
-        threads will equal the number of processing cores of the machine.
-
-    .. py:method:: abort_render()
-
-        Signal for the renderer to quit and wait until all drawing has stopped
-        and the scene has been unlocked.
-
-        If the renderer isn't running, this does nothing.
-
-    .. py:method:: begin_render(dest,scene)
-
-        Begin rendering ``scene`` onto ``dest``.
-
-        If the renderer is already running, an exception is thrown instead. Upon
-        starting, the scene will be locked for writing.
-
-        :param pygame.Surface dest: A surface to draw onto.
-        :param Scene scene: The scene to draw.
-
-    .. py::staticmethod:: render_sync(dest,scene)
-
-        Render ``scene`` onto ``dest``.
-
-        This will render the scene using a single thread: the one from which it
-        gets called. It will not return until it is finished.
-
-        :param pygame.Surface dest: A surface to draw onto.
-        :param Scene scene: The scene to draw.
-
-
 .. py:class:: Scene
 
     A scene that :py:class:`Renderer` can render.
@@ -175,7 +362,7 @@ Every function that takes a vector, can in addition to taking a
 can't add a tuple and a :py:class:`Vector` together).
 
 
-.. py:class:: AABB(dimension [,start, end])
+.. py:class:: AABB(dimension[,start,end])
 
     An axis-aligned bounding box.
 
@@ -386,7 +573,8 @@ can't add a tuple and a :py:class:`Vector` together).
         that encloses all the primitives of the scene.
     :param vector aabb_max: The maximum extent of the axis-aligned bounding-box
         that encloses all the primitives of the scene.
-    :param KDNode data: The root node of a k-d tree.
+    :param data: The root node of a k-d tree.
+    :type data: :py:class:`KDNode`
     
     .. py:method:: add_light(light)
     
@@ -600,17 +788,17 @@ can't add a tuple and a :py:class:`Vector` together).
 .. py:class:: GlobalLightList
 
     An array of :py:class:`GlobalLight` objects.
-    
+
     An instance of this class is tied to a specific :py:class:`CompositeScene`
     instance. Any attempt to modify an instance of this class while the scene is
     locked will cause an exception to be raised.
-    
+
     Since the order of lights is not important, when deleting an element,
     instead of shifting all subsequent elements back, the gap is filled with the
     last element (unless the last element is the one being deleted).
-    
+
     This class cannot be instantiated directly in Python code.
-    
+
     .. py:method:: __getitem__(index)
 
         :code:`self.__getitem__(i)` <==> :code:`self[i]`
@@ -622,13 +810,13 @@ can't add a tuple and a :py:class:`Vector` together).
     .. py:method:: __setitem__(index,value)
 
         :code:`self.__setitem__(i,v)` <==> :code:`self[i]=v`
-    
+
     .. py:method:: append(light)
-    
+
         Add a light.
-        
+
     .. py:method:: extend(lights)
-    
+
         Add lights from an iterable object.
 
 
@@ -643,8 +831,10 @@ can't add a tuple and a :py:class:`Vector` together).
     :param integer axis: The axis that the split hyper-plane is perpendicular
         to.
     :param number split: The location along the axis where the split occurs.
-    :param KDNode left: The left node (< split) or ``None``.
-    :param KDNode right: The right node (>= split) or ``None``.
+    :param left: The left node (< split) or ``None``.
+    :param right: The right node (>= split) or ``None``.
+    :type left: :py:class:`KDNode`
+    :type right: :py:class:`KDNode`
 
     .. py:attribute:: axis
 
@@ -717,8 +907,8 @@ can't add a tuple and a :py:class:`Vector` together).
         :param vector direction: The direction of the ray.
         :param number t_near:
         :param number t_far:
-        :param KDNode source: A node that will not be considered for
-            intersection.
+        :param source: A node that will not be considered for intersection.
+        :type source: :py:class:`KDNode`
     
     .. py:method:: occludes(origin,direction[,distance,t_near,t_far,source]) -> tuple
 
@@ -739,8 +929,8 @@ can't add a tuple and a :py:class:`Vector` together).
         :param number distance: How far out to check for intersections.
         :param number t_near:
         :param number t_far:
-        :param KDNode source: A node that will not be considered for
-            intersection.
+        :param source: A node that will not be considered for intersection.
+        :type source: :py:class:`KDNode`
 
 
 .. py:class:: Matrix(dimension,values)
@@ -863,31 +1053,31 @@ can't add a tuple and a :py:class:`Vector` together).
 
     A light source that emits light uniformly in every direction from a given
     point.
-    
+
     :py:attr:`color` represents not only the light's color, but its brightness,
     too, thus its ``r`` ``g`` ``b`` components may be much greater than 1.
-    
+
     The intensity of the light at a given point depends on the distance from
     :py:attr:`position` and is given by the formula:
-    
+
     .. math::
-    
+
         \text{color} \times \frac{1}{\text{distance}^{\text{dimension} - 1}}
-    
+
     :param vector position: The position of the light.
     :param color: The light's color multiplied by its brightness. This can be an
         instance of :py:class:`.render.Color` or a tuple with three numbers.
-    
+
     .. py:attribute:: color
-    
+
         The light's color multiplied by its brightness.
-    
+
     .. py:attribute:: dimension
-    
+
         The dimension of :py:attr:`position`.
-    
+
     .. py:attribute:: position
-    
+
         The position of the light.
 
 
@@ -990,9 +1180,10 @@ can't add a tuple and a :py:class:`Vector` together).
     :param type: The type of solid: either :py:data:`.wrapper.CUBE` or
         :py:data:`.wrapper.SPHERE`.
     :param vector position: The position of the solid.
-    :param Matrix orientation: A transformation matrix. The matrix must be
-        invertable.
-    :param Material material: A material to apply to the solid.
+    :param orientation: A transformation matrix. The matrix must be invertable.
+    :param material: A material to apply to the solid.
+    :type orientation: :py:class:`Matrix`
+    :type material: :py:class:`.render.Material`
 
     .. py:attribute:: dimension
 
@@ -1027,9 +1218,10 @@ can't add a tuple and a :py:class:`Vector` together).
     :param type: The type of solid: either :py:data:`.wrapper.CUBE` or
         :py:data:`.wrapper.SPHERE`.
     :param vector position: The position of the solid.
-    :param Matrix orientation: A transformation matrix. The matrix must be
-        invertable.
-    :param Material material: A material to apply to the solid.
+    :param orientation: A transformation matrix. The matrix must be invertable.
+    :param material: A material to apply to the solid.
+    :type orientation: :py:class:`Matrix`
+    :type material: :py:class:`.render.Material`
 
     .. py:attribute:: dimension
 
@@ -1073,7 +1265,8 @@ can't add a tuple and a :py:class:`Vector` together).
     :param vector p1:
     :param vector face_normal:
     :param iterable edge_normals:
-    :param Material material: A material to apply to the simplex.
+    :param material: A material to apply to the simplex.
+    :type material: :py:class:`.render.Material`
 
     .. py:staticmethod:: from_points(points,material) -> Triangle
 
@@ -1081,7 +1274,8 @@ can't add a tuple and a :py:class:`Vector` together).
 
         :param points: A sequence of vectors specifying the vertices. The number
             of vectors must equal their dimension.
-        :param Material material: A material to apply to the simplex.
+        :param material: A material to apply to the simplex.
+        :type material: :py:class:`.render.Material`
 
     .. py:attribute:: d
 
@@ -1143,7 +1337,8 @@ can't add a tuple and a :py:class:`Vector` together).
 
     :param points: A sequence of vectors specifying the vertices of the simplex.
         The number of vectors must equal their dimension.
-    :param Material material: A material to apply to the simplex.
+    :param material: A material to apply to the simplex.
+    :type material: :py:class:`.render.Material`
 
     .. py:attribute:: dimension
 
@@ -1282,7 +1477,7 @@ can't add a tuple and a :py:class:`Vector` together).
     A generalized cross product.
 
     :param vectors: A sequence of linearly independent vectors. The number of
-        vectors must be one less than their dimensionality.
+        vectors must be one less than their dimension.
 
 .. py:function:: dot(a,b) -> float
 
@@ -1293,11 +1488,8 @@ can't add a tuple and a :py:class:`Vector` together).
 :mod:`kdtree_builder` Module
 ----------------------------
 
-.. py:module:: ntracer.kdtree_builder
-
-.. autofunction:: build_kdtree
-
-.. autofunction:: build_composite_scene
+.. automodule:: ntracer.kdtree_builder
+    :members:
 
 
 
@@ -1310,7 +1502,29 @@ can't add a tuple and a :py:class:`Vector` together).
 
 .. py:data:: CUBE
 
+    A constant that can be passed to :py:class:`.tracern.Solid`'s constructor
+    to create a hypercube.
+
 .. py:data:: SPHERE
+
+    A constant that can be passed to :py:class:`.tracern.Solid`'s constructor
+    to create a hypersphere.
+
+
+
+:mod:`pygame_render` Module
+---------------------------
+
+.. automodule:: ntracer.pygame_render
+
+.. autoclass:: PygameRenderer
+    
+    .. automethod:: begin_render
+    
+    .. autoattribute:: ON_COMPLETE
+        :annotation:
+
+.. autofunction:: channels_from_surface
 
 
 
@@ -1344,5 +1558,10 @@ This package can also work without the generic version, using only specialized
 versions, but you would only be able to use those particular dimensionalities.
 
 Note that equivalent types between the generic and specific versions are not
-interchangeable with each other.
+compatible with each other (e.g. an instance ``tracern.Vector`` cannot be added
+to an instance of ``tracer3.Vector`` even if they have the same dimension),
+however, they are interchangeable in the other modules (e.g.
+:py:func:`.kdtree_builder.build_composite_scene` is documented as taking
+instances of ``tracern.PrimitivePrototype``, but it will accept instances of
+``tracer3.PrimitivePrototype`` just as well).
 

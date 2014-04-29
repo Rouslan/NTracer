@@ -6,7 +6,8 @@ The following code will load a 3D mesh and display it.
 .. code:: python
 
     import pygame
-    from ntracer import NTracer, Renderer, build_composite_scene
+    from ntracer import NTracer, build_composite_scene
+    from ntracer.pygame_render import PygameRenderer
     from ntracer import wavefront_obj
 
     ntracer = NTracer(3)
@@ -21,23 +22,25 @@ The following code will load a 3D mesh and display it.
     pygame.display.init()
     screen = pygame.display.set_mode((800,600))
 
-    render = Renderer()
+    render = PygameRenderer()
     render.begin_render(screen,scene)
 
     while True:
         e = pygame.event.wait()
-        if e.type == pygame.USEREVENT:
+        if e.type == PygameRenderer.ON_COMPLETE:
             pygame.display.flip()
         if e.type == pygame.QUIT:
+            render.abort_render()
             break
 
 
-The following is a breakdown of the code:
+Here is a breakdown of the code:
 
 .. code:: python
 
     import pygame
-    from ntracer import NTracer, Renderer, build_composite_scene
+    from ntracer import NTracer, build_composite_scene
+    from ntracer.pygame_render import PygameRenderer
     from ntracer import wavefront_obj
     
 First we import what we need.
@@ -102,7 +105,7 @@ We initialize Pygame and create our window.
 
 .. code:: python
 
-    render = Renderer()
+    render = PygameRenderer()
     render.begin_render(screen,scene)
 
 Then a renderer is created and the drawing is started. By default, the renderer
@@ -113,14 +116,15 @@ different number of threads in its constructor.
 
     while True:
         e = pygame.event.wait()
-        if e.type == pygame.USEREVENT:
+        if e.type == PygameRenderer.ON_COMPLETE:
             pygame.display.flip()
         elif e.type == pygame.QUIT:
             render.abort_render()
             break
 
 Finally, we have a basic event loop with two additions. When the renderer is
-finished, it sends an event of type USEREVENT. The event will have a ``source``
+finished, it sends an event of type :py:attr:`PygameRenderer.ON_COMPLETE` (which
+is equal to pygame.USEREVENT by default). The event will have a ``source``
 attribute containing the associated renderer. Having only one renderer, we don't
 use it here. We flip the display buffer to make our image appear.
 :py:meth:`.abort_render` is called to stop drawing early.

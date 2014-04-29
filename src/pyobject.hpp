@@ -15,12 +15,12 @@
 namespace py {
 
     // Exception-safe alternative to Py_BEGIN_ALLOW_THREADS and Py_END_ALLOW_THREADS
-    class AllowThreads {
+    class allow_threads {
 #ifdef WITH_THREAD
         PyThreadState *save;
     public:
-        AllowThreads() { save = PyEval_SaveThread(); }
-        ~AllowThreads() { PyEval_RestoreThread(save); }
+        allow_threads() { save = PyEval_SaveThread(); }
+        ~allow_threads() { PyEval_RestoreThread(save); }
 #endif
     };
 
@@ -346,18 +346,21 @@ namespace py {
 
 
 #if PY_VERSION_HEX >= 0x02060000
-    class BufferView {
+    class buffer_view {
         Py_buffer view;
     public:
-        BufferView(PyObject *obj,int flags) {
+        buffer_view(PyObject *obj,int flags) {
             if(PyObject_GetBuffer(obj,&view,flags)) throw py_error_set();
         }
 
-        BufferView(object obj,int flags) {
+        buffer_view(object obj,int flags) {
             if(PyObject_GetBuffer(obj.ref(),&view,flags)) throw py_error_set();
         }
+        
+        buffer_view(const buffer_view &b) = delete;
+        buffer_view &operator=(const buffer_view &b) = delete;
 
-        ~BufferView() {
+        ~buffer_view() {
             PyBuffer_Release(&view);
         }
 
@@ -370,7 +373,6 @@ namespace py {
         Py_ssize_t *strides() const { return view.strides; }
         Py_ssize_t *suboffsets() const { return view.suboffsets; }
         Py_ssize_t itemsize() const { return view.itemsize; }
-        void *internal() const { return view.internal; }
     };
 #endif
 

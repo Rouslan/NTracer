@@ -11,7 +11,7 @@ GCC >= 4.7 and Clang >= 3.1.
 NTracer is a simple ray-tracer that can work with scenes with an arbitrary
 number of dimensions.
 
-.. image:: http://rouslan.github.io/NTracer/screenshots/ntracer_6d.png
+.. image:: https://rouslan.github.io/NTracer/screenshots/ntracer_6d.png
 
 The renderer can use an arbitrary number of threads and by default uses as many
 threads as there are processing cores. For small dimensionalities (by default,
@@ -19,10 +19,10 @@ eight or fewer dimensions), the library uses specialized routines with the
 number of dimensions hard-coded, which offer better performance by avoiding the
 looping and heap allocation that the generic versions require.
 
-The main goal is to aid in the visualization of higher-dimensional space. Python
-and Pygame were chosen as the library's interface to make experimenting with
-user interfaces and navigation schemes as easy as possible. The included script,
-hypercube.py, offers a working example.
+The main goal is to aid in the visualization of higher-dimensional space.
+
+There is special support for Pygame, but it is not a requirement. However, the
+included example scripts, hypercube.py and polytope.py, depend on it.
 
 Documentation is available at http://rouslan.github.io/NTracer/doc.
 
@@ -46,7 +46,7 @@ way that exploits one of the newly acquired degrees of freedom (one new
 translation and two new rotation components).
 
 Having more than three dimensions, it no longer makes sense to rotate about a
-single axis.  Thus the static member function ``Matrix.rotation``, which creates
+single axis. Thus the static member function ``Matrix.rotation``, which creates
 a rotation matrix, requires two vectors to describe a plane of rotation.
 
 Normally, cross products can only be computed in three-dimensional space. To

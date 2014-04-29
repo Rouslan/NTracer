@@ -245,6 +245,8 @@ namespace impl {
         }
         
         template<size_t Size> simd::v_type<typename Store::item_t,Size> vec(size_t n) const {
+            ASSUME((row*a.dimension() + n) < std::numeric_limits<ptrdiff_t>::max());
+            
             /* the Size > 1 check is not necessary, but it should subject the
                first branch to dead-code elimination when Size is 1 */
             if(Size > 1 && a.dimension() % Size == 0) {
@@ -281,6 +283,8 @@ namespace impl {
         }
         
         template<size_t Size> simd::v_type<typename Store::item_t,Size> vec(size_t n) const {
+            ASSUME((row*a.dimension() + n) < std::numeric_limits<ptrdiff_t>::max());
+            
             /* the Size > 1 check is not necessary, but it should subject the
                first branch to dead-code elimination when Size is 1 */
             if(Size > 1 && a.dimension() % Size == 0) {

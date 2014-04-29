@@ -28,7 +28,7 @@ from version import get_version
 # -- General configuration -----------------------------------------------------
 
 # If your documentation needs a minimal Sphinx version, state it here.
-#needs_sphinx = '1.0'
+needs_sphinx = '1.2'
 
 # Add any Sphinx extension module names here, as strings. They can be extensions
 # coming with Sphinx (named 'sphinx.ext.*') or your custom ones.
@@ -48,7 +48,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = u'NTracer'
-copyright = u'2013, Rouslan Korneychuk'
+copyright = u'2013-2014, Rouslan Korneychuk'
 
 
 # The version info for the project you're documenting, acts as replacement for
@@ -94,6 +94,8 @@ pygments_style = 'sphinx'
 
 # A list of ignored prefixes for module index sorting.
 #modindex_common_prefix = []
+
+autodoc_member_order = 'groupwise'
 
 
 # -- Options for HTML output ---------------------------------------------------

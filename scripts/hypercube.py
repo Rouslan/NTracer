@@ -8,7 +8,8 @@ import itertools
 import functools
 import argparse
 import pygame
-from ntracer import NTracer, Renderer, build_composite_scene
+from ntracer import NTracer, build_composite_scene
+from ntracer.pygame_render import PygameRenderer
 from ntracer import wavefront_obj
 
 
@@ -357,7 +358,7 @@ for i,dd in enumerate(itertools.combinations(range(ntracer.dimension),2)):
 
 camera = ntracer.Camera()
 camera.translate(ntracer.Vector.axis(2,-5))
-r = Renderer()
+r = PygameRenderer()
 
 def begin_render():
     scene.set_camera(camera)

@@ -97,9 +97,12 @@ template<typename T> std::vector<T,simd::allocator<T> > collect(PyObject *src) {
     } else if(PyList_Check(src)) {
         fill_vector(items,PyList_GET_SIZE(src),&PyList_GET_ITEM(src,0));
     } else {
-        py::object itr = py::new_ref(py::check_obj(PyObject_GetIter(src)));
-        while(py::nullable_object item = py::next(itr)) {
-            items.push_back(from_pyobject<T>(*item));
+        auto size = PyObject_LengthHint(src,0);
+        if(size < 0) throw py_error_set();
+        if(size > 0) items.reserve(size);
+        auto itr = py::iter(src);
+        while(auto item = py::next(itr)) {
+            items.push_back(from_pyobject<T>(item.ref()));
         }
     }
     return items;
@@ -448,16 +451,6 @@ template<> n_vector from_pyobject<n_vector>(PyObject *o) {
 
 
 
-int obj_BoxScene_traverse(obj_BoxScene *self,visitproc visit,void *arg) {
-    Py_VISIT(self->idict);
-    return 0;
-}
-
-int obj_BoxScene_clear(obj_BoxScene *self) {
-    Py_CLEAR(self->idict);
-    return 0;
-}
-
 PyObject *obj_BoxScene_set_camera(obj_BoxScene *self,PyObject *arg) {
     try {
         ensure_unlocked(self);
@@ -532,8 +525,8 @@ PyTypeObject obj_BoxScene::_pytype = make_type_object(
     sizeof(obj_BoxScene),
     tp_dealloc = destructor_dealloc<obj_BoxScene>::value,
     tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE|Py_TPFLAGS_CHECKTYPES|Py_TPFLAGS_HAVE_GC,
-    tp_traverse = &obj_BoxScene_traverse,
-    tp_clear = &obj_BoxScene_clear,
+    tp_traverse = &traverse_idict<obj_BoxScene>,
+    tp_clear = &clear_idict<obj_BoxScene>,
     tp_weaklistoffset = offsetof(obj_BoxScene,weaklist),
     tp_methods = obj_BoxScene_methods,
     tp_members = obj_BoxScene_members,
@@ -541,17 +534,6 @@ PyTypeObject obj_BoxScene::_pytype = make_type_object(
     tp_dictoffset = offsetof(obj_BoxScene,idict),
     tp_new = &obj_BoxScene_new);
 
-
-int obj_CompositeScene_traverse(obj_CompositeScene *self,visitproc visit,void *arg) {
-    Py_VISIT(self->idict);
-    return 0;
-}
-
-
-int obj_CompositeScene_clear(obj_CompositeScene *self) {
-    Py_CLEAR(self->idict);
-    return 0;
-}
 
 PyObject *obj_CompositeScene_set_camera(obj_CompositeScene *self,PyObject *arg) {
     try {
@@ -696,8 +678,8 @@ PyTypeObject composite_scene_obj_base::_pytype = make_type_object(
     sizeof(obj_CompositeScene),
     tp_dealloc = destructor_dealloc<obj_CompositeScene>::value,
     tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE|Py_TPFLAGS_CHECKTYPES|Py_TPFLAGS_HAVE_GC,
-    tp_traverse = &obj_CompositeScene_traverse,
-    tp_clear = &obj_CompositeScene_clear,
+    tp_traverse = &traverse_idict<obj_CompositeScene>,
+    tp_clear = &clear_idict<obj_CompositeScene>,
     tp_weaklistoffset = offsetof(obj_CompositeScene,weaklist),
     tp_methods = obj_CompositeScene_methods,
     tp_getset = obj_CompositeScene_getset,
@@ -1029,11 +1011,15 @@ PyObject *kdnode_intersects(obj_KDNode *self,PyObject *args,PyObject *kwds) {
         
         check_origin_dir_compat(origin,direction);
         
-        ray<module_store> target(origin,direction);
         ray<module_store> normal(origin.dimension());
         ray_intersections<module_store> hits;
-        
-        real dist = self->_data->intersects(target,normal,source,hits,t_near,t_far);
+        real dist;
+        {
+            py::allow_threads _;
+            ray<module_store> target(origin,direction);
+            
+            dist = self->_data->intersects(target,normal,source,hits,t_near,t_far);
+        }
         
         size_t r_size = hits.size();
         if(dist) ++r_size;
@@ -1081,10 +1067,14 @@ PyObject *kdnode_occludes(obj_KDNode *self,PyObject *args,PyObject *kwds) {
         
         check_origin_dir_compat(origin,direction);
         
-        ray<module_store> target(origin,direction);
         ray_intersections<module_store> hits;
-        
-        bool occ = self->_data->occludes(target,distance,source,hits,t_near,t_far);
+        bool occ;
+        {
+            py::allow_threads _;
+            ray<module_store> target(origin,direction);
+            
+            occ = self->_data->occludes(target,distance,source,hits,t_near,t_far);
+        }
         
         py::object b;
         if(!occ) {
@@ -2377,8 +2367,8 @@ template<typename T> PyObject *cs_light_list_extend(cs_light_list<T> *self,PyObj
         
         auto &vals = T::value(self->parent.get());
         
-        Py_ssize_t hint = PyObject_LengthHint(arg,-2);
-        if(hint == -1) return nullptr;
+        Py_ssize_t hint = PyObject_LengthHint(arg,0);
+        if(hint < 0) return nullptr;
         if(hint > 0) vals.reserve(vals.size() + hint);
         
         auto &pbase = self->parent->cast_base();
@@ -2539,7 +2529,7 @@ extern "C" SHARED(void) APPEND_MODULE_NAME(init)() {
             PyCapsule_GetPointer(static_cast<object>(rmod.attr("_PACKAGE_COMMON")).ref(),"render._PACKAGE_COMMON")))) return INIT_ERR_VAL;
     } PY_EXCEPT_HANDLERS(INIT_ERR_VAL)
 
-    for(auto &cls : classes) {
+    for(auto cls : classes) {
         if(UNLIKELY(PyType_Ready(cls) < 0)) return INIT_ERR_VAL;
     }
 
@@ -2550,7 +2540,7 @@ extern "C" SHARED(void) APPEND_MODULE_NAME(init)() {
 #endif
     if(UNLIKELY(!m)) return INIT_ERR_VAL;
         
-    for(auto &cls : classes) {
+    for(auto cls : classes) {
         add_class(m,cls->tp_name + sizeof(MODULE_STR),cls);
     }
 

@@ -10,10 +10,6 @@ from distutils.dir_util import mkpath
 from distutils import log
 from distutils.dep_util import newer
 
-try:
-    from distutils.command.build_py import build_py_2to3 as build_py
-except ImportError:
-    from distutils.command.build_py import build_py
 
 base_dir = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0,os.path.join(base_dir,'support'))
@@ -35,7 +31,12 @@ GCC_OPTIMIZE_COMPILE_ARGS = [
 #    '-DPROFILE_CODE',
     '--param','large-function-growth=500',
     '--param','inline-unit-growth=1000']
-GCC_EXTRA_COMPILE_ARGS = ['-std=c++11','-fvisibility=hidden','-Wno-format','-Wno-invalid-offsetof']
+GCC_EXTRA_COMPILE_ARGS = [
+    '-std=c++11',
+    '-fvisibility=hidden',
+    '-Wno-format',
+    '-Wno-invalid-offsetof',
+    '-Werror=return-type']
 
 # At the time of this writing, no version of MSVC has enough C++11 support to
 # compile this package
@@ -107,18 +108,7 @@ class CustomBuildExt(build_ext):
                 'src/fixed_geometry.hpp','src/tracer.hpp','src/light.hpp',
                 'src/render.hpp','src/camera.hpp','src/compatibility.hpp',
                 'src/v_array.hpp','src/instrumentation.hpp'],
-            include_dirs=['src'],
-            libraries=['SDL'])
-    
-    def find_sdl(self,path):
-        if os.path.isfile(os.path.join(path,'SDL.h')):
-            return path
-        
-        path = os.path.join(path,'SDL')
-        if os.path.isfile(os.path.join(path,'SDL.h')):
-            return path
-        
-        return None
+            include_dirs=['src'])
     
     def finalize_options(self):
         build_ext.finalize_options(self)
@@ -129,24 +119,7 @@ class CustomBuildExt(build_ext):
         
         for d in self.optimize_dimensions:
             self.extensions.append(self.special_tracer_ext(d))
-        
-        # try to find the SDL include directory
-        for p in self.include_dirs:
-            sp = self.find_sdl(p)
-            if sp is not None:
-                if sp is not p:
-                    self.include_dirs.append(sp)
-                break
-        else:
-            for p in ['/usr/include','/usr/local/include']:
-                sp = self.find_sdl(p)
-                if sp is not None:
-                    self.include_dirs.append(sp)
-                    break
-            else:
-                raise DistutilsSetupError(
-                    'Unable to locate "SDL.h". Use --include-dirs to specify the location of the SDL header files.')
-        
+
         # needed for simd.hpp (derived from simd.hpp.in)
         self.include_dirs.append(self.build_temp)
         self.include_dirs.append('src')
@@ -223,7 +196,7 @@ setup(name='ntracer',
                 'src/var_geometry.hpp','src/tracer.hpp','src/light.hpp',
                 'src/render.hpp','src/camera.hpp','src/compatibility.hpp',
                 'src/v_array.hpp','src/instrumentation.hpp'])],
-    requires=['pygame'],
+#    extras_require={'PygameRenderer': ['pygame']},
     description='A fast hyper-spacial ray-tracing library',
     long_description=long_description,
     license='MIT',
@@ -243,6 +216,4 @@ setup(name='ntracer',
         'Programming Language :: Python :: 3.4',
         'Topic :: Multimedia :: Graphics :: 3D Rendering',
         'Topic :: Scientific/Engineering :: Mathematics'],
-    cmdclass={
-        'build_py' : build_py,
-        'build_ext' : CustomBuildExt})
+    cmdclass={'build_ext' : CustomBuildExt})

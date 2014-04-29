@@ -345,6 +345,19 @@ template<typename T> struct destructor_dealloc<T,true> {
 };
 
 
+template<typename T> int traverse_idict(PyObject *self,visitproc visit,void *arg) {
+    Py_VISIT(reinterpret_cast<T*>(self)->idict);
+
+    return 0;
+}
+
+template<typename T> int clear_idict(PyObject *self) {
+    Py_CLEAR(reinterpret_cast<T*>(self)->idict);
+
+    return 0;
+}
+
+
 template<typename T,typename Base,bool InPlace=(alignof(T) <= PYOBJECT_ALIGNMENT)> struct simple_py_wrapper : Base {
     static constexpr bool contained = true;
     

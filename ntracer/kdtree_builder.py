@@ -2,7 +2,10 @@
 # rewritten in C++ where it can be made threaded (CPython can only execute one
 # instruction at a time)
 
-from future_builtins import filter, map, zip
+try:
+    from future_builtins import map
+except ImportError:
+    pass
 
 import sys
 import itertools
@@ -137,27 +140,6 @@ def best_axis(boundary):
     return axis
 
 
-if DUMP_ASY_REPR:
-    T_IDS = {}
-    def shift(p,s):
-        return p*0.99 + s*0.01
-
-    def shrink(nt,points):
-        center = sum(points,nt.Vector())
-        return [shift(p,center) for p in points]
-
-    def v_str(v):
-        return '({0})'.format(','.join(map(str,v)))
-
-    def print_box(nt,bound,cp,op):
-        start,end = shrink(nt,[bound.start,bound.end])
-        print 'draw(box({0},{1}),red);'.format(v_str(start),v_str(end))
-        print '//{0},{1}'.format(bound.start,bound.end)
-        print 'label("{0}",{1},Z,red);'.format(
-            ','.join(str(T_IDS[id(t.p)]) for t in (cp+op)),
-            v_str((bound.start+bound.end)*0.5))
-
-
 def ortho_flat(p):
     for i in range(p.dimension):
         if p.aabb_min[i] == p.aabb_max[i]: return i
@@ -187,12 +169,10 @@ def create_node(nt,depth,boundary,contain_p,overlap_p):
     if not (contain_p or overlap_p): return None
     
     if depth >= MAX_DEPTH or len(contain_p) + len(overlap_p) <= SPLIT_THRESHHOLD:
-        if DUMP_ASY_REPR: print_box(nt,boundary,contain_p,overlap_p);
         return create_leaf(nt,contain_p,overlap_p)
     
     split = find_split(boundary,axis,contain_p,overlap_p)
     if split is None:
-        if DUMP_ASY_REPR: print_box(nt,boundary,contain_p,overlap_p);
         return create_leaf(nt,contain_p,overlap_p)
     
     b_left = boundary.left(axis,split)
@@ -244,18 +224,24 @@ if DUMP_ASY_REPR:
 
 
 def build_kdtree(nt,primitives):
-    if not isinstance(nt,NTracer): nt = NTracer(nt)
+    """Create a k-d tree from a sequence of
+    :py:class:`.tracern.PrimitivePrototype` instances.
     
-    if DUMP_ASY_REPR:
-        for i,p in enumerate(primitives):
-            T_IDS[id(p)] = i+1
-            print 'draw({0} -- {1} -- {2} -- cycle);'.format(*map(point_data_str,p.point_data))
-            print 'label("{0}",{1},Z);'.format(
-                i+1,
-                v_str(point_data_center(nt,p.point_data)))
-            #for j,pd in enumerate(p.point_data):
-            #    print 'draw({0} -- {1},Arrow);'.format(v_str(pd.point),v_str(pd.point+pd.edge_normal))
-            #    print 'label("{0}",{1},Z);'.format(j,v_str(pd.point))
+    The return value is a tuple containing two vectors followed by the root
+    node of k-d tree (instance of :py:class:`.tracern.KDNode`). The vectors are
+    the minimum followed by the maximum point of an axis-aligned bounding box
+    enclosing all the primitives from ``primitives``. The tuple's values can be
+    passed directly to :py:class:`.tracern.CompositeScene` which is exactly
+    what :py:func:`build_composite_scene` does.
+    
+    :param nt: An instance of :py:class:`.wrapper.NTracer` or an integer that
+        will be passed to the constructor of :py:class:`.wrapper.NTracer`.
+    :param sequence primitives: One or more instances of
+        :py:class:`.tracern.PrimitivePrototype`.
+    :rtype: tuple
+    
+    """
+    if not isinstance(nt,NTracer): nt = NTracer(nt)
 
     start = nt.Vector(reduce(partial(map,min),(p.aabb_min for p in primitives)))
     end = nt.Vector(reduce(partial(map,max),(p.aabb_max for p in primitives)))
@@ -263,6 +249,16 @@ def build_kdtree(nt,primitives):
 
 
 def build_composite_scene(nt,primitives):
+    """Create a scene from a sequence of
+    :py:class:`.tracern.PrimitivePrototype` instances.
+    
+    :param nt: An instance of :py:class:`.wrapper.NTracer` or an integer that
+        will be passed to the constructor of :py:class:`.wrapper.NTracer`.
+    :param sequence primitives: One or more instances of
+        :py:class:`.tracern.PrimitivePrototype`.
+    :rtype: :py:class:`.tracern.CompositeScene`
+    
+    """
     if not isinstance(nt,NTracer): nt = NTracer(nt)
     
     return nt.CompositeScene(*build_kdtree(nt,primitives))
