@@ -1,4 +1,3 @@
-
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
   "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 
@@ -7,7 +6,7 @@
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     
-    <title>ntracer Package &mdash; NTracer 0.4 documentation</title>
+    <title>ntracer Package &mdash; NTracer 0.5 documentation</title>
     
     <link rel="stylesheet" href="../_static/nature.css" type="text/css" />
     <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
@@ -15,7 +14,7 @@
     <script type="text/javascript">
       var DOCUMENTATION_OPTIONS = {
         URL_ROOT:    '../',
-        VERSION:     '0.4',
+        VERSION:     '0.5',
         COLLAPSE_INDEX: false,
         FILE_SUFFIX: '',
         HAS_SOURCE:  true
@@ -24,7 +23,7 @@
     <script type="text/javascript" src="../_static/jquery.js"></script>
     <script type="text/javascript" src="../_static/underscore.js"></script>
     <script type="text/javascript" src="../_static/doctools.js"></script>
-    <link rel="top" title="NTracer 0.4 documentation" href="../" />
+    <link rel="top" title="NTracer 0.5 documentation" href="../" />
     <link rel="prev" title="Basic Usage" href="../example/" /> 
   </head>
   <body>
@@ -40,7 +39,7 @@
         <li class="right" >
           <a href="../example/" title="Basic Usage"
              accesskey="P">previous</a> |</li>
-        <li><a href="../">NTracer 0.4 documentation</a> &raquo;</li> 
+        <li><a href="../">NTracer 0.5 documentation</a> &raquo;</li> 
       </ul>
     </div>  
 
@@ -54,13 +53,204 @@
 <div class="section" id="module-ntracer.__init__">
 <span id="init-module"></span><h2><tt class="xref py py-mod docutils literal"><span class="pre">__init__</span></tt> Module<a class="headerlink" href="#module-ntracer.__init__" title="Permalink to this headline">¶</a></h2>
 <p>The names <a class="reference internal" href="#ntracer.render.Color" title="ntracer.render.Color"><tt class="xref py py-class docutils literal"><span class="pre">render.Color</span></tt></a>, <a class="reference internal" href="#ntracer.render.Material" title="ntracer.render.Material"><tt class="xref py py-class docutils literal"><span class="pre">render.Material</span></tt></a>,
-<a class="reference internal" href="#ntracer.render.Renderer" title="ntracer.render.Renderer"><tt class="xref py py-class docutils literal"><span class="pre">render.Renderer</span></tt></a>, <a class="reference internal" href="#ntracer.wrapper.NTracer" title="ntracer.wrapper.NTracer"><tt class="xref py py-class docutils literal"><span class="pre">wrapper.NTracer</span></tt></a>,
-<a class="reference internal" href="#ntracer.wrapper.CUBE" title="ntracer.wrapper.CUBE"><tt class="xref py py-data docutils literal"><span class="pre">wrapper.CUBE</span></tt></a>, <a class="reference internal" href="#ntracer.wrapper.SPHERE" title="ntracer.wrapper.SPHERE"><tt class="xref py py-data docutils literal"><span class="pre">wrapper.SPHERE</span></tt></a> and
-<a class="reference internal" href="#ntracer.kdtree_builder.build_composite_scene" title="ntracer.kdtree_builder.build_composite_scene"><tt class="xref py py-func docutils literal"><span class="pre">kdtree_builder.build_composite_scene()</span></tt></a> are imported here for
-convenience.</p>
+<a class="reference internal" href="#ntracer.render.Channel" title="ntracer.render.Channel"><tt class="xref py py-class docutils literal"><span class="pre">render.Channel</span></tt></a>, <a class="reference internal" href="#ntracer.render.ImageFormat" title="ntracer.render.ImageFormat"><tt class="xref py py-class docutils literal"><span class="pre">render.ImageFormat</span></tt></a>,
+<a class="reference internal" href="#ntracer.render.CallbackRenderer" title="ntracer.render.CallbackRenderer"><tt class="xref py py-class docutils literal"><span class="pre">render.CallbackRenderer</span></tt></a>, <a class="reference internal" href="#ntracer.render.BlockingRenderer" title="ntracer.render.BlockingRenderer"><tt class="xref py py-class docutils literal"><span class="pre">render.BlockingRenderer</span></tt></a>,
+<a class="reference internal" href="#ntracer.wrapper.NTracer" title="ntracer.wrapper.NTracer"><tt class="xref py py-class docutils literal"><span class="pre">wrapper.NTracer</span></tt></a>, <a class="reference internal" href="#ntracer.wrapper.CUBE" title="ntracer.wrapper.CUBE"><tt class="xref py py-data docutils literal"><span class="pre">wrapper.CUBE</span></tt></a>,
+<a class="reference internal" href="#ntracer.wrapper.SPHERE" title="ntracer.wrapper.SPHERE"><tt class="xref py py-data docutils literal"><span class="pre">wrapper.SPHERE</span></tt></a> and <a class="reference internal" href="#ntracer.kdtree_builder.build_composite_scene" title="ntracer.kdtree_builder.build_composite_scene"><tt class="xref py py-func docutils literal"><span class="pre">kdtree_builder.build_composite_scene()</span></tt></a>
+are imported here for convenience.</p>
 </div>
 <div class="section" id="module-ntracer.render">
 <span id="render-module"></span><h2><tt class="xref py py-mod docutils literal"><span class="pre">render</span></tt> Module<a class="headerlink" href="#module-ntracer.render" title="Permalink to this headline">¶</a></h2>
+<dl class="class">
+<dt id="ntracer.render.BlockingRenderer">
+<em class="property">class </em><tt class="descname">BlockingRenderer</tt><big>(</big><span class="optional">[</span><em>threads=-1</em><span class="optional">]</span><big>)</big><a class="headerlink" href="#ntracer.render.BlockingRenderer" title="Permalink to this definition">¶</a></dt>
+<dd><p>A synchronous scene renderer.</p>
+<p>By default, this class uses as many threads are the are processing cores.
+The scene can be drawn on any writable object supporting the buffer
+protocol. <a class="reference internal" href="#ntracer.render.BlockingRenderer.signal_abort" title="ntracer.render.BlockingRenderer.signal_abort"><tt class="xref py py-meth docutils literal"><span class="pre">signal_abort()</span></tt></a> can be called from another thread to quit
+drawing early.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>threads</strong> (<em>integer</em>) &#8211; The number of threads to use <em>in addition</em> to the
+thread from which it&#8217;s called. If -1, the number of extra threads will
+be one minus the number of processing cores of the machine.</td>
+</tr>
+</tbody>
+</table>
+<dl class="method">
+<dt id="ntracer.render.BlockingRenderer.signal_abort">
+<tt class="descname">signal_abort</tt><big>(</big><big>)</big><a class="headerlink" href="#ntracer.render.BlockingRenderer.signal_abort" title="Permalink to this definition">¶</a></dt>
+<dd><p>Signal for the renderer to quit and return immediately.</p>
+<p>If the renderer isn&#8217;t running, this does nothing.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ntracer.render.BlockingRenderer.render">
+<tt class="descname">render</tt><big>(</big><em>dest</em>, <em>scene</em><big>)</big> &rarr; boolean<a class="headerlink" href="#ntracer.render.BlockingRenderer.render" title="Permalink to this definition">¶</a></dt>
+<dd><p>Render <tt class="docutils literal"><span class="pre">scene</span></tt> onto <tt class="docutils literal"><span class="pre">dest</span></tt>.</p>
+<p>If the renderer is already running on another thread, an exception is
+thrown instead. Upon starting, the scene will be locked for writing.</p>
+<p>The return value will be <tt class="docutils literal"><span class="pre">True</span></tt> unless the renderer quit before
+finishing because of a call to <a class="reference internal" href="#ntracer.render.BlockingRenderer.signal_abort" title="ntracer.render.BlockingRenderer.signal_abort"><tt class="xref py py-meth docutils literal"><span class="pre">signal_abort()</span></tt></a>, in which case
+the return value will be <tt class="docutils literal"><span class="pre">False</span></tt>.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>dest</strong> &#8211; An object supporting the buffer protocol to draw onto.</li>
+<li><strong>format</strong> (<a class="reference internal" href="#ntracer.render.ImageFormat" title="ntracer.render.ImageFormat"><tt class="xref py py-class docutils literal"><span class="pre">ImageFormat</span></tt></a>) &#8211; The dimensions and pixel format of <tt class="docutils literal"><span class="pre">dest</span></tt>.</li>
+<li><strong>scene</strong> (<a class="reference internal" href="#ntracer.render.Scene" title="ntracer.render.Scene"><tt class="xref py py-class docutils literal"><span class="pre">Scene</span></tt></a>) &#8211; The scene to draw.</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="ntracer.render.CallbackRenderer">
+<em class="property">class </em><tt class="descname">CallbackRenderer</tt><big>(</big><span class="optional">[</span><em>threads=0</em><span class="optional">]</span><big>)</big><a class="headerlink" href="#ntracer.render.CallbackRenderer" title="Permalink to this definition">¶</a></dt>
+<dd><p>An asynchronous scene renderer.</p>
+<p>By default, this class uses as many threads are the are processing cores.
+The scene can be drawn on any writable object supporting the buffer protocol
+(such as <tt class="docutils literal"><span class="pre">bytearray</span></tt>) and a callback function is invoked when finished.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>threads</strong> (<em>integer</em>) &#8211; The number of threads to use. If zero, the number of
+threads will equal the number of processing cores of the machine.</td>
+</tr>
+</tbody>
+</table>
+<dl class="method">
+<dt id="ntracer.render.CallbackRenderer.abort_render">
+<tt class="descname">abort_render</tt><big>(</big><big>)</big><a class="headerlink" href="#ntracer.render.CallbackRenderer.abort_render" title="Permalink to this definition">¶</a></dt>
+<dd><p>Signal for the renderer to quit and wait until all drawing has stopped
+and the scene has been unlocked.</p>
+<p>The callback function passed to <a class="reference internal" href="#ntracer.render.CallbackRenderer.begin_render" title="ntracer.render.CallbackRenderer.begin_render"><tt class="xref py py-meth docutils literal"><span class="pre">begin_render()</span></tt></a> will not be
+called if the renderer doesn&#8217;t finish drawing.</p>
+<p>If the renderer isn&#8217;t running, this does nothing.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ntracer.render.CallbackRenderer.begin_render">
+<tt class="descname">begin_render</tt><big>(</big><em>dest</em>, <em>format</em>, <em>scene</em>, <em>callback</em><big>)</big><a class="headerlink" href="#ntracer.render.CallbackRenderer.begin_render" title="Permalink to this definition">¶</a></dt>
+<dd><p>Begin rendering <tt class="docutils literal"><span class="pre">scene</span></tt> onto <tt class="docutils literal"><span class="pre">dest</span></tt>.</p>
+<p>If the renderer is already running, an exception is thrown instead. Upon
+starting, the scene will be locked for writing.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>dest</strong> &#8211; An object supporting the buffer protocol to draw onto.</li>
+<li><strong>format</strong> (<a class="reference internal" href="#ntracer.render.ImageFormat" title="ntracer.render.ImageFormat"><tt class="xref py py-class docutils literal"><span class="pre">ImageFormat</span></tt></a>) &#8211; The dimensions and pixel format of <tt class="docutils literal"><span class="pre">dest</span></tt>.</li>
+<li><strong>scene</strong> (<a class="reference internal" href="#ntracer.render.Scene" title="ntracer.render.Scene"><tt class="xref py py-class docutils literal"><span class="pre">Scene</span></tt></a>) &#8211; The scene to draw.</li>
+<li><strong>callback</strong> &#8211; A function taking one parameter to call when rendering
+is done. The parameter will be the renderer itself.</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="ntracer.render.Channel">
+<em class="property">class </em><tt class="descname">Channel</tt><big>(</big><em>bit_size</em>, <em>f_r</em>, <em>f_g</em>, <em>f_b</em><span class="optional">[</span>, <em>f_c=0</em>, <em>tfloat=False</em><span class="optional">]</span><big>)</big><a class="headerlink" href="#ntracer.render.Channel" title="Permalink to this definition">¶</a></dt>
+<dd><p>A representation of a color channel.</p>
+<p>This is used by <a class="reference internal" href="#ntracer.render.ImageFormat" title="ntracer.render.ImageFormat"><tt class="xref py py-class docutils literal"><span class="pre">ImageFormat</span></tt></a> to specify how pixels are stored.</p>
+<p>All colors are computed internally using three 32-bit floating point
+numbers, representing red, green and blue. An instance of <tt class="docutils literal"><span class="pre">Channel</span></tt>
+specifies how to convert a color to a component of the destination format.
+For a given color &#8220;c&#8221;, the output will be <tt class="code docutils literal"><span class="pre">f_r*c.r</span> <span class="pre">+</span> <span class="pre">f_g*c.g</span> <span class="pre">+</span> <span class="pre">f_b*c.b</span>
+<span class="pre">+</span> <span class="pre">f_c</span></tt> and is clamped between 0 and 1. If <tt class="docutils literal"><span class="pre">tfloat</span></tt> is false, the value is
+multiplied by 2<sup>bit_size</sup>−1 and converted to an integer.</p>
+<p>Instances of this class are read-only.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>bit_size</strong> (<em>integer</em>) &#8211; The number of bits the channel takes up. If
+<tt class="docutils literal"><span class="pre">tfloat</span></tt> is false, it can be between 1 and 31. If <tt class="docutils literal"><span class="pre">tfloat</span></tt> is true
+it must be 32.</li>
+<li><strong>f_r</strong> (<em>number</em>) &#8211; The red factor.</li>
+<li><strong>f_g</strong> (<em>number</em>) &#8211; The green factor.</li>
+<li><strong>f_b</strong> (<em>number</em>) &#8211; The blue factor.</li>
+<li><strong>f_c</strong> (<em>number</em>) &#8211; A constant to add.</li>
+<li><strong>tfloat</strong> (<em>boolean</em>) &#8211; Whether the channel is stored as an integer or
+floating point number.</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+<dl class="attribute">
+<dt id="ntracer.render.Channel.bit_size">
+<tt class="descname">bit_size</tt><a class="headerlink" href="#ntracer.render.Channel.bit_size" title="Permalink to this definition">¶</a></dt>
+<dd><p>The number of bits the channel takes up.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="ntracer.render.Channel.f_r">
+<tt class="descname">f_r</tt><a class="headerlink" href="#ntracer.render.Channel.f_r" title="Permalink to this definition">¶</a></dt>
+<dd><p>The red factor.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="ntracer.render.Channel.f_g">
+<tt class="descname">f_g</tt><a class="headerlink" href="#ntracer.render.Channel.f_g" title="Permalink to this definition">¶</a></dt>
+<dd><p>The green factor.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="ntracer.render.Channel.f_b">
+<tt class="descname">f_b</tt><a class="headerlink" href="#ntracer.render.Channel.f_b" title="Permalink to this definition">¶</a></dt>
+<dd><p>The blue factor.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="ntracer.render.Channel.f_c">
+<tt class="descname">f_c</tt><a class="headerlink" href="#ntracer.render.Channel.f_c" title="Permalink to this definition">¶</a></dt>
+<dd><p>A constant to add.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="ntracer.render.Channel.tfloat">
+<tt class="descname">tfloat</tt><a class="headerlink" href="#ntracer.render.Channel.tfloat" title="Permalink to this definition">¶</a></dt>
+<dd><p>Whether the channel is stored as an integer or floating point number.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="ntracer.render.ChannelList">
+<em class="property">class </em><tt class="descname">ChannelList</tt><a class="headerlink" href="#ntracer.render.ChannelList" title="Permalink to this definition">¶</a></dt>
+<dd><p>The channels of an <a class="reference internal" href="#ntracer.render.ImageFormat" title="ntracer.render.ImageFormat"><tt class="xref py py-class docutils literal"><span class="pre">ImageFormat</span></tt></a> object.</p>
+<p>This class can not be instantiated directly in Python code.</p>
+<dl class="method">
+<dt id="ntracer.render.ChannelList.__getitem__">
+<tt class="descname">__getitem__</tt><big>(</big><em>index</em><big>)</big><a class="headerlink" href="#ntracer.render.ChannelList.__getitem__" title="Permalink to this definition">¶</a></dt>
+<dd><p><tt class="code docutils literal"><span class="pre">self.__getitem__(i)</span></tt> &lt;==&gt; <tt class="code docutils literal"><span class="pre">self[i]</span></tt></p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ntracer.render.ChannelList.__len__">
+<tt class="descname">__len__</tt><big>(</big><big>)</big><a class="headerlink" href="#ntracer.render.ChannelList.__len__" title="Permalink to this definition">¶</a></dt>
+<dd><p><tt class="code docutils literal"><span class="pre">self.__len__()</span></tt> &lt;==&gt; <tt class="code docutils literal"><span class="pre">len(self)</span></tt></p>
+</dd></dl>
+
+</dd></dl>
+
 <dl class="class">
 <dt id="ntracer.render.Color">
 <em class="property">class </em><tt class="descname">Color</tt><big>(</big><em>r</em>, <em>g</em>, <em>b</em><big>)</big><a class="headerlink" href="#ntracer.render.Color" title="Permalink to this definition">¶</a></dt>
@@ -70,9 +260,8 @@ maximum value. Therefore, <tt class="code docutils literal"><span class="pre">Co
 <tt class="code docutils literal"><span class="pre">Color(1,1,1)</span></tt> represents white and <tt class="code docutils literal"><span class="pre">Color(0,0,0.5)</span></tt> represents
 dark blue.</p>
 <p>Although values outside of 0-1 are allowed, they are clipped to the normal
-range when drawn onto a <a class="reference external" href="http://www.pygame.org/docs/ref/surface.html#pygame.Surface">pygame.Surface</a> object. Such
-values will, however, affect how reflections and transparency are
-calculated.</p>
+range when finally drawn. Such values will, however, affect how reflections
+and transparency are calculated.</p>
 <p>Instances of this class are read-only.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -103,6 +292,140 @@ calculated.</p>
 <dt id="ntracer.render.Color.b">
 <tt class="descname">b</tt><a class="headerlink" href="#ntracer.render.Color.b" title="Permalink to this definition">¶</a></dt>
 <dd><p>Blue component</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="ntracer.render.ImageFormat">
+<em class="property">class </em><tt class="descname">ImageFormat</tt><big>(</big><em>width</em>, <em>height</em>, <em>channels</em><span class="optional">[</span>, <em>pitch=0</em>, <em>reversed=False</em><span class="optional">]</span><big>)</big><a class="headerlink" href="#ntracer.render.ImageFormat" title="Permalink to this definition">¶</a></dt>
+<dd><p>The dimensions and pixel format of an image.</p>
+<p>The pixel format is specified by one or more instances of
+<a class="reference internal" href="#ntracer.render.Channel" title="ntracer.render.Channel"><tt class="xref py py-class docutils literal"><span class="pre">Channel</span></tt></a>. Each channel describes how to convert a red-green-blue
+triplet into the associated pixel component and has a bit size. When drawing
+a pixel, a renderer will write each component, one after the other without
+leaving any gaps. However, each pixel will start on a new byte. If the last
+byte is not completely covered by the channels, the remaining bits will be
+set to zero.</p>
+<p>The size of a pixel may not exceed 16 bytes (128 bits).</p>
+<p>Some examples of pixel formats and their associated channel sequences:</p>
+<table border="1" class="docutils">
+<colgroup>
+<col width="38%" />
+<col width="62%" />
+</colgroup>
+<tbody valign="top">
+<tr class="row-odd"><td>24-bit RGB</td>
+<td><tt class="code docutils literal"><span class="pre">[Channel(8,1,0,0),</span>
+<span class="pre">Channel(8,0,1,0),</span>
+<span class="pre">Channel(8,0,0,1)]</span></tt></td>
+</tr>
+<tr class="row-even"><td>32-bit RGBA with full alpha</td>
+<td><tt class="code docutils literal"><span class="pre">[Channel(8,1,0,0),</span>
+<span class="pre">Channel(8,0,1,0),</span>
+<span class="pre">Channel(8,0,0,1),</span>
+<span class="pre">Channel(8,0,0,0,1)]</span></tt></td>
+</tr>
+<tr class="row-odd"><td>16-bit 5-5-5 RGB (the last
+bit is unused)</td>
+<td><tt class="code docutils literal"><span class="pre">[Channel(5,1,0,0),</span>
+<span class="pre">Channel(5,0,1,0),</span>
+<span class="pre">Channel(5,0,0,1)]</span></tt></td>
+</tr>
+<tr class="row-even"><td>16-bit 5-6-5 RGB</td>
+<td><tt class="code docutils literal"><span class="pre">[Channel(5,1,0,0),</span>
+<span class="pre">Channel(6,0,1,0),</span>
+<span class="pre">Channel(5,0,0,1)]</span></tt></td>
+</tr>
+<tr class="row-odd"><td>the native internal
+representation</td>
+<td><tt class="code docutils literal"><span class="pre">[Channel(32,1,0,0,0,True),</span>
+<span class="pre">Channel(32,0,1,0,0,True),</span>
+<span class="pre">Channel(32,0,0,1,0,True)]</span></tt></td>
+</tr>
+<tr class="row-even"><td>digital YC<sub>R</sub>C<sub>B</sub> (ITU-R
+BT.601 conversion)</td>
+<td><tt class="code docutils literal"><span class="pre">[Channel(8,0.299,0.587,0.114,0.0625),</span>
+<span class="pre">Channel(8,-0.147,-0.289,0.436,0.5),</span>
+<span class="pre">Channel(8,0.615,-0.515,-0.1,0.5)]</span></tt></td>
+</tr>
+<tr class="row-odd"><td>16-bit brightness only</td>
+<td><tt class="code docutils literal"><span class="pre">[Channel(16,0.299,0.587,0.114)]</span></tt></td>
+</tr>
+</tbody>
+</table>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>width</strong> (<em>integer</em>) &#8211; The width of the image in pixels.</li>
+<li><strong>height</strong> (<em>integer</em>) &#8211; The height of the image in pixels.</li>
+<li><strong>channels</strong> &#8211; An iterable containing one or more instances of
+<a class="reference internal" href="#ntracer.render.Channel" title="ntracer.render.Channel"><tt class="xref py py-class docutils literal"><span class="pre">Channel</span></tt></a>, describing the bit layout of a pixel.</li>
+<li><strong>pitch</strong> (<em>integer</em>) &#8211; The number of bytes per row. If zero is passed, it
+will be set to <tt class="docutils literal"><span class="pre">width</span></tt> times the byte width of one pixel (calculated
+from <tt class="docutils literal"><span class="pre">channels</span></tt>).</li>
+<li><strong>reversed</strong> (<em>boolean</em>) &#8211; If true, the bytes of each pixel will be written in
+reverse order. This is needed if storing pixels as little-endian words
+and the channels don&#8217;t fit neatly into bytes.</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+<dl class="method">
+<dt id="ntracer.render.ImageFormat.set_channels">
+<tt class="descname">set_channels</tt><big>(</big><em>new_channels</em><big>)</big><a class="headerlink" href="#ntracer.render.ImageFormat.set_channels" title="Permalink to this definition">¶</a></dt>
+<dd><p>Replace the contents of <a class="reference internal" href="#ntracer.render.ImageFormat.channels" title="ntracer.render.ImageFormat.channels"><tt class="xref py py-attr docutils literal"><span class="pre">channels</span></tt></a>.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>channels</strong> &#8211; An iterable containing one or more instances of
+<a class="reference internal" href="#ntracer.render.Channel" title="ntracer.render.Channel"><tt class="xref py py-class docutils literal"><span class="pre">Channel</span></tt></a>, describing the bit layout of a pixel.</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="ntracer.render.ImageFormat.width">
+<tt class="descname">width</tt><a class="headerlink" href="#ntracer.render.ImageFormat.width" title="Permalink to this definition">¶</a></dt>
+<dd><p>The width of the image in pixels.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="ntracer.render.ImageFormat.height">
+<tt class="descname">height</tt><a class="headerlink" href="#ntracer.render.ImageFormat.height" title="Permalink to this definition">¶</a></dt>
+<dd><p>The height of the image in pixels.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="ntracer.render.ImageFormat.channels">
+<tt class="descname">channels</tt><a class="headerlink" href="#ntracer.render.ImageFormat.channels" title="Permalink to this definition">¶</a></dt>
+<dd><p>An read-only list-like object containing one or more instances of
+<a class="reference internal" href="#ntracer.render.Channel" title="ntracer.render.Channel"><tt class="xref py py-class docutils literal"><span class="pre">Channel</span></tt></a>, describing the bit layout of a pixel.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="ntracer.render.ImageFormat.pitch">
+<tt class="descname">pitch</tt><a class="headerlink" href="#ntracer.render.ImageFormat.pitch" title="Permalink to this definition">¶</a></dt>
+<dd><p>The number of bytes per row.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="ntracer.render.ImageFormat.reversed">
+<tt class="descname">reversed</tt><a class="headerlink" href="#ntracer.render.ImageFormat.reversed" title="Permalink to this definition">¶</a></dt>
+<dd><p>If true, the bytes of each pixel will be written in reverse order (like
+a little-endian word).</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="ntracer.render.ImageFormat.bytes_per_pixel">
+<tt class="descname">bytes_per_pixel</tt><a class="headerlink" href="#ntracer.render.ImageFormat.bytes_per_pixel" title="Permalink to this definition">¶</a></dt>
+<dd><p>The byte size of one pixel.</p>
+<p>This is the sum of the bit sizes of the channels, rounded up.</p>
 </dd></dl>
 
 </dd></dl>
@@ -179,58 +502,9 @@ object at maximum intensity.</p>
 </dd></dl>
 
 <dl class="class">
-<dt id="ntracer.render.Renderer">
-<em class="property">class </em><tt class="descname">Renderer</tt><big>(</big><span class="optional">[</span><em>threads=0</em><span class="optional">]</span><big>)</big><a class="headerlink" href="#ntracer.render.Renderer" title="Permalink to this definition">¶</a></dt>
-<dd><p>A multi-threaded scene renderer.</p>
-<p>By default, this class uses as many threads are the are processing cores.
-The scene is drawn onto a <a class="reference external" href="http://www.pygame.org/docs/ref/surface.html#pygame.Surface">pygame.Surface</a> object and
-upon completion, sends a <tt class="docutils literal"><span class="pre">pygame.USEREVENT</span></tt> message with a <tt class="docutils literal"><span class="pre">source</span></tt>
-attribute set to the instance of the renderer.</p>
-<p>Note, the renderer does not honor clipping areas or subsurface boundaries
-and will always draw onto the entire surface.</p>
-<table class="docutils field-list" frame="void" rules="none">
-<col class="field-name" />
-<col class="field-body" />
-<tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>threads</strong> (<em>integer</em>) &#8211; The number of threads to use. If zero, the number of
-threads will equal the number of processing cores of the machine.</td>
-</tr>
-</tbody>
-</table>
-<dl class="method">
-<dt id="ntracer.render.Renderer.abort_render">
-<tt class="descname">abort_render</tt><big>(</big><big>)</big><a class="headerlink" href="#ntracer.render.Renderer.abort_render" title="Permalink to this definition">¶</a></dt>
-<dd><p>Signal for the renderer to quit and wait until all drawing has stopped
-and the scene has been unlocked.</p>
-<p>If the renderer isn&#8217;t running, this does nothing.</p>
-</dd></dl>
-
-<dl class="method">
-<dt id="ntracer.render.Renderer.begin_render">
-<tt class="descname">begin_render</tt><big>(</big><em>dest</em>, <em>scene</em><big>)</big><a class="headerlink" href="#ntracer.render.Renderer.begin_render" title="Permalink to this definition">¶</a></dt>
-<dd><p>Begin rendering <tt class="docutils literal"><span class="pre">scene</span></tt> onto <tt class="docutils literal"><span class="pre">dest</span></tt>.</p>
-<p>If the renderer is already running, an exception is thrown instead. Upon
-starting, the scene will be locked for writing.</p>
-<table class="docutils field-list" frame="void" rules="none">
-<col class="field-name" />
-<col class="field-body" />
-<tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
-<li><strong>dest</strong> (<em>pygame.Surface</em>) &#8211; A surface to draw onto.</li>
-<li><strong>scene</strong> (<em>Scene</em>) &#8211; The scene to draw.</li>
-</ul>
-</td>
-</tr>
-</tbody>
-</table>
-</dd></dl>
-
-</dd></dl>
-
-<dl class="class">
 <dt id="ntracer.render.Scene">
 <em class="property">class </em><tt class="descname">Scene</tt><a class="headerlink" href="#ntracer.render.Scene" title="Permalink to this definition">¶</a></dt>
-<dd><p>A scene that <a class="reference internal" href="#ntracer.render.Renderer" title="ntracer.render.Renderer"><tt class="xref py py-class docutils literal"><span class="pre">Renderer</span></tt></a> can render.</p>
+<dd><p>A scene that <tt class="xref py py-class docutils literal"><span class="pre">Renderer</span></tt> can render.</p>
 <p>Although not exposed to Python code, the scene class has a concept of
 locking. While a renderer is drawing a scene, the scene is locked. While
 locked, a scene cannot be modified. Attempting to do so will raise an
@@ -404,7 +678,7 @@ axis. It&#8217;s not much to look at but it renders really fast.</p>
 <dt id="ntracer.tracern.BoxScene.set_camera">
 <tt class="descname">set_camera</tt><big>(</big><em>camera</em><big>)</big><a class="headerlink" href="#ntracer.tracern.BoxScene.set_camera" title="Permalink to this definition">¶</a></dt>
 <dd><p>Set the scene&#8217;s camera to a copy of the provided value.</p>
-<p>If the scene has been locked by a <a class="reference internal" href="#ntracer.render.Renderer" title="ntracer.render.Renderer"><tt class="xref py py-class docutils literal"><span class="pre">render.Renderer</span></tt></a>, this
+<p>If the scene has been locked by a <tt class="xref py py-class docutils literal"><span class="pre">render.Renderer</span></tt>, this
 function will raise an exception instead.</p>
 </dd></dl>
 
@@ -412,7 +686,7 @@ function will raise an exception instead.</p>
 <dt id="ntracer.tracern.BoxScene.set_fov">
 <tt class="descname">set_fov</tt><big>(</big><em>fov</em><big>)</big><a class="headerlink" href="#ntracer.tracern.BoxScene.set_fov" title="Permalink to this definition">¶</a></dt>
 <dd><p>Set the field of vision.</p>
-<p>If the scene has been locked by a <a class="reference internal" href="#ntracer.render.Renderer" title="ntracer.render.Renderer"><tt class="xref py py-class docutils literal"><span class="pre">render.Renderer</span></tt></a>, this
+<p>If the scene has been locked by a <tt class="xref py py-class docutils literal"><span class="pre">render.Renderer</span></tt>, this
 function will raise an exception instead.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -557,7 +831,7 @@ effect is undefined).</p>
 that encloses all the primitives of the scene.</li>
 <li><strong>aabb_max</strong> (<em>vector</em>) &#8211; The maximum extent of the axis-aligned bounding-box
 that encloses all the primitives of the scene.</li>
-<li><strong>data</strong> (<em>KDNode</em>) &#8211; The root node of a k-d tree.</li>
+<li><strong>data</strong> (<a class="reference internal" href="#ntracer.tracern.KDNode" title="ntracer.tracern.KDNode"><tt class="xref py py-class docutils literal"><span class="pre">KDNode</span></tt></a>) &#8211; The root node of a k-d tree.</li>
 </ul>
 </td>
 </tr>
@@ -569,7 +843,7 @@ that encloses all the primitives of the scene.</li>
 <dd><p>Add a light to the scene.</p>
 <p>The light will be added to <a class="reference internal" href="#ntracer.tracern.CompositeScene.global_lights" title="ntracer.tracern.CompositeScene.global_lights"><tt class="xref py py-attr docutils literal"><span class="pre">global_lights</span></tt></a> or
 <a class="reference internal" href="#ntracer.tracern.CompositeScene.point_lights" title="ntracer.tracern.CompositeScene.point_lights"><tt class="xref py py-attr docutils literal"><span class="pre">point_lights</span></tt></a> according to its type.</p>
-<p>If the scene has been locked by a <a class="reference internal" href="#ntracer.render.Renderer" title="ntracer.render.Renderer"><tt class="xref py py-class docutils literal"><span class="pre">render.Renderer</span></tt></a>, this
+<p>If the scene has been locked by a <tt class="xref py py-class docutils literal"><span class="pre">render.Renderer</span></tt>, this
 method will raise an exception instead.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -592,7 +866,7 @@ method will raise an exception instead.</p>
 <dt id="ntracer.tracern.CompositeScene.set_ambient_color">
 <tt class="descname">set_ambient_color</tt><big>(</big><em>color</em><big>)</big><a class="headerlink" href="#ntracer.tracern.CompositeScene.set_ambient_color" title="Permalink to this definition">¶</a></dt>
 <dd><p>Set the value of <a class="reference internal" href="#ntracer.tracern.CompositeScene.ambient_color" title="ntracer.tracern.CompositeScene.ambient_color"><tt class="xref py py-attr docutils literal"><span class="pre">ambient_color</span></tt></a></p>
-<p>If the scene has been locked by a <a class="reference internal" href="#ntracer.render.Renderer" title="ntracer.render.Renderer"><tt class="xref py py-class docutils literal"><span class="pre">render.Renderer</span></tt></a>, this
+<p>If the scene has been locked by a <tt class="xref py py-class docutils literal"><span class="pre">render.Renderer</span></tt>, this
 method will raise an exception instead.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -609,7 +883,7 @@ three numbers.</td>
 <dt id="ntracer.tracern.CompositeScene.set_camera">
 <tt class="descname">set_camera</tt><big>(</big><em>camera</em><big>)</big><a class="headerlink" href="#ntracer.tracern.CompositeScene.set_camera" title="Permalink to this definition">¶</a></dt>
 <dd><p>Set the scene&#8217;s camera to a copy of the provided value.</p>
-<p>If the scene has been locked by a <a class="reference internal" href="#ntracer.render.Renderer" title="ntracer.render.Renderer"><tt class="xref py py-class docutils literal"><span class="pre">render.Renderer</span></tt></a>, this
+<p>If the scene has been locked by a <tt class="xref py py-class docutils literal"><span class="pre">render.Renderer</span></tt>, this
 method will raise an exception instead.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -625,7 +899,7 @@ method will raise an exception instead.</p>
 <dt id="ntracer.tracern.CompositeScene.set_camera_light">
 <tt class="descname">set_camera_light</tt><big>(</big><em>camera_light</em><big>)</big><a class="headerlink" href="#ntracer.tracern.CompositeScene.set_camera_light" title="Permalink to this definition">¶</a></dt>
 <dd><p>Set the value of <a class="reference internal" href="#ntracer.tracern.CompositeScene.camera_light" title="ntracer.tracern.CompositeScene.camera_light"><tt class="xref py py-attr docutils literal"><span class="pre">camera_light</span></tt></a></p>
-<p>If the scene has been locked by a <a class="reference internal" href="#ntracer.render.Renderer" title="ntracer.render.Renderer"><tt class="xref py py-class docutils literal"><span class="pre">render.Renderer</span></tt></a>, this
+<p>If the scene has been locked by a <tt class="xref py py-class docutils literal"><span class="pre">render.Renderer</span></tt>, this
 method will raise an exception instead.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -641,7 +915,7 @@ method will raise an exception instead.</p>
 <dt id="ntracer.tracern.CompositeScene.set_fov">
 <tt class="descname">set_fov</tt><big>(</big><em>fov</em><big>)</big><a class="headerlink" href="#ntracer.tracern.CompositeScene.set_fov" title="Permalink to this definition">¶</a></dt>
 <dd><p>Set the field of vision.</p>
-<p>If the scene has been locked by a <a class="reference internal" href="#ntracer.render.Renderer" title="ntracer.render.Renderer"><tt class="xref py py-class docutils literal"><span class="pre">render.Renderer</span></tt></a>, this
+<p>If the scene has been locked by a <tt class="xref py py-class docutils literal"><span class="pre">render.Renderer</span></tt>, this
 method will raise an exception instead.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -657,7 +931,7 @@ method will raise an exception instead.</p>
 <dt id="ntracer.tracern.CompositeScene.set_max_reflect_depth">
 <tt class="descname">set_max_reflect_depth</tt><big>(</big><em>depth</em><big>)</big><a class="headerlink" href="#ntracer.tracern.CompositeScene.set_max_reflect_depth" title="Permalink to this definition">¶</a></dt>
 <dd><p>Set the value of <a class="reference internal" href="#ntracer.tracern.CompositeScene.max_reflect_depth" title="ntracer.tracern.CompositeScene.max_reflect_depth"><tt class="xref py py-attr docutils literal"><span class="pre">max_reflect_depth</span></tt></a>.</p>
-<p>If the scene has been locked by a <a class="reference internal" href="#ntracer.render.Renderer" title="ntracer.render.Renderer"><tt class="xref py py-class docutils literal"><span class="pre">render.Renderer</span></tt></a>, this
+<p>If the scene has been locked by a <tt class="xref py py-class docutils literal"><span class="pre">render.Renderer</span></tt>, this
 method will raise an exception instead.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -673,7 +947,7 @@ method will raise an exception instead.</p>
 <dt id="ntracer.tracern.CompositeScene.set_shadows">
 <tt class="descname">set_shadows</tt><big>(</big><em>shadows</em><big>)</big><a class="headerlink" href="#ntracer.tracern.CompositeScene.set_shadows" title="Permalink to this definition">¶</a></dt>
 <dd><p>Set the value of <a class="reference internal" href="#ntracer.tracern.CompositeScene.shadows" title="ntracer.tracern.CompositeScene.shadows"><tt class="xref py py-attr docutils literal"><span class="pre">shadows</span></tt></a></p>
-<p>If the scene has been locked by a <a class="reference internal" href="#ntracer.render.Renderer" title="ntracer.render.Renderer"><tt class="xref py py-class docutils literal"><span class="pre">render.Renderer</span></tt></a>, this
+<p>If the scene has been locked by a <tt class="xref py py-class docutils literal"><span class="pre">render.Renderer</span></tt>, this
 method will raise an exception instead.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -816,7 +1090,7 @@ camera light (see <a class="reference internal" href="#ntracer.tracern.Composite
 <tbody valign="top">
 <tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
 <li><strong>direction</strong> (<em>vector</em>) &#8211; The direction that the light&#8217;s rays travel (i.e.
-the light will be located at <img class="math" src="../_images/math/640e80cd1920954352800d6f592fee885cacfcf0.png" alt="-\text{direction} \times \infty"/>).</li>
+the light will be located at <img class="math" src="../_images/math/0cbfc2371a06d15a122f21dcb110d338c59b6f30.png" alt="-\text{direction} \times \infty"/>).</li>
 <li><strong>color</strong> &#8211; The light&#8217;s color. This can be an instance of
 <a class="reference internal" href="#ntracer.render.Color" title="ntracer.render.Color"><tt class="xref py py-class docutils literal"><span class="pre">render.Color</span></tt></a> or a tuple with three numbers.</li>
 </ul>
@@ -840,7 +1114,7 @@ the light will be located at <img class="math" src="../_images/math/640e80cd1920
 <dt id="ntracer.tracern.GlobalLight.direction">
 <tt class="descname">direction</tt><a class="headerlink" href="#ntracer.tracern.GlobalLight.direction" title="Permalink to this definition">¶</a></dt>
 <dd><p>The direction that the light&#8217;s rays travel (i.e. the light source will
-be located at <img class="math" src="../_images/math/640e80cd1920954352800d6f592fee885cacfcf0.png" alt="-\text{direction} \times \infty"/>).</p>
+be located at <img class="math" src="../_images/math/0cbfc2371a06d15a122f21dcb110d338c59b6f30.png" alt="-\text{direction} \times \infty"/>).</p>
 </dd></dl>
 
 </dd></dl>
@@ -902,8 +1176,8 @@ last element (unless the last element is the one being deleted).</p>
 <li><strong>axis</strong> (<em>integer</em>) &#8211; The axis that the split hyper-plane is perpendicular
 to.</li>
 <li><strong>split</strong> (<em>number</em>) &#8211; The location along the axis where the split occurs.</li>
-<li><strong>left</strong> (<em>KDNode</em>) &#8211; The left node (&lt; split) or <tt class="docutils literal"><span class="pre">None</span></tt>.</li>
-<li><strong>right</strong> (<em>KDNode</em>) &#8211; The right node (&gt;= split) or <tt class="docutils literal"><span class="pre">None</span></tt>.</li>
+<li><strong>left</strong> (<a class="reference internal" href="#ntracer.tracern.KDNode" title="ntracer.tracern.KDNode"><tt class="xref py py-class docutils literal"><span class="pre">KDNode</span></tt></a>) &#8211; The left node (&lt; split) or <tt class="docutils literal"><span class="pre">None</span></tt>.</li>
+<li><strong>right</strong> (<a class="reference internal" href="#ntracer.tracern.KDNode" title="ntracer.tracern.KDNode"><tt class="xref py py-class docutils literal"><span class="pre">KDNode</span></tt></a>) &#8211; The right node (&gt;= split) or <tt class="docutils literal"><span class="pre">None</span></tt>.</li>
 </ul>
 </td>
 </tr>
@@ -1004,8 +1278,7 @@ no intersection occurs, the return value will be an empty list.</p>
 <li><strong>direction</strong> (<em>vector</em>) &#8211; The direction of the ray.</li>
 <li><strong>t_near</strong> (<em>number</em>) &#8211; </li>
 <li><strong>t_far</strong> (<em>number</em>) &#8211; </li>
-<li><strong>source</strong> (<em>KDNode</em>) &#8211; A node that will not be considered for
-intersection.</li>
+<li><strong>source</strong> (<a class="reference internal" href="#ntracer.tracern.KDNode" title="ntracer.tracern.KDNode"><tt class="xref py py-class docutils literal"><span class="pre">KDNode</span></tt></a>) &#8211; A node that will not be considered for intersection.</li>
 </ul>
 </td>
 </tr>
@@ -1036,8 +1309,7 @@ can happen when a primitive crosses a split pane).</p>
 <li><strong>distance</strong> (<em>number</em>) &#8211; How far out to check for intersections.</li>
 <li><strong>t_near</strong> (<em>number</em>) &#8211; </li>
 <li><strong>t_far</strong> (<em>number</em>) &#8211; </li>
-<li><strong>source</strong> (<em>KDNode</em>) &#8211; A node that will not be considered for
-intersection.</li>
+<li><strong>source</strong> (<a class="reference internal" href="#ntracer.tracern.KDNode" title="ntracer.tracern.KDNode"><tt class="xref py py-class docutils literal"><span class="pre">KDNode</span></tt></a>) &#8211; A node that will not be considered for intersection.</li>
 </ul>
 </td>
 </tr>
@@ -1145,7 +1417,7 @@ present in 3-space, thus instead of taking one perpendicular vector,
 this method takes two coplanar vectors.</p>
 <p>The resulting matrix <tt class="docutils literal"><span class="pre">M</span></tt> is such that <tt class="code docutils literal"><span class="pre">M</span> <span class="pre">*</span> <span class="pre">p</span></tt> is equal to:</p>
 <div class="math">
-<p><img src="../_images/math/23de47c95731826dd78e29b35fc00aa06c9e35a4.png" alt="(\mathbf{p} \cdot \mathbf{a})(\mathbf{a}(\cos \theta - 1) -
+<p><img src="../_images/math/6dd9b9c5778c6da759b993e8fbc63072ce46b7dd.png" alt="(\mathbf{p} \cdot \mathbf{a})(\mathbf{a}(\cos \theta - 1) -
 \mathbf{b} \sin \theta) + (\mathbf{p} \cdot \mathbf{b})(\mathbf{b}
 (\cos \theta - 1) + \mathbf{a} \sin \theta) + \mathbf{p}"/></p>
 </div><table class="docutils field-list" frame="void" rules="none">
@@ -1220,7 +1492,7 @@ too, thus its <tt class="docutils literal"><span class="pre">r</span></tt> <tt c
 <p>The intensity of the light at a given point depends on the distance from
 <a class="reference internal" href="#ntracer.tracern.PointLight.position" title="ntracer.tracern.PointLight.position"><tt class="xref py py-attr docutils literal"><span class="pre">position</span></tt></a> and is given by the formula:</p>
 <div class="math">
-<p><img src="../_images/math/d66c09d69fa61f6bd2da96d14bdece783fbf2944.png" alt="\text{color} \times \frac{1}{\text{distance}^{\text{dimension} - 1}}"/></p>
+<p><img src="../_images/math/8a0ae6d77326f7994820316e8ffb1f20b79f09a6.png" alt="\text{color} \times \frac{1}{\text{distance}^{\text{dimension} - 1}}"/></p>
 </div><table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
@@ -1383,9 +1655,8 @@ bounding box.</p>
 <li><strong>type</strong> &#8211; The type of solid: either <a class="reference internal" href="#ntracer.wrapper.CUBE" title="ntracer.wrapper.CUBE"><tt class="xref py py-data docutils literal"><span class="pre">wrapper.CUBE</span></tt></a> or
 <a class="reference internal" href="#ntracer.wrapper.SPHERE" title="ntracer.wrapper.SPHERE"><tt class="xref py py-data docutils literal"><span class="pre">wrapper.SPHERE</span></tt></a>.</li>
 <li><strong>position</strong> (<em>vector</em>) &#8211; The position of the solid.</li>
-<li><strong>orientation</strong> (<em>Matrix</em>) &#8211; A transformation matrix. The matrix must be
-invertable.</li>
-<li><strong>material</strong> (<em>Material</em>) &#8211; A material to apply to the solid.</li>
+<li><strong>orientation</strong> (<a class="reference internal" href="#ntracer.tracern.Matrix" title="ntracer.tracern.Matrix"><tt class="xref py py-class docutils literal"><span class="pre">Matrix</span></tt></a>) &#8211; A transformation matrix. The matrix must be invertable.</li>
+<li><strong>material</strong> (<a class="reference internal" href="#ntracer.render.Material" title="ntracer.render.Material"><tt class="xref py py-class docutils literal"><span class="pre">render.Material</span></tt></a>) &#8211; A material to apply to the solid.</li>
 </ul>
 </td>
 </tr>
@@ -1438,9 +1709,8 @@ invertable.</li>
 <li><strong>type</strong> &#8211; The type of solid: either <a class="reference internal" href="#ntracer.wrapper.CUBE" title="ntracer.wrapper.CUBE"><tt class="xref py py-data docutils literal"><span class="pre">wrapper.CUBE</span></tt></a> or
 <a class="reference internal" href="#ntracer.wrapper.SPHERE" title="ntracer.wrapper.SPHERE"><tt class="xref py py-data docutils literal"><span class="pre">wrapper.SPHERE</span></tt></a>.</li>
 <li><strong>position</strong> (<em>vector</em>) &#8211; The position of the solid.</li>
-<li><strong>orientation</strong> (<em>Matrix</em>) &#8211; A transformation matrix. The matrix must be
-invertable.</li>
-<li><strong>material</strong> (<em>Material</em>) &#8211; A material to apply to the solid.</li>
+<li><strong>orientation</strong> (<a class="reference internal" href="#ntracer.tracern.Matrix" title="ntracer.tracern.Matrix"><tt class="xref py py-class docutils literal"><span class="pre">Matrix</span></tt></a>) &#8211; A transformation matrix. The matrix must be invertable.</li>
+<li><strong>material</strong> (<a class="reference internal" href="#ntracer.render.Material" title="ntracer.render.Material"><tt class="xref py py-class docutils literal"><span class="pre">render.Material</span></tt></a>) &#8211; A material to apply to the solid.</li>
 </ul>
 </td>
 </tr>
@@ -1500,7 +1770,7 @@ perimeter/hull.</p>
 <li><strong>p1</strong> (<em>vector</em>) &#8211; </li>
 <li><strong>face_normal</strong> (<em>vector</em>) &#8211; </li>
 <li><strong>edge_normals</strong> (<em>iterable</em>) &#8211; </li>
-<li><strong>material</strong> (<em>Material</em>) &#8211; A material to apply to the simplex.</li>
+<li><strong>material</strong> (<a class="reference internal" href="#ntracer.render.Material" title="ntracer.render.Material"><tt class="xref py py-class docutils literal"><span class="pre">render.Material</span></tt></a>) &#8211; A material to apply to the simplex.</li>
 </ul>
 </td>
 </tr>
@@ -1517,7 +1787,7 @@ perimeter/hull.</p>
 <tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
 <li><strong>points</strong> &#8211; A sequence of vectors specifying the vertices. The number
 of vectors must equal their dimension.</li>
-<li><strong>material</strong> (<em>Material</em>) &#8211; A material to apply to the simplex.</li>
+<li><strong>material</strong> (<a class="reference internal" href="#ntracer.render.Material" title="ntracer.render.Material"><tt class="xref py py-class docutils literal"><span class="pre">render.Material</span></tt></a>) &#8211; A material to apply to the simplex.</li>
 </ul>
 </td>
 </tr>
@@ -1528,7 +1798,7 @@ of vectors must equal their dimension.</li>
 <dl class="attribute">
 <dt id="ntracer.tracern.Triangle.d">
 <tt class="descname">d</tt><a class="headerlink" href="#ntracer.tracern.Triangle.d" title="Permalink to this definition">¶</a></dt>
-<dd><p>A value that equals <img class="math" src="../_images/math/6b88f4002ad443d6c0d2aceab7e28270040425b4.png" alt="-\text{face\_normal} \cdot \text{p1}"/></p>
+<dd><p>A value that equals <img class="math" src="../_images/math/f5e6331ac1616be7cfa0ba889b921f739e67d78d.png" alt="-\text{face\_normal} \cdot \text{p1}"/></p>
 <p>This is simply a pre-computed value needed by the ray-tracer.</p>
 </dd></dl>
 
@@ -1609,7 +1879,7 @@ the simplex.</p>
 <tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
 <li><strong>points</strong> &#8211; A sequence of vectors specifying the vertices of the simplex.
 The number of vectors must equal their dimension.</li>
-<li><strong>material</strong> (<em>Material</em>) &#8211; A material to apply to the simplex.</li>
+<li><strong>material</strong> (<a class="reference internal" href="#ntracer.render.Material" title="ntracer.render.Material"><tt class="xref py py-class docutils literal"><span class="pre">render.Material</span></tt></a>) &#8211; A material to apply to the simplex.</li>
 </ul>
 </td>
 </tr>
@@ -1807,7 +2077,7 @@ returns a number.</td>
 <col class="field-body" />
 <tbody valign="top">
 <tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>vectors</strong> &#8211; A sequence of linearly independent vectors. The number of
-vectors must be one less than their dimensionality.</td>
+vectors must be one less than their dimension.</td>
 </tr>
 </tbody>
 </table>
@@ -1823,14 +2093,58 @@ vectors must be one less than their dimensionality.</td>
 <div class="section" id="module-ntracer.kdtree_builder">
 <span id="kdtree-builder-module"></span><h2><tt class="xref py py-mod docutils literal"><span class="pre">kdtree_builder</span></tt> Module<a class="headerlink" href="#module-ntracer.kdtree_builder" title="Permalink to this headline">¶</a></h2>
 <dl class="function">
-<dt id="ntracer.kdtree_builder.build_kdtree">
-<tt class="descname">build_kdtree</tt><big>(</big><em>nt</em>, <em>primitives</em><big>)</big><a class="headerlink" href="#ntracer.kdtree_builder.build_kdtree" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="function">
 <dt id="ntracer.kdtree_builder.build_composite_scene">
 <tt class="descname">build_composite_scene</tt><big>(</big><em>nt</em>, <em>primitives</em><big>)</big><a class="headerlink" href="#ntracer.kdtree_builder.build_composite_scene" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Create a scene from a sequence of
+<a class="reference internal" href="#ntracer.tracern.PrimitivePrototype" title="ntracer.tracern.PrimitivePrototype"><tt class="xref py py-class docutils literal"><span class="pre">tracern.PrimitivePrototype</span></tt></a> instances.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>nt</strong> &#8211; An instance of <a class="reference internal" href="#ntracer.wrapper.NTracer" title="ntracer.wrapper.NTracer"><tt class="xref py py-class docutils literal"><span class="pre">wrapper.NTracer</span></tt></a> or an integer that
+will be passed to the constructor of <a class="reference internal" href="#ntracer.wrapper.NTracer" title="ntracer.wrapper.NTracer"><tt class="xref py py-class docutils literal"><span class="pre">wrapper.NTracer</span></tt></a>.</li>
+<li><strong>primitives</strong> (<em>sequence</em>) &#8211; One or more instances of
+<a class="reference internal" href="#ntracer.tracern.PrimitivePrototype" title="ntracer.tracern.PrimitivePrototype"><tt class="xref py py-class docutils literal"><span class="pre">tracern.PrimitivePrototype</span></tt></a>.</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last"><a class="reference internal" href="#ntracer.tracern.CompositeScene" title="ntracer.tracern.CompositeScene"><tt class="xref py py-class docutils literal"><span class="pre">tracern.CompositeScene</span></tt></a></p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="ntracer.kdtree_builder.build_kdtree">
+<tt class="descname">build_kdtree</tt><big>(</big><em>nt</em>, <em>primitives</em><big>)</big><a class="headerlink" href="#ntracer.kdtree_builder.build_kdtree" title="Permalink to this definition">¶</a></dt>
+<dd><p>Create a k-d tree from a sequence of
+<a class="reference internal" href="#ntracer.tracern.PrimitivePrototype" title="ntracer.tracern.PrimitivePrototype"><tt class="xref py py-class docutils literal"><span class="pre">tracern.PrimitivePrototype</span></tt></a> instances.</p>
+<p>The return value is a tuple containing two vectors followed by the root
+node of k-d tree (instance of <a class="reference internal" href="#ntracer.tracern.KDNode" title="ntracer.tracern.KDNode"><tt class="xref py py-class docutils literal"><span class="pre">tracern.KDNode</span></tt></a>). The vectors are
+the minimum followed by the maximum point of an axis-aligned bounding box
+enclosing all the primitives from <tt class="docutils literal"><span class="pre">primitives</span></tt>. The tuple&#8217;s values can be
+passed directly to <a class="reference internal" href="#ntracer.tracern.CompositeScene" title="ntracer.tracern.CompositeScene"><tt class="xref py py-class docutils literal"><span class="pre">tracern.CompositeScene</span></tt></a> which is exactly
+what <a class="reference internal" href="#ntracer.kdtree_builder.build_composite_scene" title="ntracer.kdtree_builder.build_composite_scene"><tt class="xref py py-func docutils literal"><span class="pre">build_composite_scene()</span></tt></a> does.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>nt</strong> &#8211; An instance of <a class="reference internal" href="#ntracer.wrapper.NTracer" title="ntracer.wrapper.NTracer"><tt class="xref py py-class docutils literal"><span class="pre">wrapper.NTracer</span></tt></a> or an integer that
+will be passed to the constructor of <a class="reference internal" href="#ntracer.wrapper.NTracer" title="ntracer.wrapper.NTracer"><tt class="xref py py-class docutils literal"><span class="pre">wrapper.NTracer</span></tt></a>.</li>
+<li><strong>primitives</strong> (<em>sequence</em>) &#8211; One or more instances of
+<a class="reference internal" href="#ntracer.tracern.PrimitivePrototype" title="ntracer.tracern.PrimitivePrototype"><tt class="xref py py-class docutils literal"><span class="pre">tracern.PrimitivePrototype</span></tt></a>.</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">tuple</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
 
 </div>
 <div class="section" id="module-ntracer.wrapper">
@@ -1873,12 +2187,90 @@ even if a specialized version exists. This is mainly for testing.</li>
 <dl class="data">
 <dt id="ntracer.wrapper.CUBE">
 <tt class="descname">CUBE</tt><a class="headerlink" href="#ntracer.wrapper.CUBE" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>A constant that can be passed to <a class="reference internal" href="#ntracer.tracern.Solid" title="ntracer.tracern.Solid"><tt class="xref py py-class docutils literal"><span class="pre">tracern.Solid</span></tt></a>&#8216;s constructor
+to create a hypercube.</p>
+</dd></dl>
 
 <dl class="data">
 <dt id="ntracer.wrapper.SPHERE">
 <tt class="descname">SPHERE</tt><a class="headerlink" href="#ntracer.wrapper.SPHERE" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>A constant that can be passed to <a class="reference internal" href="#ntracer.tracern.Solid" title="ntracer.tracern.Solid"><tt class="xref py py-class docutils literal"><span class="pre">tracern.Solid</span></tt></a>&#8216;s constructor
+to create a hypersphere.</p>
+</dd></dl>
+
+</div>
+<div class="section" id="module-ntracer.pygame_render">
+<span id="pygame-render-module"></span><h2><tt class="xref py py-mod docutils literal"><span class="pre">pygame_render</span></tt> Module<a class="headerlink" href="#module-ntracer.pygame_render" title="Permalink to this headline">¶</a></h2>
+<dl class="class">
+<dt id="ntracer.pygame_render.PygameRenderer">
+<em class="property">class </em><tt class="descname">PygameRenderer</tt><big>(</big><em>threads=0</em><big>)</big><a class="headerlink" href="#ntracer.pygame_render.PygameRenderer" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#ntracer.render.CallbackRenderer" title="ntracer.render.CallbackRenderer"><tt class="xref py py-class docutils literal"><span class="pre">render.CallbackRenderer</span></tt></a></p>
+<p>A renderer for Pygame surfaces.</p>
+<p>The scene is drawn onto a <a class="reference external" href="http://www.pygame.org/docs/ref/surface.html#pygame.Surface">pygame.Surface</a> object and
+upon completion, sends a Pygame event of type <a class="reference internal" href="#ntracer.pygame_render.PygameRenderer.ON_COMPLETE" title="ntracer.pygame_render.PygameRenderer.ON_COMPLETE"><tt class="xref py py-attr docutils literal"><span class="pre">ON_COMPLETE</span></tt></a> with a
+<tt class="docutils literal"><span class="pre">source</span></tt> attribute set to the instance of the renderer, and <tt class="docutils literal"><span class="pre">surface</span></tt>
+and <tt class="docutils literal"><span class="pre">scene</span></tt> attributes with the surface and scene that were passed to
+<a class="reference internal" href="#ntracer.pygame_render.PygameRenderer.begin_render" title="ntracer.pygame_render.PygameRenderer.begin_render"><tt class="xref py py-meth docutils literal"><span class="pre">begin_render()</span></tt></a>.</p>
+<p>Note: the renderer does not honor clipping areas or subsurface boundaries
+(it will always draw onto the entire surface) and indexed color modes (all
+8-bit color modes are indexed) are not supported.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>threads</strong> (<em>integer</em>) &#8211; The number of threads to use. If zero, the number
+of threads will equal the number of processing cores of the machine.</td>
+</tr>
+</tbody>
+</table>
+<dl class="method">
+<dt id="ntracer.pygame_render.PygameRenderer.begin_render">
+<tt class="descname">begin_render</tt><big>(</big><em>surface</em>, <em>scene</em><big>)</big><a class="headerlink" href="#ntracer.pygame_render.PygameRenderer.begin_render" title="Permalink to this definition">¶</a></dt>
+<dd><p>Begin rendering <tt class="docutils literal"><span class="pre">scene</span></tt> onto <tt class="docutils literal"><span class="pre">dest</span></tt>.</p>
+<p>If the renderer is already running, an exception is thrown instead.
+Upon starting, the scene will be locked for writing.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>dest</strong> (<em>pygame.Surface</em>) &#8211; A surface to draw onto.</li>
+<li><strong>scene</strong> (<a class="reference internal" href="#ntracer.render.Scene" title="ntracer.render.Scene"><tt class="xref py py-class docutils literal"><span class="pre">render.Scene</span></tt></a>) &#8211; The scene to draw.</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="ntracer.pygame_render.PygameRenderer.ON_COMPLETE">
+<tt class="descname">ON_COMPLETE</tt><a class="headerlink" href="#ntracer.pygame_render.PygameRenderer.ON_COMPLETE" title="Permalink to this definition">¶</a></dt>
+<dd><p>The Pygame event type that will be sent when rendering is finished.</p>
+<p>This is set to <tt class="docutils literal"><span class="pre">pygame.USEREVENT</span></tt> initially, but can be set to any
+value between <tt class="docutils literal"><span class="pre">pygame.USEREVENT</span></tt> and <tt class="docutils literal"><span class="pre">pygame.NUMEVENTS</span></tt> to avoid
+conflicts with other producers of events.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="function">
+<dt id="ntracer.pygame_render.channels_from_surface">
+<tt class="descname">channels_from_surface</tt><big>(</big><em>surface</em><big>)</big><a class="headerlink" href="#ntracer.pygame_render.channels_from_surface" title="Permalink to this definition">¶</a></dt>
+<dd><p>Create a list of <a class="reference internal" href="#ntracer.render.Channel" title="ntracer.render.Channel"><tt class="xref py py-class docutils literal"><span class="pre">render.Channel</span></tt></a> objects that match the
+pixel format of <tt class="docutils literal"><span class="pre">surface</span></tt>.</p>
+<p>Note: indexed color modes (all 8-bit color modes are indexed) are not
+supported.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>surface</strong> &#8211; <p>An instance of <a class="reference external" href="http://www.pygame.org/docs/ref/surface.html#pygame.Surface">pygame.Surface</a>.</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
 
 </div>
 <div class="section" id="module-ntracer.wavefront_obj">
@@ -1911,7 +2303,12 @@ even all the specialized modules, can be deleted with no loss of functionality.
 This package can also work without the generic version, using only specialized
 versions, but you would only be able to use those particular dimensionalities.</p>
 <p>Note that equivalent types between the generic and specific versions are not
-interchangeable with each other.</p>
+compatible with each other (e.g. an instance <tt class="docutils literal"><span class="pre">tracern.Vector</span></tt> cannot be added
+to an instance of <tt class="docutils literal"><span class="pre">tracer3.Vector</span></tt> even if they have the same dimension),
+however, they are interchangeable in the other modules (e.g.
+<a class="reference internal" href="#ntracer.kdtree_builder.build_composite_scene" title="ntracer.kdtree_builder.build_composite_scene"><tt class="xref py py-func docutils literal"><span class="pre">kdtree_builder.build_composite_scene()</span></tt></a> is documented as taking
+instances of <tt class="docutils literal"><span class="pre">tracern.PrimitivePrototype</span></tt>, but it will accept instances of
+<tt class="docutils literal"><span class="pre">tracer3.PrimitivePrototype</span></tt> just as well).</p>
 </div>
 </div>
 
@@ -1929,6 +2326,7 @@ interchangeable with each other.</p>
 <li><a class="reference internal" href="#module-ntracer.tracern"><tt class="docutils literal"><span class="pre">tracern</span></tt> Module</a></li>
 <li><a class="reference internal" href="#module-ntracer.kdtree_builder"><tt class="docutils literal"><span class="pre">kdtree_builder</span></tt> Module</a></li>
 <li><a class="reference internal" href="#module-ntracer.wrapper"><tt class="docutils literal"><span class="pre">wrapper</span></tt> Module</a></li>
+<li><a class="reference internal" href="#module-ntracer.pygame_render"><tt class="docutils literal"><span class="pre">pygame_render</span></tt> Module</a></li>
 <li><a class="reference internal" href="#module-ntracer.wavefront_obj"><tt class="docutils literal"><span class="pre">wavefront_obj</span></tt> Module</a></li>
 <li><a class="reference internal" href="#tracer3-tracer4-tracer5-modules"><tt class="docutils literal"><span class="pre">tracer3,</span> <span class="pre">tracer4,</span> <span class="pre">tracer5,</span> <span class="pre">...</span></tt> Modules</a></li>
 </ul>
@@ -1967,12 +2365,12 @@ interchangeable with each other.</p>
         <li class="right" >
           <a href="../example/" title="Basic Usage"
              >previous</a> |</li>
-        <li><a href="../">NTracer 0.4 documentation</a> &raquo;</li> 
+        <li><a href="../">NTracer 0.5 documentation</a> &raquo;</li> 
       </ul>
     </div>
     <div class="footer">
-        &copy; Copyright 2013, Rouslan Korneychuk.
-      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.1.3.
+        &copy; Copyright 2013-2014, Rouslan Korneychuk.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.2.2.
     </div>
   </body>
 </html>
