@@ -24,7 +24,7 @@
     <script type="text/javascript" src="../_static/underscore.js"></script>
     <script type="text/javascript" src="../_static/doctools.js"></script>
     <link rel="top" title="NTracer 0.5 documentation" href="../" />
-    <link rel="prev" title="Basic Usage" href="../example/" /> 
+    <link rel="prev" title="Using without Pygame" href="../nonpygame_example/" /> 
   </head>
   <body>
     <div class="related">
@@ -37,7 +37,7 @@
           <a href="../py-modindex/" title="Python Module Index"
              >modules</a> |</li>
         <li class="right" >
-          <a href="../example/" title="Basic Usage"
+          <a href="../nonpygame_example/" title="Using without Pygame"
              accesskey="P">previous</a> |</li>
         <li><a href="../">NTracer 0.5 documentation</a> &raquo;</li> 
       </ul>
@@ -88,7 +88,7 @@ be one minus the number of processing cores of the machine.</td>
 
 <dl class="method">
 <dt id="ntracer.render.BlockingRenderer.render">
-<tt class="descname">render</tt><big>(</big><em>dest</em>, <em>scene</em><big>)</big> &rarr; boolean<a class="headerlink" href="#ntracer.render.BlockingRenderer.render" title="Permalink to this definition">¶</a></dt>
+<tt class="descname">render</tt><big>(</big><em>dest</em>, <em>format</em>, <em>scene</em><big>)</big> &rarr; boolean<a class="headerlink" href="#ntracer.render.BlockingRenderer.render" title="Permalink to this definition">¶</a></dt>
 <dd><p>Render <tt class="docutils literal"><span class="pre">scene</span></tt> onto <tt class="docutils literal"><span class="pre">dest</span></tt>.</p>
 <p>If the renderer is already running on another thread, an exception is
 thrown instead. Upon starting, the scene will be locked for writing.</p>
@@ -510,6 +510,28 @@ locking. While a renderer is drawing a scene, the scene is locked. While
 locked, a scene cannot be modified. Attempting to do so will raise an
 exception.</p>
 <p>This cannot be instantiated in Python code, not even as a base class.</p>
+<dl class="method">
+<dt id="ntracer.render.Scene.calculate_color">
+<tt class="descname">calculate_color</tt><big>(</big><em>x</em>, <em>y</em>, <em>width</em>, <em>height</em><big>)</big> &rarr; Color<a class="headerlink" href="#ntracer.render.Scene.calculate_color" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the pixel color at a particular coordinate.</p>
+<p>Coordinate <tt class="docutils literal"><span class="pre">0,0</span></tt> is the top left pixel and <tt class="docutils literal"><span class="pre">width-1,height-1</span></tt> is the
+bottom right.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>x</strong> (<em>integer</em>) &#8211; The horizontal coordinate component.</li>
+<li><strong>y</strong> (<em>integer</em>) &#8211; The vertical coordinate component.</li>
+<li><strong>width</strong> (<em>integer</em>) &#8211; The pixel width of the image.</li>
+<li><strong>height</strong> (<em>integer</em>) &#8211; The pixel height of the image.</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
 </dd></dl>
 
 </div>
@@ -880,6 +902,30 @@ three numbers.</td>
 </dd></dl>
 
 <dl class="method">
+<dt id="ntracer.tracern.CompositeScene.set_background">
+<tt class="descname">set_background</tt><big>(</big><em>c1</em><span class="optional">[</span>, <em>c2=c1</em>, <em>c3=c1</em>, <em>axis=1</em><span class="optional">]</span><big>)</big><a class="headerlink" href="#ntracer.tracern.CompositeScene.set_background" title="Permalink to this definition">¶</a></dt>
+<dd><p>Set the values of <a class="reference internal" href="#ntracer.tracern.CompositeScene.bg1" title="ntracer.tracern.CompositeScene.bg1"><tt class="xref py py-attr docutils literal"><span class="pre">bg1</span></tt></a>, <a class="reference internal" href="#ntracer.tracern.CompositeScene.bg2" title="ntracer.tracern.CompositeScene.bg2"><tt class="xref py py-attr docutils literal"><span class="pre">bg2</span></tt></a>, <a class="reference internal" href="#ntracer.tracern.CompositeScene.bg3" title="ntracer.tracern.CompositeScene.bg3"><tt class="xref py py-attr docutils literal"><span class="pre">bg3</span></tt></a> and
+<a class="reference internal" href="#ntracer.tracern.CompositeScene.bg_gradient_axis" title="ntracer.tracern.CompositeScene.bg_gradient_axis"><tt class="xref py py-attr docutils literal"><span class="pre">bg_gradient_axis</span></tt></a>.</p>
+<p>If the scene has been locked by a <tt class="xref py py-class docutils literal"><span class="pre">render.Renderer</span></tt>, this
+method will raise an exception instead.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>c1</strong> (<em>color</em>) &#8211; The new value for <a class="reference internal" href="#ntracer.tracern.CompositeScene.bg1" title="ntracer.tracern.CompositeScene.bg1"><tt class="xref py py-attr docutils literal"><span class="pre">bg1</span></tt></a>.</li>
+<li><strong>c2</strong> (<em>color</em>) &#8211; The new value for <a class="reference internal" href="#ntracer.tracern.CompositeScene.bg2" title="ntracer.tracern.CompositeScene.bg2"><tt class="xref py py-attr docutils literal"><span class="pre">bg2</span></tt></a>.</li>
+<li><strong>c3</strong> (<em>color</em>) &#8211; The new value for <a class="reference internal" href="#ntracer.tracern.CompositeScene.bg3" title="ntracer.tracern.CompositeScene.bg3"><tt class="xref py py-attr docutils literal"><span class="pre">bg3</span></tt></a>.</li>
+<li><strong>axis</strong> (<em>integer</em>) &#8211; The new value for <a class="reference internal" href="#ntracer.tracern.CompositeScene.bg_gradient_axis" title="ntracer.tracern.CompositeScene.bg_gradient_axis"><tt class="xref py py-attr docutils literal"><span class="pre">bg_gradient_axis</span></tt></a>. This
+must be a value between 0 and dimension−1.</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
 <dt id="ntracer.tracern.CompositeScene.set_camera">
 <tt class="descname">set_camera</tt><big>(</big><em>camera</em><big>)</big><a class="headerlink" href="#ntracer.tracern.CompositeScene.set_camera" title="Permalink to this definition">¶</a></dt>
 <dd><p>Set the scene&#8217;s camera to a copy of the provided value.</p>
@@ -983,6 +1029,43 @@ the primitives of the scene.</p>
 <p>The default value is <tt class="docutils literal"><span class="pre">Color(0,0,0)</span></tt>.</p>
 <p>This attribute is read-only. To modify the value, use
 <a class="reference internal" href="#ntracer.tracern.CompositeScene.set_ambient_color" title="ntracer.tracern.CompositeScene.set_ambient_color"><tt class="xref py py-meth docutils literal"><span class="pre">set_ambient_color()</span></tt></a>.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="ntracer.tracern.CompositeScene.bg_gradient_axis">
+<tt class="descname">bg_gradient_axis</tt><a class="headerlink" href="#ntracer.tracern.CompositeScene.bg_gradient_axis" title="Permalink to this definition">¶</a></dt>
+<dd><p>The index of the axis along which the three color gradient of the
+background will run.</p>
+<p>The default value is 1, corresponding to the y-axis.</p>
+<p>This attribute is read-only. To modify the value, use
+<a class="reference internal" href="#ntracer.tracern.CompositeScene.set_background" title="ntracer.tracern.CompositeScene.set_background"><tt class="xref py py-meth docutils literal"><span class="pre">set_background()</span></tt></a>.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="ntracer.tracern.CompositeScene.bg1">
+<tt class="descname">bg1</tt><a class="headerlink" href="#ntracer.tracern.CompositeScene.bg1" title="Permalink to this definition">¶</a></dt>
+<dd><p>The first color of the three color gradient of the background.</p>
+<p>The default value is <tt class="docutils literal"><span class="pre">Color(1,1,1)</span></tt>.</p>
+<p>This attribute is read-only. To modify the value, use
+<a class="reference internal" href="#ntracer.tracern.CompositeScene.set_background" title="ntracer.tracern.CompositeScene.set_background"><tt class="xref py py-meth docutils literal"><span class="pre">set_background()</span></tt></a>.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="ntracer.tracern.CompositeScene.bg2">
+<tt class="descname">bg2</tt><a class="headerlink" href="#ntracer.tracern.CompositeScene.bg2" title="Permalink to this definition">¶</a></dt>
+<dd><p>The middle color of the three color gradient of the background.</p>
+<p>The default value is <tt class="docutils literal"><span class="pre">Color(0,0,0)</span></tt>.</p>
+<p>This attribute is read-only. To modify the value, use
+<a class="reference internal" href="#ntracer.tracern.CompositeScene.set_background" title="ntracer.tracern.CompositeScene.set_background"><tt class="xref py py-meth docutils literal"><span class="pre">set_background()</span></tt></a>.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="ntracer.tracern.CompositeScene.bg3">
+<tt class="descname">bg3</tt><a class="headerlink" href="#ntracer.tracern.CompositeScene.bg3" title="Permalink to this definition">¶</a></dt>
+<dd><p>The last color of the three color gradient of the background.</p>
+<p>The default value is <tt class="docutils literal"><span class="pre">Color(0,1,1)</span></tt>.</p>
+<p>This attribute is read-only. To modify the value, use
+<a class="reference internal" href="#ntracer.tracern.CompositeScene.set_background" title="ntracer.tracern.CompositeScene.set_background"><tt class="xref py py-meth docutils literal"><span class="pre">set_background()</span></tt></a>.</p>
 </dd></dl>
 
 <dl class="attribute">
@@ -2334,8 +2417,8 @@ instances of <tt class="docutils literal"><span class="pre">tracern.PrimitivePro
 </ul>
 
   <h4>Previous topic</h4>
-  <p class="topless"><a href="../example/"
-                        title="previous chapter">Basic Usage</a></p>
+  <p class="topless"><a href="../nonpygame_example/"
+                        title="previous chapter">Using without Pygame</a></p>
 <div id="searchbox" style="display: none">
   <h3>Quick search</h3>
     <form class="search" action="../search/" method="get">
@@ -2363,7 +2446,7 @@ instances of <tt class="docutils literal"><span class="pre">tracern.PrimitivePro
           <a href="../py-modindex/" title="Python Module Index"
              >modules</a> |</li>
         <li class="right" >
-          <a href="../example/" title="Basic Usage"
+          <a href="../nonpygame_example/" title="Using without Pygame"
              >previous</a> |</li>
         <li><a href="../">NTracer 0.5 documentation</a> &raquo;</li> 
       </ul>
