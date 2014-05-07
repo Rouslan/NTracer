@@ -241,6 +241,9 @@ def build_kdtree(nt,primitives):
     :rtype: tuple
     
     """
+    if not len(primitives):
+        raise ValueError('cannot build tree from empty sequence of primitives')
+    
     if not isinstance(nt,NTracer): nt = NTracer(nt)
 
     start = nt.Vector(reduce(partial(map,min),(p.aabb_min for p in primitives)))

@@ -20,7 +20,7 @@ def load_obj(file,nt=None):
     vertices = []
     triangles = []
     
-    with open(file,'rb') as input:
+    with open(file,'r') as input:
         for line in input:
             parts = line.split()
             if parts[0] == 'v':

@@ -309,6 +309,13 @@ int obj_KDNode::dimension() const {
     return static_cast<const obj_KDLeaf*>(this)->data()->dimension();
 }
 
+template<> obj_KDNode *checked_py_cast<obj_KDNode>(PyObject *o) {
+    if(Py_TYPE(o) != obj_KDBranch::pytype() && Py_TYPE(o) != obj_KDLeaf::pytype())
+        THROW_PYERR_STRING(TypeError,"object is not an an instance of " MODULE_STR ".KDNode");
+                
+    return reinterpret_cast<obj_KDNode*>(o);
+}
+
 
 SIMPLE_WRAPPER(aabb);
 
@@ -493,9 +500,9 @@ PyObject *obj_BoxScene_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
         try {
             try {
                 const char *names[] = {"dimension"};
-                get_arg ga(args,kwds,names,"BoxScene.__new__");
-                real d = from_pyobject<real>(ga(true));
-                ga.finished();
+                real d = std::get<0>(get_arg::get_args<real>("BoxScene.__new__",names,args,kwds));
+                
+                check_dimension(d);
                 
                 new(&ptr->base) box_scene<module_store>(d);
                 ptr->_get_base = &obj_BoxScene::get_base;
@@ -584,6 +591,47 @@ PyObject *obj_CompositeScene_add_light(obj_CompositeScene *self,PyObject *arg) {
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
+PyObject *obj_CompositeScene_set_background(obj_CompositeScene *self,PyObject *args,PyObject *kwds) {
+    try {
+        ensure_unlocked(self);
+        auto &base = self->get_base();
+        
+        const char *names[] = {"c1","c2","c3","axis"};
+        get_arg ga(args,kwds,names,"CompositeScene.set_background");
+        color c1;
+        read_color(c1,ga(true));
+        
+        color c2;
+        auto tmp = ga(false);
+        if(tmp) read_color(c2,tmp);
+        else c2 = c1;
+        
+        color c3;
+        tmp = ga(false);
+        if(tmp) read_color(c3,tmp);
+        else c3 = c1;
+        
+        int axis = composite_scene<module_store>::default_bg_gradient_axis;
+        tmp = ga(false);
+        if(tmp) {
+            axis = from_pyobject<int>(tmp);
+            if(axis < 0 || axis >= base.dimension()) {
+                PyErr_SetString(PyExc_ValueError,"\"axis\" must be between 0 and one less than the dimension of the scene");
+                return nullptr;
+            }
+        }
+        
+        ga.finished();
+        
+        base.bg1 = c1;
+        base.bg2 = c2;
+        base.bg3 = c3;
+        base.bg_gradient_axis = axis;
+        
+        Py_RETURN_NONE;
+    } PY_EXCEPT_HANDLERS(nullptr)
+}
+
 #define CS_SET_ATTR(ATTR) [](PyObject *_self,PyObject *arg) -> PyObject* { \
     auto self = reinterpret_cast<obj_CompositeScene*>(_self); \
     try { \
@@ -601,6 +649,7 @@ PyMethodDef obj_CompositeScene_methods[] = {
     {"set_shadows",CS_SET_ATTR(shadows),METH_O,NULL},
     {"set_camera_light",CS_SET_ATTR(camera_light),METH_O,NULL},
     {"set_ambient_color",reinterpret_cast<PyCFunction>(&obj_CompositeScene_set_ambient),METH_O,NULL},
+    {"set_background",reinterpret_cast<PyCFunction>(&obj_CompositeScene_set_background),METH_VARARGS|METH_KEYWORDS,NULL},
     {"add_light",reinterpret_cast<PyCFunction>(&obj_CompositeScene_add_light),METH_O,NULL},
     {NULL}
 };
@@ -615,15 +664,10 @@ PyObject *obj_CompositeScene_new(PyTypeObject *type,PyObject *args,PyObject *kwd
                 
                 auto aabb_min = from_pyobject<n_vector>(ga(true));
                 auto aabb_max = from_pyobject<n_vector>(ga(true));
-                
-                PyObject *data = ga(true);
-                
-                if(Py_TYPE(data) != obj_KDBranch::pytype() && Py_TYPE(data) != obj_KDLeaf::pytype())
-                    THROW_PYERR_STRING(TypeError,"\"data\" must be an instance of " MODULE_STR ".KDNode");
+                auto d_node = checked_py_cast<obj_KDNode>(ga(true));
                 
                 ga.finished();
-                
-                auto d_node = reinterpret_cast<obj_KDNode*>(data);
+
                 if(d_node->parent) THROW_PYERR_STRING(ValueError,"\"data\" must not be already attached to another node");
                 
                 if(aabb_min.dimension() != aabb_max.dimension() || aabb_min.dimension() != d_node->dimension())
@@ -659,6 +703,10 @@ PyGetSetDef obj_CompositeScene_getset[] = {
     {const_cast<char*>("shadows"),OBJ_GETTER(obj_CompositeScene,self->get_base().shadows),NULL,NULL,NULL},
     {const_cast<char*>("camera_light"),OBJ_GETTER(obj_CompositeScene,self->get_base().camera_light),NULL,NULL,NULL},
     {const_cast<char*>("ambient_color"),OBJ_GETTER(obj_CompositeScene,self->get_base().ambient),NULL,NULL,NULL},
+    {const_cast<char*>("bg1"),OBJ_GETTER(obj_CompositeScene,self->get_base().bg1),NULL,NULL,NULL},
+    {const_cast<char*>("bg2"),OBJ_GETTER(obj_CompositeScene,self->get_base().bg2),NULL,NULL,NULL},
+    {const_cast<char*>("bg3"),OBJ_GETTER(obj_CompositeScene,self->get_base().bg3),NULL,NULL,NULL},
+    {const_cast<char*>("bg_gradient_axis"),OBJ_GETTER(obj_CompositeScene,self->get_base().bg_gradient_axis),NULL,NULL,NULL},
     {const_cast<char*>("aabb_min"),OBJ_GETTER(obj_CompositeScene,self->get_base().aabb_min),NULL,NULL,NULL},
     {const_cast<char*>("aabb_max"),OBJ_GETTER(obj_CompositeScene,self->get_base().aabb_max),NULL,NULL,NULL},
     {const_cast<char*>("root"),OBJ_GETTER(
@@ -1460,8 +1508,9 @@ PyObject *obj_Vector_axis(PyObject*,PyObject *args,PyObject *kwds) {
         get_arg ga(args,kwds,names,"Vector.axis");
         int dimension = from_pyobject<int>(ga(true));
         int axis = from_pyobject<int>(ga(true));
-        PyObject *temp = ga(false);
-        real length = temp ? from_pyobject<real>(temp) : real(1);
+        real length = 1;
+        auto tmp = ga(false);
+        if(tmp) length = from_pyobject<real>(tmp);
         ga.finished();
 
         check_dimension(dimension);
@@ -1499,18 +1548,15 @@ PyObject *obj_Vector_apply(wrapped_type<n_vector> *_self,PyObject *_func) {
 
 PyObject *obj_Vector_set_c(wrapped_type<n_vector> *self,PyObject *args,PyObject *kwds) {
     try {
-        const char *names[] = {"index","value"};
-        get_arg ga(args,kwds,names,"Vector.set_c");
-        auto index = from_pyobject<Py_ssize_t>(ga(true));
-        real value = from_pyobject<real>(ga(true));
-        ga.finished();
-        
         auto &v = self->get_base();
         
-        v_index_check(v,index);
+        const char *names[] = {"index","value"};
+        auto vals = get_arg::get_args<Py_ssize_t,real>("Vector.set_c",names,args,kwds);
+        
+        v_index_check(v,std::get<0>(vals));
         
         n_vector r = v;
-        r[index] = value;
+        r[std::get<0>(vals)] = std::get<1>(vals);
         
         return to_pyobject(std::move(r));
     } PY_EXCEPT_HANDLERS(nullptr)
@@ -1611,9 +1657,7 @@ PyMethodDef obj_Camera_methods[] = {
 PyObject *obj_Camera_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
     try {
         const char *names[] = {"dimension"};
-        get_arg ga(args,kwds,names,"Camera.__new__");
-        int dimension = from_pyobject<int>(ga(true));
-        ga.finished();
+        int dimension = std::get<0>(get_arg::get_args<int>("Camera.__new__",names,args,kwds));
         
         check_dimension(dimension);
         
@@ -1739,18 +1783,14 @@ PyObject *obj_Matrix_scale(PyObject*,PyObject *args) {
 PyObject *obj_Matrix_rotation(PyObject*,PyObject *args,PyObject *kwds) {
     try {
         const char *names[] = {"a","b","theta"};
-        get_arg ga(args,kwds,names,"Matrix.rotation");
-        auto a = from_pyobject<n_vector>(ga(true));
-        auto b = from_pyobject<n_vector>(ga(true));
-        float theta = from_pyobject<float>(ga(true));
-        ga.finished();
+        auto vals = get_arg::get_args<n_vector,n_vector,real>("Matrix.rotation",names,args,kwds);
         
-        if(!compatible(a,b)) {
+        if(!compatible(std::get<0>(vals),std::get<1>(vals))) {
             PyErr_SetString(PyExc_TypeError,"cannot produce rotation matrix using vectors of different dimension");
             return nullptr;
         }
         
-        return to_pyobject(n_matrix::rotation(a,b,theta));
+        return to_pyobject(apply(&n_matrix::rotation,vals));
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
@@ -1871,10 +1911,7 @@ PyObject *aabb_split(wrapped_type<n_aabb> *self,PyObject *args,PyObject *kwds,bo
     
     try {
         const char *names[] = {"axis","split"};
-        get_arg ga(args,kwds,names,right ? "AABB.right" : "AABB.left");
-        axis = from_pyobject<int>(ga(true));
-        split = from_pyobject<real>(ga(false));
-        ga.finished();
+        std::tie(axis,split) = get_arg::get_args<int,real>(right ? "AABB.right" : "AABB.left",names,args,kwds);
         
         auto &base = self->get_base();
         
@@ -2406,16 +2443,13 @@ template<typename T> PyTypeObject cs_light_list<T>::_pytype = make_type_object(
 PyObject *obj_dot(PyObject*,PyObject *args,PyObject *kwds) {
     try {
         const char *names[] = {"a","b"};
-        get_arg ga(args,kwds,names,"dot");
-        auto a = from_pyobject<n_vector>(ga(true));
-        auto b = from_pyobject<n_vector>(ga(true));
-        ga.finished();
+        auto vals = get_arg::get_args<n_vector,n_vector>("dot",names,args,kwds);
         
-        if(!compatible(a,b)) {
+        if(!compatible(std::get<0>(vals),std::get<1>(vals))) {
             PyErr_SetString(PyExc_TypeError,"cannot perform dot product on vectors of different dimension");
             return nullptr;
         }
-        return to_pyobject(dot(a,b));
+        return to_pyobject(dot(std::get<0>(vals),std::get<1>(vals)));
 
     } PY_EXCEPT_HANDLERS(nullptr)
 }

@@ -7,9 +7,11 @@
 #include <new>
 #include <limits>
 #include <utility>
+#include <tuple>
 
 #include "compatibility.hpp"
 #include "simd.hpp"
+#include "index_list.hpp"
 
 
 #define PY_MEM_NEW_DELETE void *operator new(size_t s) {            \
@@ -305,7 +307,7 @@ template<typename T> using wrapped_type = typename _wrapped_type<T>::type;
    from a PyObject pointer using
    reinterpret_cast<wrapped_type<T>::type*>(pointer)->base. However, the
    instance will not necessarily be initialized. Call get_base at least once to
-   ensure that it is (once initialized, it can never be uninitialized). */
+   verify that it is (once initialized, it can never be uninitialized). */
 template<typename T> struct invariable_storage {
     static constexpr bool value = false;
 };
@@ -413,18 +415,38 @@ template<typename T,typename Base> struct simple_py_wrapper<T,Base,false> : Base
     static constexpr PyTypeObject *pytype() { return &_pytype; }
 
 
-
-struct get_arg {
-    PyObject *args, *kwds;
-    const char **names;
-    const char *fname;
-    Py_ssize_t arg_index, tcount, kcount;
+class get_arg {
+    struct get_arg_base {
+        PyObject *args, *kwds;
+        const char **names;
+        const char *fname;
+        Py_ssize_t kcount;
+        
+        get_arg_base(PyObject *args,PyObject *kwds,Py_ssize_t arg_len,const char **names,const char *fname);
+        
+        PyObject *operator()(size_t i,bool required);
+        void finished();
+    } base;
     
-    get_arg(PyObject *args,PyObject *kwds,Py_ssize_t arg_len,const char **names=NULL,const char *fname=NULL);
+    template<typename... T,size_t... Indexes> static std::tuple<T...> _get_args(index_list<Indexes...>,const char *fname,const char **arg_names,PyObject *args,PyObject *kwds) {
+        get_arg_base ga(args,kwds,sizeof...(T),arg_names,fname);
+        std::tuple<T...> r{from_pyobject<T>(ga(Indexes,true))...};
+        ga.finished();
+        return r;
+    }
+    
+public:
+    Py_ssize_t arg_index;
+    
+    get_arg(PyObject *args,PyObject *kwds,Py_ssize_t arg_len,const char **names=NULL,const char *fname=NULL) : base(args,kwds,arg_len,names,fname), arg_index(0) {}
     template<int N> get_arg(PyObject *args,PyObject *kwds,const char *(&names)[N],const char *fname=NULL) : get_arg(args,kwds,N,names,fname) {}
     
-    PyObject *operator()(bool required);
-    void finished();
+    PyObject *operator()(bool required) { return base(arg_index++,required); }
+    void finished() { base.finished(); }
+    
+    template<typename... T> static std::tuple<T...> get_args(const char *fname,const char **arg_names,PyObject *args,PyObject *kwds) {
+        return _get_args<T...>(make_index_list<sizeof...(T)>(),fname,arg_names,args,kwds);
+    }
 };
 
 void NoSuchOverload(PyObject *args);

@@ -35,7 +35,7 @@ ntracer Package
 
         If the renderer isn't running, this does nothing.
 
-    .. py:method:: render(dest,scene) -> boolean
+    .. py:method:: render(dest,format,scene) -> boolean
 
         Render ``scene`` onto ``dest``.
 
@@ -343,6 +343,18 @@ ntracer Package
     exception.
 
     This cannot be instantiated in Python code, not even as a base class.
+    
+    .. py:method:: calculate_color(x,y,width,height) -> Color
+    
+        Get the pixel color at a particular coordinate.
+        
+        Coordinate ``0,0`` is the top left pixel and ``width-1,height-1`` is the
+        bottom right.
+        
+        :param integer x: The horizontal coordinate component.
+        :param integer y: The vertical coordinate component.
+        :param integer width: The pixel width of the image.
+        :param integer height: The pixel height of the image.
 
 
 
@@ -602,6 +614,20 @@ can't add a tuple and a :py:class:`Vector` together).
 
         :param color: An instance of :py:class:`.render.Color` or a tuple with
             three numbers.
+    
+    .. py:method:: set_background(c1[,c2=c1,c3=c1,axis=1])
+    
+        Set the values of :py:attr:`bg1`, :py:attr:`bg2`, :py:attr:`bg3` and
+        :py:attr:`bg_gradient_axis`.
+        
+        If the scene has been locked by a :py:class:`.render.Renderer`, this
+        method will raise an exception instead.
+        
+        :param color c1: The new value for :py:attr:`bg1`.
+        :param color c2: The new value for :py:attr:`bg2`.
+        :param color c3: The new value for :py:attr:`bg3`.
+        :param integer axis: The new value for :py:attr:`bg_gradient_axis`. This
+            must be a value between 0 and dimension−1.
 
     .. py:method:: set_camera(camera)
 
@@ -672,6 +698,43 @@ can't add a tuple and a :py:class:`Vector` together).
         
         This attribute is read-only. To modify the value, use
         :py:meth:`set_ambient_color`.
+    
+    .. py:attribute:: bg_gradient_axis
+    
+        The index of the axis along which the three color gradient of the
+        background will run.
+        
+        The default value is 1, corresponding to the y-axis.
+        
+        This attribute is read-only. To modify the value, use
+        :py:meth:`set_background`.
+    
+    .. py:attribute:: bg1
+    
+        The first color of the three color gradient of the background.
+        
+        The default value is ``Color(1,1,1)``.
+        
+        This attribute is read-only. To modify the value, use
+        :py:meth:`set_background`.
+    
+    .. py:attribute:: bg2
+    
+        The middle color of the three color gradient of the background.
+        
+        The default value is ``Color(0,0,0)``.
+        
+        This attribute is read-only. To modify the value, use
+        :py:meth:`set_background`.
+    
+    .. py:attribute:: bg3
+    
+        The last color of the three color gradient of the background.
+        
+        The default value is ``Color(0,1,1)``.
+        
+        This attribute is read-only. To modify the value, use
+        :py:meth:`set_background`.
         
     .. py:attribute:: camera_light
     

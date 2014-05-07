@@ -34,7 +34,7 @@ typedef unsigned char byte;
 const int RENDER_CHUNK_SIZE = 32;
 const int DEFAULT_SPECULAR_EXP = 8;
 
-/* this is number of bits of the largest number that can be stored in a long
+/* this is number of bits of the largest number that can be stored in a "long"
    across all platforms */
 const byte MAX_BITSIZE = 31;
 
@@ -44,7 +44,7 @@ const byte MAX_PIXELSIZE = 16;
 class already_running_error : public std::exception {
 public:
     const char *what() const throw() {
-        return "The renderer is already running";
+        return "the renderer is already running";
     }
 };
 
@@ -461,16 +461,17 @@ void callback_worker(obj_CallbackRenderer *self) {
                 
                 if(LIKELY(r.state == renderer::NORMAL)) {
                     // notify the main thread
+                    
+                    // in case the callback calls start_render/abort_render
+                    lock.unlock();
                     try {
-                        // in case the callback calls start_render/abort_render
-                        lock.unlock();
                         py::object(py::borrowed_ref(r.callback))(self);
-                        lock.lock();
                     } catch(py_error_set&) {
                         PyErr_Print();
                     } catch(std::exception &e) {
                         PySys_WriteStderr("error: %.500s\n",e.what());
                     }
+                    lock.lock();
                 } else if(r.state == renderer::CANCEL) {
                     /* If the job is being canceled, abort_render is waiting on 
                        this condition. The side-effect of waking the other 
@@ -515,9 +516,38 @@ callback_renderer::~callback_renderer() {
 }
 
 
+PyObject *obj_Scene_calculate_color(obj_Scene *self,PyObject *args,PyObject *kwds) {
+    try {
+        auto &sc = self->get_base();
+        const char *names[] = {"x","y","width","height"};
+        auto vals = get_arg::get_args<int,int,int,int>("Scene.calculate_color",names,args,kwds);
+        
+        color r;
+        
+        struct s_lock {
+            scene &sc;
+            s_lock(scene &sc) : sc(sc) { sc.lock(); }
+            ~s_lock() { sc.unlock(); }
+        } _(sc);
+        
+        {
+            py::allow_threads __;
+            r = apply(sc,&scene::calculate_color,vals);
+        }
+        
+        return to_pyobject(r);
+    } PY_EXCEPT_HANDLERS(nullptr)
+}
+
+PyMethodDef obj_Scene_methods[] = {
+    {"calculate_color",reinterpret_cast<PyCFunction>(&obj_Scene_calculate_color),METH_VARARGS|METH_KEYWORDS,NULL},
+    {NULL}
+};
+
 PyTypeObject obj_Scene::_pytype = make_type_object(
     "render.Scene",
     sizeof(obj_Scene),
+    tp_methods = obj_Scene_methods,
     tp_new = [](PyTypeObject *type,PyObject *args,PyObject *kwds) -> PyObject* {
         PyErr_SetString(PyExc_TypeError,"the Scene type cannot be instantiated directly");
         return nullptr;

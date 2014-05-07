@@ -39,12 +39,12 @@ template<typename Store> color background_color(const vector<Store> &dir);
 
 template<typename Store> class box_scene : public scene {
 public:
-    bool locked;
+    size_t locked;
     real fov;
     
     camera<Store> cam;
 
-    box_scene(int d) : locked(false), fov(0.8), cam(d) {}
+    box_scene(int d) : locked(0), fov(0.8), cam(d) {}
     
     color calculate_color(int x,int y,int w,int h) const {
         real fovI = (2 * std::tan(fov/2)) / w;
@@ -62,8 +62,11 @@ public:
 
     int dimension() const { return cam.dimension(); }
     
-    void lock() { locked = true; }
-    void unlock() throw() { locked = false; }
+    void lock() { ++locked; }
+    void unlock() throw() {
+        assert(locked);
+        --locked;
+    }
 };
 
 
@@ -1013,12 +1016,15 @@ template<typename Store> void append_specular(color &c,float &a,const material *
 
 
 template<typename Store> struct composite_scene : scene {
-    bool locked;
+    static const int default_bg_gradient_axis = 1;
+    
+    size_t locked;
     bool shadows;
     bool camera_light;
     real fov;
     int max_reflect_depth;
-    color ambient;
+    int bg_gradient_axis;
+    color ambient, bg1, bg2, bg3;
     camera<Store> cam;
     vector<Store> aabb_min, aabb_max;
     std::unique_ptr<kd_node<Store>,kd_node_deleter<Store> > root;
@@ -1026,7 +1032,20 @@ template<typename Store> struct composite_scene : scene {
     std::vector<global_light<Store> > global_lights;
 
     composite_scene(const vector<Store> &aabb_min,const vector<Store> &aabb_max,kd_node<Store> *data)
-        : locked(false), shadows(false), camera_light(true), fov(0.8), max_reflect_depth(4), ambient(0,0,0), cam(aabb_min.dimension()), aabb_min(aabb_min), aabb_max(aabb_max), root(data) {
+        : locked(0),
+          shadows(false),
+          camera_light(true),
+          fov(0.8),
+          max_reflect_depth(4),
+          bg_gradient_axis(default_bg_gradient_axis),
+          ambient(0,0,0),
+          bg1(1,1,1),
+          bg2(0,0,0),
+          bg3(0,1,1),
+          cam(aabb_min.dimension()),
+          aabb_min(aabb_min),
+          aabb_max(aabb_max),
+          root(data) {
         assert(aabb_min.dimension() == aabb_max.dimension());
     }
     
@@ -1125,7 +1144,8 @@ template<typename Store> struct composite_scene : scene {
         if(dist >= 0 && (dist = root->intersects(target,normal,source,transparent_hits,dist,std::numeric_limits<real>::max()))) {
             r = base_color(target,normal,source,depth);
         } else {
-            r = background_color<Store>(target.direction);
+            real intensity = target.direction[bg_gradient_axis];
+            r = intensity >= 0 ? bg1 * intensity + bg2 * (1 - intensity) : bg3 * -intensity + bg2 * (1 + intensity);
         }
         
         if(transparent_hits) {
@@ -1181,8 +1201,11 @@ template<typename Store> struct composite_scene : scene {
 
     int dimension() const { return cam.dimension(); }
     
-    void lock() { locked = true; }
-    void unlock() throw() { locked = false; }
+    void lock() { ++locked; }
+    void unlock() throw() {
+        assert(locked);
+        --locked;
+    }
 };
 
 template<typename Store> color background_color(const vector<Store> &dir) {

@@ -25,11 +25,11 @@ namespace std {
     #if __GNUC_MINOR__ < 8
       #if !defined(__clang__)
         #define alignas(X) __attribute__ ((aligned (X)))
-      #endif
 
 namespace std {
     template<typename T> struct is_trivially_destructible : has_trivial_destructor<T> {};
 }
+      #endif
     #endif
   #endif
 

@@ -5,6 +5,8 @@
 #include <utility>
 
 #include "simd.hpp"
+#include "index_list.hpp"
+
 
 // this only applies to dividing by a scalar
 // Enabling this seems to causes problems
@@ -75,21 +77,6 @@ namespace impl {
         assert(n != VSIZE_MAX);
         return _v_rep_until<F,0>::go(n,0,f);
     }
-    
-    
-    template<size_t... Indexes> struct index_list {
-        typedef index_list<Indexes..., sizeof...(Indexes)> next;
-    };
-
-    template<size_t N> struct _make_index_list {
-        typedef typename _make_index_list<N-1>::type::next type;
-    };
-
-    template<> struct _make_index_list<0> {
-        typedef index_list<> type;
-    };
-    
-    template<size_t N> using make_index_list = typename _make_index_list<N>::type;
     
     
     template<typename T> using v_expr_store = typename std::conditional<T::temporary,T,const T&>::type;

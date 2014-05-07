@@ -12,6 +12,7 @@ Contents:
    :maxdepth: 4
 
    example
+   nonpygame_example
    ntracer
 
 

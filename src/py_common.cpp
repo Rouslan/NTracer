@@ -21,8 +21,9 @@ Py_ssize_t PyObject_LengthHint(PyObject *o,Py_ssize_t defaultlen) {
 }
 #endif
 
-get_arg::get_arg(PyObject *args,PyObject *kwds,Py_ssize_t arg_len,const char **names,const char *fname)
-        : args(args), kwds(kwds), names(names), fname(fname), arg_index(0), tcount(0), kcount(0) {
+
+get_arg::get_arg_base::get_arg_base(PyObject *args,PyObject *kwds,Py_ssize_t arg_len,const char **names,const char *fname)
+        : args(args), kwds(kwds), names(names), fname(fname), kcount(0) {
     assert(args != NULL && PyTuple_Check(args));
     assert(kwds == NULL || PyDict_Check(kwds));
     
@@ -39,18 +40,17 @@ get_arg::get_arg(PyObject *args,PyObject *kwds,Py_ssize_t arg_len,const char **n
     }
 }
 
-PyObject *get_arg::operator()(bool required) {
-    const char *name = names[arg_index++];
-    if(tcount < PyTuple_GET_SIZE(args)) {
-        PyObject *r = PyTuple_GET_ITEM(args,tcount++);
-        if(UNLIKELY(name && kwds && PyDict_GetItemString(kwds,name))) {
-            PyErr_Format(PyExc_TypeError,"got multiple values for keyword argument \"%s\"",name);
+PyObject *get_arg::get_arg_base::operator()(size_t i,bool required) {
+    if(i < size_t(PyTuple_GET_SIZE(args))) {
+        PyObject *r = PyTuple_GET_ITEM(args,i);
+        if(UNLIKELY(names && kwds && PyDict_GetItemString(kwds,names[i]))) {
+            PyErr_Format(PyExc_TypeError,"got multiple values for keyword argument \"%s\"",names[i]);
             throw py_error_set();
         }
         return r;
     }
-    if(name && kwds) {
-        PyObject *r = PyDict_GetItemString(kwds,name);
+    if(names && kwds) {
+        PyObject *r = PyDict_GetItemString(kwds,names[i]);
         if(r) {
             ++kcount;
             return r;
@@ -58,17 +58,17 @@ PyObject *get_arg::operator()(bool required) {
     }
 
     if(UNLIKELY(required)) {
-        if(name) PyErr_Format(PyExc_TypeError,"a value for keyword argument \"%s\" is required",name);
-        else PyErr_Format(PyExc_TypeError,"a value for positional argument # %zd is required",tcount);
+        if(names) PyErr_Format(PyExc_TypeError,"a value for keyword argument \"%s\" is required",names[i]);
+        else PyErr_Format(PyExc_TypeError,"a value for positional argument # %zd is required",i);
         throw py_error_set();
     }
 
     return NULL;
 }
 
-void get_arg::finished() {
+void get_arg::get_arg_base::finished() {
     // are there more keywords than we used?
-    if(UNLIKELY(kwds && kcount > PyDict_Size(kwds))) {
+    if(UNLIKELY(kwds && kcount < PyDict_Size(kwds))) {
         PyObject *key;
         Py_ssize_t pos = 0;
         while(PyDict_Next(kwds,&pos,&key,NULL)){
@@ -109,6 +109,7 @@ void get_arg::finished() {
         assert(false);
     }
 }
+
 
 long narrow(long x,long max,long min) {
     if(UNLIKELY(x > max || x < min)) {
