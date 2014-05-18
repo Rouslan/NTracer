@@ -174,6 +174,12 @@ long_description = open('README.rst').read()
 long_description = long_description[0:long_description.find('\n\n\n')]
 
 
+float_format = {
+    'unknown' : '0',
+    'IEEE, little-endian' : '1',
+    'IEEE, big-endian' : '2'}[float.__getformat__('float')]
+byteorder = {'little' : '1','big' : '2'}[sys.byteorder]
+
 setup(name='ntracer',
     author='Rouslan Korneychuk',
     author_email='rouslank@msn.com',
@@ -188,7 +194,11 @@ setup(name='ntracer',
             ['src/render.cpp','src/py_common.cpp'],
             depends=['src/simd.hpp.in','src/py_common.hpp','src/render.hpp',
                 'src/pyobject.hpp','src/compatibility.hpp',
-                'src/index_list.hpp']),
+                'src/index_list.hpp'],
+            define_macros=[('FORMAT_OTHER','0'),('FORMAT_IEEE_LITTLE','1'),
+                ('FORMAT_IEEE_BIG','2'),('FLOAT_NATIVE_FORMAT',float_format),
+                ('BYTEORDER_LITTLE','1'),('BYTEORDER_BIG','2'),
+                ('NATIVE_BYTEORDER',byteorder)]),
         Extension(
             'tracern',
             ['src/tracern.cpp','src/py_common.cpp','src/simd.cpp'],

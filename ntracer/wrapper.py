@@ -1,6 +1,7 @@
 import importlib
 import weakref
 
+import ntracer.render
 
 CUBE = 1
 SPHERE = 2
@@ -109,10 +110,7 @@ class NTracer(object):
         if force_generic:
             mod = importlib.import_module('ntracer.tracern')
         else:
-            try:
-                mod = importlib.import_module('ntracer.tracer{0:d}'.format(dimension))
-            except ImportError:
-                mod = importlib.import_module('ntracer.tracern')
+            mod = ntracer.render.get_optimized_tracern(dimension)
         
         obj.dimension = dimension
         obj.Vector = vector_wrapper(mod,dimension)

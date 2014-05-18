@@ -23,7 +23,7 @@ template<typename Store> class ray {
 public:
     ray(int d) : origin(d), direction(d) {}
     template<typename T1,typename T2> ray(T1 &&o,T2 &&d) : origin(std::forward<T1>(o)), direction(std::forward<T2>(d)) {
-        assert(o.dimension() == d.dimension());
+        assert(origin.dimension() == direction.dimension());
     }
 
     int dimension() const { return origin.dimension(); }
@@ -35,7 +35,6 @@ public:
 //Ray operator*(const Matrix &mat,const Ray &ray);
 
 template<typename Store> real hypercube_intersects(const ray<Store> &target,ray<Store> &normal);
-template<typename Store> color background_color(const vector<Store> &dir);
 
 template<typename Store> class box_scene : public scene {
 public:
@@ -57,7 +56,10 @@ public:
             real sine = dot(view.direction,normal.direction);
             return (sine <= 0 ? -sine : real(0)) * color(1.0f,0.5f,0.5f);
         }
-        return background_color<Store>(view.direction);
+        
+        real intensity = dot(view.direction,vector<Store>::axis(dimension(),0));
+        return intensity > 0 ? color(intensity,intensity,intensity) :
+            color(0.0f,-intensity,-intensity);
     }
 
     int dimension() const { return cam.dimension(); }
@@ -126,7 +128,7 @@ template<typename Store> struct primitive {
     }
     
 protected:
-    primitive(material *m,PyTypeObject *t) : m(m) {
+    primitive(material *m,PyTypeObject *t) : m(py::borrowed_ref(reinterpret_cast<PyObject*>(m))) {
         PyObject_Init(reinterpret_cast<PyObject*>(this),t);
     }
     
@@ -149,11 +151,14 @@ template<typename Store> struct solid : solid_obj_common, primitive<Store> {
     py::pyptr<material> m;
     
     solid(solid_type type,const matrix<Store> &o,const matrix<Store> &io,const vector<Store> &p,material *m)
-        : primitive<Store>(m,pytype()), type(type), orientation(o), inv_orientation(io), position(p) {
+        : primitive<Store>(m,pytype()), type(type), orientation(o), inv_orientation(io), position(p), m(py::borrowed_ref(reinterpret_cast<PyObject*>(m))) {
         assert(o.dimension() == p.dimension() && o.dimension() == io.dimension());
     }
     
     solid(solid_type type,const matrix<Store> &o,const vector<Store> &p,material *m) : solid(type,o,o.inverse(),p,m) {}
+    
+    solid(int dimension,solid_type type,material *m)
+        : primitive<Store>(m,pytype()), type(type), orientation(dimension), inv_orientation(dimension), position(dimension), m(py::borrowed_ref(reinterpret_cast<PyObject*>(m))) {}
     
     real intersects(const ray<Store> &target,ray<Store> &normal) const {
         ray<Store> transformed(inv_orientation * target.origin - position,inv_orientation * target.direction);
@@ -343,18 +348,30 @@ template<typename Store> struct triangle : triangle_obj_common, primitive<Store>
         },mat);
     }
     
+    static triangle<Store> *create(int dimension,material *m) {
+        return new(dimension-1) triangle<Store>(dimension,m);
+    }
+    
     template<typename F> static triangle<Store> *create(const vector<Store> &p1,const vector<Store> &face_normal,F edge_normals,material *m) {
         return new(p1.dimension()-1) triangle<Store>(p1,face_normal,edge_normals,m);
     }
     
+    void recalculate_d() {
+        d = -dot(face_normal,p1);
+    }
+    
 private:
+    triangle(int dimension,material *m)
+        : primitive<Store>(m,pytype()), flex_base(dimension-1,[=](int i) { return dimension; }), p1(dimension), face_normal(dimension) {}
+    
     template<typename F> triangle(const vector<Store> &p1,const vector<Store> &face_normal,F edge_normals,material *m)
-        : primitive<Store>(m,pytype()), flex_base(p1.dimension()-1,edge_normals), d(-dot(face_normal,p1)), p1(p1), face_normal(face_normal) {
+        : primitive<Store>(m,pytype()), flex_base(p1.dimension()-1,edge_normals), p1(p1), face_normal(face_normal) {
         assert(p1.dimension() == face_normal.dimension() &&
             std::all_of(
-                items().begin(),
-                items().end(),
-                [&](const vector<Store> &e){ return e.dimension() == p1.dimension() }));
+                this->items().begin(),
+                this->items().end(),
+                [&](const vector<Store> &e){ return e.dimension() == p1.dimension(); }));
+        recalculate_d();
     }
 };
 
@@ -599,8 +616,6 @@ template<typename Store> struct kd_branch : kd_node<Store> {
     }
     
     bool occludes(const ray<Store> &target,real ldistance,const primitive<Store> *source,ray_intersections<Store> &hits,real t_near,real t_far) const {
-        assert(target.dimension() == normal.dimension());
-        
         if(target.direction[axis]) {
             if(target.origin[axis] == split) {
                 auto node = (target.direction[axis] > 0 ? right : left).get();
@@ -699,7 +714,7 @@ template<typename Store> struct kd_leaf : kd_node<Store>, flexible_struct<kd_lea
     }
     
     bool occludes(const ray<Store> &target,real ldistance,const primitive<Store> *source,ray_intersections<Store> &hits) const {
-        assert(dimension() == target.dimension() && dimension() == normal.dimension());
+        assert(dimension() == target.dimension());
 
         real dist;
         ray<Store> normal(dimension());
@@ -745,7 +760,7 @@ template<typename Store> inline void kd_node_deleter<Store>::operator()(kd_node<
     if(ptr->type == LEAF) {
         delete static_cast<const kd_leaf<Store>*>(ptr);
     } else {
-        assert(type == BRANCH);
+        assert(ptr->type == BRANCH);
         delete static_cast<const kd_branch<Store>*>(ptr);
     }
 }
@@ -966,7 +981,7 @@ template<typename Store> struct aabb {
             return true;
         }
         
-        assert(sp.p.type == SPHERE);
+        assert(sp.p->type == SPHERE);
 
         vector<Store> box_p = sp.p->position - sp.p->inv_orientation * ((start + end) * 0.5);
         
@@ -1084,7 +1099,7 @@ template<typename Store> struct composite_scene : scene {
             if(sine > 0) {
                 real strength = pl.strength(dist);
                 if(shadows) {
-                    if(std::max(pl.c.r,std::max(pl.c.g,pl.c.b)) * strength * sine > LIGHT_THRESHOLD) {
+                    if(std::max(pl.c.r(),std::max(pl.c.g(),pl.c.b())) * strength * sine > LIGHT_THRESHOLD) {
                         color filtered = pl.c;
                         if(light_reaches(ray<Store>(normal.origin,lv),dist,p,filtered)) {
                             filtered *= strength;
@@ -1207,11 +1222,5 @@ template<typename Store> struct composite_scene : scene {
         --locked;
     }
 };
-
-template<typename Store> color background_color(const vector<Store> &dir) {
-    real intensity = dot(dir,vector<Store>::axis(dir.dimension(),0));
-    return intensity > 0 ? color(intensity,intensity,intensity) :
-        color(0.0f,-intensity,-intensity);
-}
 
 #endif

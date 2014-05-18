@@ -72,12 +72,11 @@ namespace var {
         }
         
         ~item_array() {
-            if(simd::v_sizes<T>::value[0] == 1) free(items);
-            else simd::aligned_free(items);
+            deallocate();
         }
             
         item_array &operator=(const item_array &b) {
-            free(items);
+            deallocate();
             size = b.size;
             allocate();
             memcpy(items,b.items,RealItems::get(size) * sizeof(T));
@@ -86,7 +85,7 @@ namespace var {
         }
         
         item_array &operator=(item_array &&b) noexcept {
-            free(items);
+            deallocate();
             size = b.size;
             items = b.items;
             b.items = nullptr;
@@ -108,6 +107,11 @@ namespace var {
                     simd::largest_fit<T>(size) * sizeof(T),
                     RealItems::get(size) * sizeof(T)));
             }
+        }
+        
+        void deallocate() {
+            if(simd::v_sizes<T>::value[0] == 1) free(items);
+            else simd::aligned_free(items);
         }
         
         int size;

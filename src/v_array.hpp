@@ -302,7 +302,7 @@ namespace impl {
         }
         
         template<typename B> FORCE_INLINE v_array<Store,T> &operator=(const v_expr<B> &b) {
-            assert(size() == b.size());
+            assert(_size() == b.size());
             fill_with(b);
         }
         
@@ -399,6 +399,9 @@ namespace impl {
         T &operator[](size_t n) { return store.items[n]; }
         T operator[](size_t n) const { return store.items[n]; }
         
+        T *data() { return store.items; }
+        const T *data() const { return store.items; }
+        
         template<size_t Size> FORCE_INLINE simd::v_type<T,Size> &vec(size_t n) {
             return *reinterpret_cast<simd::v_type<T,Size>*>(store.items + n);
         }
@@ -437,8 +440,6 @@ namespace impl {
         }
     };
     template<typename Op,typename T> inline s_item_t<T> reduce(const v_expr<T> &a) {
-        assert(a.size() == b.size());
-        
         s_item_t<T> r_small = 0;
         if(v_reduce<Op,T>::v_score < V_SCORE_THRESHHOLD || size_t(a.size()) < v_reduce<Op,T>::smallest_vec()) {
             for(size_t i=0; i<a.size(); ++i) r_small = Op::op(r_small,static_cast<const T&>(a).template vec<1>(i)[0]);

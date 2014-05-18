@@ -18,6 +18,8 @@
 #define PACKAGE ntracer
 #define PACKAGE_STR STR(PACKAGE)
 
+#define FULL_MODULE_STR PACKAGE_STR "." MODULE_STR
+
 
 using namespace type_object_abbrev;
 
@@ -31,6 +33,9 @@ typedef triangle_point<module_store> n_triangle_point;
 typedef aabb<module_store> n_aabb;
 typedef point_light<module_store> n_point_light;
 typedef global_light<module_store> n_global_light;
+
+
+package_common package_common_data = {nullptr};
 
 
 Py_ssize_t check_dimension(int d) {
@@ -64,7 +69,7 @@ struct sized_iter {
 };
 
 py::object sized_iter::next() {
-    py::nullable_object r = py::next(itr);
+    py::nullable<py::object> r = py::next(itr);
     if(!r) {
         PyErr_Format(PyExc_ValueError,"too few items in object, expected %d",expected_len);
         throw py_error_set();
@@ -73,7 +78,7 @@ py::object sized_iter::next() {
 }
 
 void sized_iter::finished() const {
-    py::nullable_object r = py::next(itr);
+    py::nullable<py::object> r = py::next(itr);
     if(r) {
         PyErr_Format(PyExc_ValueError,"too many items in object, expected %d",expected_len);
         throw py_error_set();
@@ -163,7 +168,7 @@ template<> struct _wrapped_type<box_scene<module_store> > {
 };
 
 
-constexpr char matrix_proxy_name[] = MODULE_STR ".MatrixProxy";
+constexpr char matrix_proxy_name[] = FULL_MODULE_STR ".MatrixProxy";
 typedef py::obj_array_adapter<real,matrix_proxy_name,false,true> obj_MatrixProxy;
 
 
@@ -213,7 +218,7 @@ template<typename T> void ensure_unlocked(const py::pyptr<T> &s) {
 }
 
 
-constexpr char frozen_vector_view_name[] = MODULE_STR ".FrozenVectorView";
+constexpr char frozen_vector_view_name[] = FULL_MODULE_STR ".FrozenVectorView";
 typedef py::obj_array_adapter<n_vector,frozen_vector_view_name,true,true> obj_FrozenVectorView;
 
 
@@ -248,13 +253,13 @@ struct obj_KDNode {
     CONTAINED_PYTYPE_DEF
     PyObject_HEAD
     PY_MEM_GC_NEW_DELETE
-    py::nullable_object parent;
+    py::nullable<py::object> parent;
     kd_node<module_store> *_data;
     
     int dimension() const;
     
 protected:
-    obj_KDNode(py::nullable_object parent,kd_node<module_store> *data) : parent(parent), _data(data) {}
+    obj_KDNode(py::nullable<py::object> parent,kd_node<module_store> *data) : parent(parent), _data(data) {}
     ~obj_KDNode() = default;
 };
 
@@ -273,7 +278,7 @@ struct obj_KDBranch : obj_KDNode {
         return static_cast<kd_branch<module_store>*>(_data);
     }
     
-    obj_KDBranch(py::nullable_object parent,kd_branch<module_store> *data,int dimension) : obj_KDNode(parent,data), dimension(dimension) {
+    obj_KDBranch(py::nullable<py::object> parent,kd_branch<module_store> *data,int dimension) : obj_KDNode(parent,data), dimension(dimension) {
         PyObject_Init(reinterpret_cast<PyObject*>(this),pytype());
     }
     ~obj_KDBranch() {
@@ -294,7 +299,7 @@ struct obj_KDLeaf : obj_KDNode {
         return static_cast<kd_leaf<module_store>*>(_data);
     }
     
-    obj_KDLeaf(py::nullable_object parent,kd_leaf<module_store> *data) : obj_KDNode(parent,data) {
+    obj_KDLeaf(py::nullable<py::object> parent,kd_leaf<module_store> *data) : obj_KDNode(parent,data) {
         PyObject_Init(reinterpret_cast<PyObject*>(this),pytype());
     }
     ~obj_KDLeaf() {
@@ -397,7 +402,7 @@ template<> struct _wrapped_type<n_triangle_prototype> {
 
 SIMPLE_WRAPPER(triangle_point);
 
-constexpr char triangle_point_data_name[] = MODULE_STR ".TrianglePointData";
+constexpr char triangle_point_data_name[] = FULL_MODULE_STR ".TrianglePointData";
 typedef py::obj_array_adapter<n_triangle_point,triangle_point_data_name,false,true> obj_TrianglePointData;
 
 
@@ -428,7 +433,7 @@ struct point_light_list_base {
         return parent->cast_base().point_lights;
     }
 };
-const char *point_light_list_base::name = MODULE_STR ".PointLightList";
+const char *point_light_list_base::name = FULL_MODULE_STR ".PointLightList";
 
 struct global_light_list_base {
     typedef n_global_light item_t;
@@ -438,7 +443,7 @@ struct global_light_list_base {
         return parent->cast_base().global_lights;
     }
 };
-const char *global_light_list_base::name = MODULE_STR ".GlobalLightList";
+const char *global_light_list_base::name = FULL_MODULE_STR ".GlobalLightList";
 
 
 template<> n_vector from_pyobject<n_vector>(PyObject *o) {
@@ -528,7 +533,7 @@ PyMemberDef obj_BoxScene_members[] = {
 };
 
 PyTypeObject obj_BoxScene::_pytype = make_type_object(
-    MODULE_STR ".BoxScene",
+    FULL_MODULE_STR ".BoxScene",
     sizeof(obj_BoxScene),
     tp_dealloc = destructor_dealloc<obj_BoxScene>::value,
     tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE|Py_TPFLAGS_CHECKTYPES|Py_TPFLAGS_HAVE_GC,
@@ -722,7 +727,7 @@ PyGetSetDef obj_CompositeScene_getset[] = {
 };
 
 PyTypeObject composite_scene_obj_base::_pytype = make_type_object(
-    MODULE_STR ".CompositeScene",
+    FULL_MODULE_STR ".CompositeScene",
     sizeof(obj_CompositeScene),
     tp_dealloc = destructor_dealloc<obj_CompositeScene>::value,
     tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE|Py_TPFLAGS_CHECKTYPES|Py_TPFLAGS_HAVE_GC,
@@ -772,7 +777,7 @@ PySequenceMethods obj_CameraAxes_sequence_methods = {
 };
 
 PyTypeObject obj_CameraAxes::_pytype = make_type_object(
-    MODULE_STR ".CameraAxes",
+    FULL_MODULE_STR ".CameraAxes",
     sizeof(obj_BoxScene),
     tp_dealloc = destructor_dealloc<obj_CameraAxes>::value,
     tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_CHECKTYPES,
@@ -814,7 +819,7 @@ PyMethodDef obj_Primitive_methods[] = {
 };
 
 PyTypeObject obj_Primitive::_pytype = make_type_object(
-    MODULE_STR ".Primitive",
+    FULL_MODULE_STR ".Primitive",
     sizeof(obj_Primitive),
     tp_methods = obj_Primitive_methods,
     tp_new = [](PyTypeObject*,PyObject*,PyObject*) -> PyObject* {
@@ -842,43 +847,22 @@ template<> solid_type from_pyobject<solid_type>(PyObject *o) {
     return static_cast<solid_type>(t);
 }
 
-/*PyObject *obj_Solid_set_type(obj_Solid *self,PyObject *arg) {
+PyObject *obj_Solid_reduce(obj_Solid *self,PyObject*) {
     try {
-        ensure_unlocked(self->scene);
-
-        self->data()->type = from_pyobject<primitive_type>(arg);
-        
-        Py_RETURN_NONE;
-    } PY_EXCEPT_HANDLERS(NULL)
+        return (*package_common_data.solid_reduce)(
+            self->dimension(),
+            self->type,
+            self->orientation.data(),
+            self->position.data(),self->m.get());
+    } PY_EXCEPT_HANDLERS(nullptr)
 }
 
-PyObject *obj_Solid_set_orientation(obj_Solid *self,PyObject *arg) {
-    try {
-        ensure_unlocked(self->scene);
-        
-        self->data()->orientation = get_base<n_matrix>(arg);
-        self->data()->inv_orientation = self->data->orientation.inverse();
-        
-        Py_RETURN_NONE;
-    } PY_EXCEPT_HANDLERS(NULL)
-}
-
-PyObject *obj_Solid_set_position(obj_Solid *self,PyObject *arg) {
-    try {
-        ensure_unlocked(self->scene);
-        
-        self->data()->position = from_pyobject<n_vector>(arg);
-        
-        Py_RETURN_NONE;
-    } PY_EXCEPT_HANDLERS(NULL)
-}*/
-
-/*PyMethodDef obj_Solid_methods[] = {
-    {"set_type",reinterpret_cast<PyCFunction>(&obj_Solid_set_type),METH_O,NULL},
-    {"set_orientation",reinterpret_cast<PyCFunction>(&obj_Solid_set_orientation),METH_O,NULL},
-    {"set_position",reinterpret_cast<PyCFunction>(&obj_Solid_set_position),METH_O,NULL},
+PyMethodDef obj_Solid_methods[] = {
+    {"__reduce__",reinterpret_cast<PyCFunction>(&obj_Solid_reduce),METH_NOARGS,NULL},
+    immutable_copy,
+    immutable_deepcopy,
     {NULL}
-};*/
+};
 
 PyObject *obj_Solid_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
     try {
@@ -912,10 +896,11 @@ PyMemberDef obj_Solid_members[] = {
 };
 
 PyTypeObject solid_obj_common::_pytype = make_type_object(
-    MODULE_STR ".Solid",
+    FULL_MODULE_STR ".Solid",
     sizeof(obj_Solid),
     tp_dealloc = destructor_dealloc<obj_Solid>::value,
     tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_CHECKTYPES,
+    tp_methods = obj_Solid_methods,
     tp_members = obj_Solid_members,
     tp_getset = obj_Solid_getset,
     tp_base = obj_Primitive::pytype(),
@@ -949,8 +934,26 @@ PyObject *obj_Triangle_from_points(PyObject*,PyObject *args,PyObject *kwds) {
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
+PyObject *obj_Triangle_reduce(obj_Triangle *self,PyObject*) {
+    try {
+        struct item_size {
+            static constexpr int get(int d) { return d+1; }
+        };
+        
+        module_store::type<item_size,const real*> values(self->dimension());
+        values.items[0] = self->p1.data();
+        values.items[1] = self->face_normal.data();
+        for(int i=0; i<self->dimension()-1; ++i) values.items[i+2] = self->items()[i].data();
+        
+        return (*package_common_data.triangle_reduce)(self->dimension(),values.items,self->m.get());
+    } PY_EXCEPT_HANDLERS(nullptr)
+}
+
 PyMethodDef obj_Triangle_methods[] = {
     {"from_points",reinterpret_cast<PyCFunction>(&obj_Triangle_from_points),METH_VARARGS|METH_KEYWORDS|METH_STATIC,NULL},
+    {"__reduce__",reinterpret_cast<PyCFunction>(&obj_Triangle_reduce),METH_NOARGS,NULL},
+    immutable_copy,
+    immutable_deepcopy,
     {NULL}
 };
 
@@ -1013,7 +1016,7 @@ PyMemberDef obj_Triangle_members[] = {
 };
 
 PyTypeObject triangle_obj_common::_pytype = make_type_object(
-    MODULE_STR ".Triangle",
+    FULL_MODULE_STR ".Triangle",
     obj_Triangle::base_size,
     tp_itemsize = obj_Triangle::item_size,
     tp_dealloc = destructor_dealloc<obj_Triangle>::value,
@@ -1141,7 +1144,7 @@ PyMethodDef obj_KDNode_methods[] = {
 };
 
 PyTypeObject obj_KDNode::_pytype = make_type_object(
-    MODULE_STR ".KDNode",
+    FULL_MODULE_STR ".KDNode",
     sizeof(obj_KDNode),
     tp_methods = obj_KDNode_methods,
     tp_new = [](PyTypeObject *type,PyObject *args,PyObject *kwds) -> PyObject* {
@@ -1219,7 +1222,7 @@ PyGetSetDef obj_KDLeaf_getset[] = {
 };
 
 PyTypeObject obj_KDLeaf::_pytype = make_type_object(
-    MODULE_STR ".KDLeaf",
+    FULL_MODULE_STR ".KDLeaf",
     sizeof(obj_KDLeaf),
     tp_dealloc = destructor_dealloc<obj_KDLeaf>::value,
     tp_as_sequence = &obj_KDLeaf_sequence_methods,
@@ -1299,7 +1302,7 @@ PyGetSetDef obj_KDBranch_getset[] = {
 };
 
 PyTypeObject obj_KDBranch::_pytype = make_type_object(
-    MODULE_STR ".KDBranch",
+    FULL_MODULE_STR ".KDBranch",
     sizeof(obj_KDBranch),
     tp_dealloc = destructor_dealloc<obj_KDBranch>::value,
     tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_CHECKTYPES|Py_TPFLAGS_HAVE_GC,
@@ -1562,6 +1565,13 @@ PyObject *obj_Vector_set_c(wrapped_type<n_vector> *self,PyObject *args,PyObject 
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
+PyObject *obj_Vector_reduce(wrapped_type<n_vector> *self,PyObject*) {
+    try {
+        auto &v = self->get_base();
+        return (*package_common_data.vector_reduce)(v.dimension(),v.data());
+    } PY_EXCEPT_HANDLERS(nullptr)
+}
+
 PyMethodDef obj_Vector_methods[] = {
     {"square",reinterpret_cast<PyCFunction>(&obj_Vector_square),METH_NOARGS,NULL},
     {"axis",reinterpret_cast<PyCFunction>(&obj_Vector_axis),METH_VARARGS|METH_KEYWORDS|METH_STATIC,NULL},
@@ -1569,6 +1579,9 @@ PyMethodDef obj_Vector_methods[] = {
     {"unit",reinterpret_cast<PyCFunction>(&obj_Vector_unit),METH_NOARGS,NULL},
     {"apply",reinterpret_cast<PyCFunction>(&obj_Vector_apply),METH_O,NULL},
     {"set_c",reinterpret_cast<PyCFunction>(&obj_Vector_set_c),METH_VARARGS|METH_KEYWORDS,NULL},
+    {"__reduce__",reinterpret_cast<PyCFunction>(&obj_Vector_reduce),METH_NOARGS,NULL},
+    immutable_copy,
+    immutable_deepcopy,
     {NULL}
 };
 
@@ -1577,7 +1590,7 @@ PyObject *obj_Vector_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
         const char *names[] = {"dimension","values"};
         get_arg ga(args,kwds,names,"Vector.__new__");
         int dimension = from_pyobject<int>(ga(true));
-        py::nullable_object values(py::borrowed_ref(ga(false)));
+        py::nullable<py::object> values(py::borrowed_ref(ga(false)));
         ga.finished();
         
         check_dimension(dimension);
@@ -1606,7 +1619,7 @@ PyGetSetDef obj_Vector_getset[] = {
 };
 
 PyTypeObject vector_obj_base::_pytype = make_type_object(
-    MODULE_STR ".Vector",
+    FULL_MODULE_STR ".Vector",
     sizeof(wrapped_type<n_vector>),
     tp_dealloc = destructor_dealloc<wrapped_type<n_vector> >::value,
     tp_repr = &obj_Vector_repr,
@@ -1678,7 +1691,7 @@ int obj_Camera_init(wrapped_type<n_camera> *self,PyObject *args,PyObject *kwds) 
 }
 
 PyTypeObject camera_obj_base::_pytype = make_type_object(
-    MODULE_STR ".Camera",
+    FULL_MODULE_STR ".Camera",
     sizeof(wrapped_type<n_camera>),
     tp_dealloc = destructor_dealloc<wrapped_type<n_camera> >::value,
     tp_methods = obj_Camera_methods,
@@ -1823,6 +1836,13 @@ PyObject *obj_Matrix_transpose(wrapped_type<n_matrix> *self,PyObject*) {
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
+PyObject *obj_Matrix_reduce(wrapped_type<n_matrix> *self,PyObject*) {
+    try {
+        auto &m = self->get_base();
+        return (*package_common_data.matrix_reduce)(m.dimension(),m.data());
+    } PY_EXCEPT_HANDLERS(nullptr)
+}
+
 PyMethodDef obj_Matrix_methods[] = {
     {"reflection",reinterpret_cast<PyCFunction>(&obj_Matrix_reflection),METH_O|METH_STATIC,NULL},
     {"scale",reinterpret_cast<PyCFunction>(&obj_Matrix_scale),METH_VARARGS|METH_STATIC,NULL},
@@ -1831,6 +1851,9 @@ PyMethodDef obj_Matrix_methods[] = {
     {"determinant",reinterpret_cast<PyCFunction>(&obj_Matrix_determinant),METH_NOARGS,NULL},
     {"inverse",reinterpret_cast<PyCFunction>(&obj_Matrix_inverse),METH_NOARGS,NULL},
     {"transpose",reinterpret_cast<PyCFunction>(&obj_Matrix_transpose),METH_NOARGS,NULL},
+    {"__reduce__",reinterpret_cast<PyCFunction>(&obj_Matrix_reduce),METH_NOARGS,NULL},
+    immutable_copy,
+    immutable_deepcopy,
     {NULL}
 };
 
@@ -1894,7 +1917,7 @@ PyGetSetDef obj_Matrix_getset[] = {
 };
 
 PyTypeObject matrix_obj_base::_pytype = make_type_object(
-    MODULE_STR ".Matrix",
+    FULL_MODULE_STR ".Matrix",
     sizeof(wrapped_type<n_matrix>),
     tp_dealloc = destructor_dealloc<wrapped_type<n_matrix> >::value,
     tp_as_number = &obj_Matrix_number_methods,
@@ -2031,6 +2054,7 @@ PyObject *obj_AABB_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
  
         } catch(...) {
             Py_DECREF(ptr);
+            throw;
         }
     } PY_EXCEPT_HANDLERS(nullptr)
     
@@ -2045,7 +2069,7 @@ PyGetSetDef obj_AABB_getset[] = {
 };
 
 PyTypeObject aabb_obj_base::_pytype = make_type_object(
-    MODULE_STR ".AABB",
+    FULL_MODULE_STR ".AABB",
     sizeof(wrapped_type<n_aabb>),
     tp_dealloc = destructor_dealloc<wrapped_type<n_aabb> >::value,
     tp_methods = obj_AABB_methods,
@@ -2054,7 +2078,7 @@ PyTypeObject aabb_obj_base::_pytype = make_type_object(
 
 
 PyTypeObject obj_PrimitivePrototype::_pytype = make_type_object(
-    MODULE_STR ".PrimitivePrototype",
+    FULL_MODULE_STR ".PrimitivePrototype",
     sizeof(obj_PrimitivePrototype),
     tp_new = [](PyTypeObject*,PyObject*,PyObject*) -> PyObject* {
         PyErr_SetString(PyExc_TypeError,"the PrimitivePrototype type cannot be instantiated directly");
@@ -2150,7 +2174,7 @@ PyGetSetDef obj_TrianglePrototype_getset[] = {
 };
 
 PyTypeObject triangle_prototype_obj_base::_pytype = make_type_object(
-    MODULE_STR ".TrianglePrototype",
+    FULL_MODULE_STR ".TrianglePrototype",
     obj_TrianglePrototype::base_size,
     tp_itemsize = obj_TrianglePrototype::item_size,
     tp_dealloc = destructor_dealloc<obj_TrianglePrototype>::value,
@@ -2167,7 +2191,7 @@ PyGetSetDef obj_TrianglePointDatum_getset[] = {
 };
 
 PyTypeObject triangle_point_obj_base::_pytype = make_type_object(
-    MODULE_STR ".TrianglePointDatum",
+    FULL_MODULE_STR ".TrianglePointDatum",
     sizeof(wrapped_type<n_triangle_point>),
     tp_dealloc = destructor_dealloc<wrapped_type<n_triangle_point> >::value,
     tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_CHECKTYPES,
@@ -2253,7 +2277,7 @@ PyGetSetDef obj_SolidPrototype_getset[] = {
 };
 
 PyTypeObject solid_prototype_obj_base::_pytype = make_type_object(
-    MODULE_STR ".SolidPrototype",
+    FULL_MODULE_STR ".SolidPrototype",
     sizeof(wrapped_type<n_solid_prototype>),
     tp_dealloc = destructor_dealloc<wrapped_type<n_solid_prototype> >::value,
     tp_methods = obj_SolidPrototype_methods,
@@ -2295,7 +2319,7 @@ PyGetSetDef obj_PointLight_getset[] = {
 };
 
 PyTypeObject point_light_obj_base::_pytype = make_type_object(
-    MODULE_STR ".PointLight",
+    FULL_MODULE_STR ".PointLight",
     sizeof(wrapped_type<n_point_light>),
     tp_dealloc = destructor_dealloc<wrapped_type<n_point_light> >::value,
 //    tp_repr = &obj_PointLight_repr,
@@ -2336,7 +2360,7 @@ PyGetSetDef obj_GlobalLight_getset[] = {
 };
 
 PyTypeObject global_light_obj_base::_pytype = make_type_object(
-    MODULE_STR ".GlobalLight",
+    FULL_MODULE_STR ".GlobalLight",
     sizeof(wrapped_type<n_global_light>),
     tp_dealloc = destructor_dealloc<wrapped_type<n_global_light> >::value,
 //    tp_repr = &obj_GlobalLight_repr,
@@ -2425,7 +2449,7 @@ template<typename T> PyMethodDef cs_light_list<T>::methods[] = {
 };
 
 template<typename T> PyObject *cs_light_list_new(PyTypeObject*,PyObject*,PyObject*) {
-    PyErr_Format(PyExc_TypeError,"the %s type cannot be instantiated directly",T::name + sizeof(MODULE_STR));
+    PyErr_Format(PyExc_TypeError,"the %s type cannot be instantiated directly",T::name + sizeof(FULL_MODULE_STR));
     return nullptr;
 }
 
@@ -2486,7 +2510,45 @@ PyMethodDef func_table[] = {
 };
 
 
-const package_common *package_common_data = nullptr;
+template<typename T> wrapped_array get_wrapped_array(int dimension) {
+    auto obj = new wrapped_type<T>(dimension);
+    return {py::new_ref(reinterpret_cast<PyObject*>(obj)),obj->cast_base().data()};
+}
+
+/* TODO: do something so that changing "real" to something other than float
+   won't cause compile errors */
+tracerx_constructors module_constructors = {
+    &get_wrapped_array<n_vector>,
+    &get_wrapped_array<n_matrix>,
+    [](int dimension,material *mat) -> wrapped_arrays {
+        wrapped_arrays r;
+        r.data.reset(new float*[dimension+1]);
+        
+        auto tri = obj_Triangle::create(dimension,mat);
+        r.obj = py::new_ref(reinterpret_cast<PyObject*>(tri));
+        
+        r.data[0] = tri->p1.data();
+        r.data[1] = tri->face_normal.data();
+        for(int i=0; i<dimension-1; ++i) r.data[i+2] = tri->items()[i].data();
+        
+        return r;
+    },
+    [](PyObject *tri) { reinterpret_cast<obj_Triangle*>(tri)->recalculate_d(); },
+    [](int dimension,int type,material *mat) -> wrapped_solid {
+        wrapped_solid r;
+        
+        auto s = new obj_Solid(dimension,static_cast<solid_type>(type),mat);
+        r.obj = py::new_ref(reinterpret_cast<PyObject*>(s));
+        r.orientation = s->orientation.data();
+        r.position = s->position.data();
+        
+        return r;
+    },
+    [](PyObject *sobj) -> void {
+        auto s = reinterpret_cast<obj_Solid*>(sobj);
+        s->inv_orientation = s->orientation.inverse();
+    }
+};
 
 
 PyTypeObject *classes[] = {
@@ -2529,7 +2591,7 @@ PyTypeObject *get_pytype(py::object mod,const char *name) {
 #if PY_MAJOR_VERSION >= 3
 #define INIT_ERR_VAL 0
 
-struct PyModuleDef module_def = {
+PyModuleDef module_def = {
     PyModuleDef_HEAD_INIT,
     MODULE_STR,
     NULL,
@@ -2537,7 +2599,10 @@ struct PyModuleDef module_def = {
     func_table,
     NULL,
     NULL,
-    NULL,
+    [](PyObject *self) -> int {
+        (*package_common_data.invalidate_reference)(self);
+        return 0;
+    },
     NULL
 };
 
@@ -2549,19 +2614,23 @@ extern "C" SHARED(void) APPEND_MODULE_NAME(init)() {
 #endif
     using namespace py;
 
-    try {
-        object rmod = check_new_ref(PyImport_ImportModule(PACKAGE_STR ".render"));
+    if(!package_common_data.read_color) {
+        try {
+            object rmod = py::import_module(PACKAGE_STR ".render");
 
-        auto stype = get_pytype(rmod,"Scene");
-        obj_BoxScene::pytype()->tp_base = stype;
-        obj_CompositeScene::pytype()->tp_base = stype;
+            auto stype = get_pytype(rmod,"Scene");
+            obj_BoxScene::pytype()->tp_base = stype;
+            obj_CompositeScene::pytype()->tp_base = stype;
 
-        color_obj_base::_pytype = get_pytype(rmod,"Color");
-        material::_pytype = get_pytype(rmod,"Material");
+            color_obj_base::_pytype = get_pytype(rmod,"Color");
+            material::_pytype = get_pytype(rmod,"Material");
 
-        if(!(package_common_data = reinterpret_cast<const package_common*>(
-            PyCapsule_GetPointer(static_cast<object>(rmod.attr("_PACKAGE_COMMON")).ref(),"render._PACKAGE_COMMON")))) return INIT_ERR_VAL;
-    } PY_EXCEPT_HANDLERS(INIT_ERR_VAL)
+            auto pdata = reinterpret_cast<const package_common*>(
+                PyCapsule_GetPointer(static_cast<object>(rmod.attr("_PACKAGE_COMMON")).ref(),"render._PACKAGE_COMMON"));
+            if(!pdata) return INIT_ERR_VAL;
+            package_common_data = *pdata;
+        } PY_EXCEPT_HANDLERS(INIT_ERR_VAL)
+    }
 
     for(auto cls : classes) {
         if(UNLIKELY(PyType_Ready(cls) < 0)) return INIT_ERR_VAL;
@@ -2575,8 +2644,12 @@ extern "C" SHARED(void) APPEND_MODULE_NAME(init)() {
     if(UNLIKELY(!m)) return INIT_ERR_VAL;
         
     for(auto cls : classes) {
-        add_class(m,cls->tp_name + sizeof(MODULE_STR),cls);
+        add_class(m,cls->tp_name + sizeof(FULL_MODULE_STR),cls);
     }
+    
+    PyObject *c = PyCapsule_New(&module_constructors,"_CONSTRUCTORS",nullptr);
+    if(UNLIKELY(!c)) return INIT_ERR_VAL;
+    PyModule_AddObject(m,"_CONSTRUCTORS",c);
 
 #if PY_MAJOR_VERSION >= 3
     return m;

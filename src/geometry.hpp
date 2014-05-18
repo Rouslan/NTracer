@@ -101,6 +101,7 @@ namespace impl {
         
         using base_t::fill_with;
         using base_t::operator[];
+        using base_t::data;
         
         void normalize() { operator/=(this->absolute()); }
         
@@ -520,7 +521,7 @@ template<class Store> struct matrix {
     }
     
     void inverse_(matrix<Store> &RESTRICT inv,matrix<Store> &RESTRICT tmp) const {
-        assert(dimension() == r.dimension() && dimension() == tmp.dimension());
+        assert(dimension() == inv.dimension() && dimension() == tmp.dimension());
 
         typename Store::template type<impl::vector_item_count,size_t> pivot(dimension());
         int swapped = decompose(tmp,pivot.items);
@@ -693,7 +694,7 @@ template<typename T> using smaller = typename _smaller<T>::type;
 
 // generalized cross product
 template<typename Store> void cross_(vector<Store> &r,smaller<matrix<Store> > &tmp,const vector<Store> *vs) {
-    assert(r.dimension() == (tmp.dimension()-1));
+    assert(r.dimension() == (tmp.dimension()+1));
     
     int f = r.dimension() % 2 ? 1 : -1;
     

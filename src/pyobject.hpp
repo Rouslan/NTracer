@@ -62,6 +62,9 @@ namespace py {
         explicit new_ref(PyObject *ptr) : _ptr(ptr) {}
     };
     
+    // alias for classes to use, that have new_ref function
+    typedef new_ref _new_ref;
+    
     inline new_ref check_new_ref(PyObject *o) {
         return new_ref(check_obj(o));
     }
@@ -115,6 +118,11 @@ namespace py {
         _object_base(borrowed_ref r) : _ptr(incref(r._ptr)) {}
         _object_base(py::new_ref r) : _ptr(r._ptr) { assert(_ptr); }
         _object_base(const _object_base &b) : _ptr(incref(b._ptr)) {}
+        
+        _object_base &operator=(const _object_base &b) {
+            reset(b._ptr);
+            return *this;
+        }
 
         ~_object_base() {
             Py_DECREF(_ptr);
@@ -165,7 +173,7 @@ namespace py {
     public:
         object() : _object_base(borrowed_ref(Py_None)) {}
         object(borrowed_ref r) : _object_base(r) {}
-        object(py::new_ref r) : _object_base(r) {}
+        object(_new_ref r) : _object_base(r) {}
         object(const _object_base &b) : _object_base(b) {}
 
         object &operator=(const _object_base &b) {
@@ -220,7 +228,7 @@ namespace py {
         template<typename... Args> object operator()(const Args&... args) const {
             return check_new_ref(PyObject_CallMethodObjArgs(
                 _ptr,
-                object(new_ref(check_obj(PYSTR(InternFromString)(name)))).ref(),
+                object(check_new_ref(PYSTR(InternFromString)(name))).ref(),
                 make_object(args).ref()...,
                 0));
         }
@@ -284,7 +292,7 @@ namespace py {
     }
 
 
-    template<typename T> class _nullable {
+    template<typename T> class nullable {
         PyObject *_ptr;
 
         void reset(PyObject *b) {
@@ -294,31 +302,31 @@ namespace py {
             Py_XDECREF(tmp);
         }
     public:
-        _nullable() : _ptr(nullptr) {}
-        _nullable(const _nullable<T> &b) : _ptr(b._ptr) { Py_XINCREF(_ptr); }
-        _nullable(const T &b) : _ptr(b.new_ref()) {}
-        _nullable(borrowed_ref r) : _ptr(r._ptr) { Py_XINCREF(_ptr); }
-        _nullable(new_ref r) : _ptr(r._ptr) {}
+        nullable() : _ptr(nullptr) {}
+        nullable(const nullable<T> &b) : _ptr(b._ptr) { Py_XINCREF(_ptr); }
+        nullable(const T &b) : _ptr(b.new_ref()) {}
+        nullable(borrowed_ref r) : _ptr(r._ptr) { Py_XINCREF(_ptr); }
+        nullable(new_ref r) : _ptr(r._ptr) {}
         
-        _nullable<T> &operator=(borrowed_ref r) {
+        nullable &operator=(borrowed_ref r) {
             Py_XINCREF(r._ptr);
             reset(r._ptr);
             return *this;
         }
         
-        _nullable<T> &operator=(new_ref r) {
+        nullable &operator=(new_ref r) {
             reset(r._ptr);
             return *this;
         }
 
-        _nullable<T> &operator=(const _nullable<T> &b) {
+        nullable &operator=(const nullable &b) {
             Py_XINCREF(b._ptr);
             reset(b._ptr);
             return *this;
         }
-        _nullable<T> &operator=(const T &b) {
-            Py_INCREF(b._ptr);
-            reset(b._ptr);
+        nullable &operator=(const T &b) {
+            Py_INCREF(b.ref());
+            reset(b.ref());
             return *this;
         }
 
@@ -334,15 +342,13 @@ namespace py {
 
         PyObject *ref() const { return _ptr; }
         
-        void swap(const _nullable<T> &b) {
+        void swap(const nullable &b) {
             std::swap(_ptr,b._ptr);
         }
 
         int gc_traverse(visitproc visit,void *arg) const { return _ptr ? (*visit)(_ptr,arg) : 0; }
         void gc_clear() { reset(nullptr); }
     };
-
-    typedef _nullable<object> nullable_object;
 
 
 #if PY_VERSION_HEX >= 0x02060000
@@ -429,7 +435,7 @@ namespace py {
     class tuple : public _object_base {
     public:
         tuple(borrowed_ref r) : _object_base(r) { assert(PyTuple_Check(r._ptr)); }
-        tuple(py::new_ref r) : _object_base(r) { assert(PyTuple_Check(r._ptr)); }
+        tuple(_new_ref r) : _object_base(r) { assert(PyTuple_Check(r._ptr)); }
         explicit tuple(Py_ssize_t len) : _object_base(check_new_ref(PyTuple_New(len))) {}
         tuple(const tuple &b) : _object_base(b) {}
         explicit tuple(const _object_base &b) : _object_base(object(py::borrowed_ref(reinterpret_cast<PyObject*>(&PyTuple_Type)))(b)) {
@@ -463,9 +469,7 @@ namespace py {
         tuple_iterator end() const {
             return tuple_iterator(&PyTuple_GET_ITEM(_ptr,size()));
         }
-    };    
-
-    typedef _nullable<tuple> nullable_tuple;
+    };
     
     template<typename... Args> tuple make_tuple(const Args&... args) {
         return {make_object(args)...};
@@ -503,7 +507,7 @@ namespace py {
     class list : public _object_base {
     public:
         list(borrowed_ref r) : _object_base(r) { assert(PyList_Check(r._ptr)); }
-        list(py::new_ref r) : _object_base(r) { assert(PyList_Check(r._ptr)); }
+        list(_new_ref r) : _object_base(r) { assert(PyList_Check(r._ptr)); }
         list() : _object_base(check_new_ref(PyList_New(0))) {}
         list(const list &b) : _object_base(b) {}
         explicit list(const _object_base &b) : _object_base(object(py::borrowed_ref(reinterpret_cast<PyObject*>(&PyList_Type)))(b)) {
@@ -528,8 +532,6 @@ namespace py {
             if(PyList_Append(_ptr,item.ref())) throw py_error_set();
         }
     };
-    
-    typedef _nullable<list> nullable_list;
     
     inline void del(const list_item_proxy &item) {
         if(PyList_SetSlice(item._ptr,item.index,item.index,NULL)) throw py_error_set();
@@ -573,7 +575,7 @@ namespace py {
     class dict : public _object_base {
     public:
         dict(borrowed_ref r) : _object_base(r) { assert(PyDict_Check(r._ptr)); }
-        dict(py::new_ref r) : _object_base(r) { assert(PyDict_Check(r._ptr)); }
+        dict(_new_ref r) : _object_base(r) { assert(PyDict_Check(r._ptr)); }
         dict() : _object_base(check_new_ref(PyDict_New())) {}
         dict(const dict &b) : _object_base(b) {}
 
@@ -586,7 +588,7 @@ namespace py {
 
         template<typename T> dict_item_proxy operator[](T key) const { return dict_item_proxy(_ptr,to_pyobject(key)); }
         Py_ssize_t size() const { return PyDict_Size(_ptr); }
-        template<typename T> nullable_object find(T key) const {
+        template<typename T> nullable<object> find(T key) const {
 #if PY_MAJOR_VERSION >= 3
             PyObject *item = PyDict_GetItemWithError(_ptr,to_pyobject(key));
             if(!item && PyErr_Occurred()) throw py_error_set();
@@ -601,16 +603,14 @@ namespace py {
                 if(!PyErr_ExceptionMatches(PyExc_KeyError)) throw py_error_set();
                 PyErr_Clear();
             }
-            return py::new_ref(item);
+            return _new_ref(item);
 #endif
         }
 
         dict copy(const dict &b) const {
-            return py::new_ref(PyDict_Copy(b._ptr));
+            return _new_ref(PyDict_Copy(b._ptr));
         }
     };
-
-    typedef _nullable<dict> nullable_dict;
 
     inline void del(const dict_item_proxy &attr) {
         if(PyDict_DelItem(attr._ptr,attr.key)) throw py_error_set();
@@ -620,9 +620,10 @@ namespace py {
     class bytes : public _object_base {
     public:
         bytes(borrowed_ref r) : _object_base(r) { assert(PYBYTES(Check)(r._ptr)); }
-        bytes(py::new_ref r) : _object_base(r) { assert(PYBYTES(Check)(r._ptr)); }
+        bytes(_new_ref r) : _object_base(r) { assert(PYBYTES(Check)(r._ptr)); }
         bytes(const char *str="") : _object_base(check_new_ref(PYBYTES(FromString)(str))) {}
-        explicit bytes(Py_ssize_t s) : _object_base(check_new_ref(PYBYTES(FromStringAndSize)(NULL,s))) {}
+        explicit bytes(Py_ssize_t s) : _object_base(check_new_ref(PYBYTES(FromStringAndSize)(nullptr,s))) {}
+        bytes(const char *str,Py_ssize_t s) : _object_base(check_new_ref(PYBYTES(FromStringAndSize)(str,s))) {}
         bytes(const bytes &b) : _object_base(b) {}
 
         bytes &operator=(const bytes &b) {
@@ -639,8 +640,6 @@ namespace py {
         char *data() { return PYBYTES(AS_STRING)(_ptr); }
         const char *data() const { return PYBYTES(AS_STRING)(_ptr); }
     };
-    
-    typedef _nullable<bytes> nullable_bytes;
     
     
     class set_base : public _object_base {
@@ -664,7 +663,7 @@ namespace py {
     class set : public set_base {
     public:
         set(borrowed_ref r) : set_base(r) { assert(PySet_Check(r._ptr)); }
-        set(py::new_ref r) : set_base(r) { assert(PySet_Check(r._ptr)); }
+        set(_new_ref r) : set_base(r) { assert(PySet_Check(r._ptr)); }
         set() : set_base(check_new_ref(PySet_New(nullptr))) {}
         
         void add(PyObject *x) {
@@ -684,7 +683,44 @@ namespace py {
         }
     };
     
-    typedef _nullable<set> nullable_set;
+    
+    template<typename T=object> class weak_ref {
+        object obj;
+        
+        PyObject *deref() const {
+            // obj will be None if gc_clear is called
+            assert(obj.ref() != Py_None);
+            
+            return PyWeakref_GET_OBJECT(obj.ref());
+        }
+        
+    public:
+        weak_ref(borrowed_ref r) : obj(r) { assert(PyWeakref_CheckRef(obj.ref())); }
+        weak_ref(new_ref r) : obj(r) { assert(PyWeakref_CheckRef(obj.ref())); }
+        explicit weak_ref(const object &b,PyObject *callback=nullptr) : obj(check_new_ref(PyWeakref_NewRef(b.ref(),callback))) {}
+        weak_ref(const object &b,const nullable<object> &callback) : weak_ref(b,callback.ref()) {}
+        
+        operator bool() const { return deref() != nullptr; }
+        
+        T operator*() const {
+            assert(deref());
+            return borrowed_ref(deref());
+        }
+        T operator->() const { return operator*(); }
+        
+        nullable<T> try_deref() const {
+            return borrowed_ref(deref());
+        }
+
+        PyObject *ref() const { return obj.ref(); }
+        
+        void swap(const weak_ref &b) {
+            std::swap(obj,b.obj);
+        }
+
+        int gc_traverse(visitproc visit,void *arg) const { return obj.gc_traverse(visit,arg); }
+        void gc_clear() { obj.gc_clear(); }
+    };
 
 
     /*template<typename T,bool invariable=invariable_storage<T>::value> class pyptr {
@@ -766,7 +802,7 @@ namespace py {
     
     template<typename T> class pyptr {
 
-        nullable_object _obj;
+        nullable<object> _obj;
 
     public:
         pyptr() = default;
@@ -834,6 +870,10 @@ namespace py {
         return check_new_ref(PyObject_Repr(o.ref()));
     }
     
+    inline object import_module(const char *mod) {
+        return check_new_ref(PyImport_ImportModule(mod));
+    }
+    
     inline object iter(PyObject *o) {
         return check_new_ref(PyObject_GetIter(o));
     }
@@ -842,7 +882,7 @@ namespace py {
         return iter(o.ref());
     }
 
-    inline nullable_object next(const object &o) {
+    inline nullable<object> next(const object &o) {
         PyObject *r = PyIter_Next(o.ref());
         if(!r && PyErr_Occurred()) throw py_error_set();
         return new_ref(r);
@@ -850,7 +890,7 @@ namespace py {
     
     class object_iterator {
         object itr;
-        nullable_object item;
+        nullable<object> item;
     public:
         typedef object value_type;
         typedef void difference_type;
@@ -858,7 +898,7 @@ namespace py {
         typedef object &reference;
         typedef std::input_iterator_tag iterator_category;
 
-        object_iterator(const _object_base &itr,const nullable_object &item) : itr(itr), item(item) {}
+        object_iterator(const _object_base &itr,const nullable<object> &item) : itr(itr), item(item) {}
         
         object operator*() const {
             return *item;
@@ -887,7 +927,7 @@ namespace py {
     }
     
     inline object_iterator object::end() const {
-        return object_iterator(*this,nullable_object());
+        return object_iterator(*this,nullable<object>());
     }
 
 
@@ -1045,7 +1085,7 @@ namespace std {
     template<> inline void swap(py::dict &a,py::dict &b) { a.swap(b); }
     template<> inline void swap(py::list &a,py::list &b) { a.swap(b); }
     template<> inline void swap(py::bytes &a,py::bytes &b) { a.swap(b); }
-    template<typename T> inline void swap(py::_nullable<T> &a,py::_nullable<T> &b) { a.swap(b); }
+    template<typename T> inline void swap(py::nullable<T> &a,py::nullable<T> &b) { a.swap(b); }
     template<typename T> inline void swap(py::pyptr<T> &a,py::pyptr<T> &b) { a.swap(b); }
 }
 

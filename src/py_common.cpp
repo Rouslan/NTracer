@@ -149,3 +149,8 @@ void NoSuchOverload(PyObject *args) {
         PyErr_Format(PyExc_TypeError,format,args->ob_type->tp_name);
     }
 }
+
+PyObject *immutable_copy_func(PyObject *self,PyObject*) {
+    Py_INCREF(self);
+    return self;
+}

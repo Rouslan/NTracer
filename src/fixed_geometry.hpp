@@ -53,13 +53,20 @@ namespace fixed {
             }
         }
     };
+    
+    // set pad items to 1 to avoid dividing 0/infinity/NaN
+    template<typename T> inline typename std::enable_if<std::is_arithmetic<T>::value>::type item_array_init(T *items,int start,int end) {
+        for(int i=start; i<end; ++i) items[i] = 1;
+    }
+    
+    template<typename T> inline typename std::enable_if<!std::is_arithmetic<T>::value>::type item_array_init(T *items,int start,int end) {}
 
     template<int N,typename RealItems,typename T> struct alignas(simd::largest_fit<T>(simd::padded_size<T>(N)) * sizeof(T)) item_array {
         static const int _real_size = RealItems::get(N) + simd::padded_size<T>(N) - N;
         
         explicit item_array(int d) {
             assert(d == N);
-            for(int i=RealItems::get(N); i<_real_size; ++i) items[i] = 1;
+            item_array_init(items,RealItems::get(N),_real_size);
         }
         
         int dimension() const { return N; }

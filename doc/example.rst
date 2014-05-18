@@ -13,7 +13,7 @@ The following code will load a 3D mesh and display it.
     ntracer = NTracer(3)
 
     data = wavefront_obj.load_obj('monkey.obj')
-    scene = build_composite_scene(data)
+    scene = build_composite_scene(ntracer,data)
 
     camera = ntracer.Camera()
     camera.translate(ntracer.Vector.axis(2,-5))

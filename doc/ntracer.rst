@@ -173,7 +173,78 @@ ntracer Package
     :param number r: Red component
     :param number g: Green component
     :param number b: Blue component
+    
+    .. py:method:: __add__(b)
+    
+        Element-wise addition of two colors.
 
+        :code:`self.__add__(y)` <==> :code:`self+y`
+        
+    .. py:method:: __div__(b)
+    
+        Divide each element by a number or do element-wise division of two
+        colors.
+    
+        :code:`self.__div__(y)` <==> :code:`self/y`
+
+    .. py:method:: __eq__(b)
+
+        :code:`self.__eq__(y)` <==> :code:`self==y`
+    
+    .. py:method:: __getitem__(index)
+    
+        Equivalent to :code:`[self.r,self.g,self.b].__getitem__`.
+
+        :code:`self.__getitem__(i)` <==> :code:`self[i]`
+
+    .. py:method:: __len__()
+
+        This always returns 3.
+
+        :code:`self.__len__()` <==> :code:`len(self)`
+
+    .. py:method:: __mul__(b)
+
+        Multiply each element by a number or do element-wise multiplication of
+        two colors.
+
+        :code:`self.__mul__(y)` <==> :code:`self*y`
+
+    .. py:method:: __ne__(b)
+
+        :code:`self.__ne__(y)` <==> :code:`self!=y`
+
+    .. py:method:: __neg__()
+    
+        Negate each element.
+
+        :code:`self.__neg__()` <==> :code:`-self`
+
+    .. py:method:: __repr__()
+
+        :code:`self.__repr__()` <==> :code:`repr(self)`
+
+    .. py:method:: __rmul__(b)
+
+        This is the same as :py:meth:`__mul__`.
+
+        :code:`self.__rmul__(y)` <==> :code:`y*self`
+    
+    .. py:method:: __sub__(b)
+    
+        Element-wise subtraction of two colors.
+
+        :code:`self.__sub__(y)` <==> :code:`self-y`
+
+    .. py:method:: apply(f) -> Color
+
+        Return a color with the given function applied to each component.
+
+        Equivalent to: :code:`Color(*map(f,self))`
+
+        :param f: A function or callable object that takes one number and
+            returns a number.
+    
     .. py:attribute:: r
 
         Red component
@@ -355,6 +426,16 @@ ntracer Package
         :param integer y: The vertical coordinate component.
         :param integer width: The pixel width of the image.
         :param integer height: The pixel height of the image.
+
+
+.. py:function:: get_optimized_tracern(dimension)
+
+    Return a specialized (read: faster) tracer\ *{dimension}* version if it
+    exists, otherwise return :py:mod:`.tracern`.
+    
+    The results are cached, so calling this function multiple times with the
+    same parameter is fast (the cache does not increase the reference count and
+    unloaded modules automatically remove themselves from the cache).
 
 
 
@@ -1619,6 +1700,10 @@ To save space, the modules corresponding to dimensionalities you don't need, or
 even all the specialized modules, can be deleted with no loss of functionality.
 This package can also work without the generic version, using only specialized
 versions, but you would only be able to use those particular dimensionalities.
+
+Classes that support pickling result in the exact same output, regardless of
+whether the specialized or generic versions were used when pickled. When
+unpickled, the specialized versions are used when available.
 
 Note that equivalent types between the generic and specific versions are not
 compatible with each other (e.g. an instance ``tracern.Vector`` cannot be added

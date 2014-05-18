@@ -15,8 +15,6 @@ from functools import reduce,partial
 from ntracer.wrapper import NTracer
 
 
-DUMP_ASY_REPR = False
-
 MAX_DEPTH = 20
 
 # only split nodes if there are more than this many primitives
@@ -213,14 +211,6 @@ def create_node(nt,depth,boundary,contain_p,overlap_p):
         split,
         create_node(nt,depth,b_left,l_contain_p,l_overlap_p),
         create_node(nt,depth,b_right,r_contain_p,r_overlap_p))
-
-
-if DUMP_ASY_REPR:
-    def point_data_str(d):
-        return '({0})'.format(','.join(str(n) for n in d.point))
-    
-    def point_data_center(nt,d):
-        return sum((pt.point for pt in d),nt.Vector())*(1.0/len(d))
 
 
 def build_kdtree(nt,primitives):

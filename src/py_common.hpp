@@ -365,10 +365,7 @@ template<typename T,typename Base,bool InPlace=(alignof(T) <= PYOBJECT_ALIGNMENT
     
     T base;
     PY_MEM_NEW_DELETE
-    simple_py_wrapper(const T &b) : base(b) {
-        PyObject_Init(reinterpret_cast<PyObject*>(this),Base::pytype());
-    }
-    simple_py_wrapper(T &&b) : base(std::move(b)) {
+    template<typename... Args> simple_py_wrapper(Args&&... args) : base(std::forward<Args>(args)...) {
         PyObject_Init(reinterpret_cast<PyObject*>(this),Base::pytype());
     }
     
@@ -385,15 +382,10 @@ template<typename T,typename Base> struct simple_py_wrapper<T,Base,false> : Base
     
     T *base;
     PY_MEM_NEW_DELETE
-    simple_py_wrapper(const T &b) {
+    template<typename... Args> simple_py_wrapper(Args&&... args) {
         PyObject_Init(reinterpret_cast<PyObject*>(this),Base::pytype());
         alloc_base();
-        new(base) T(b);
-    }
-    simple_py_wrapper(T &&b) {
-        PyObject_Init(reinterpret_cast<PyObject*>(this),Base::pytype());
-        alloc_base();
-        new(base) T(std::move(b));
+        new(base) T(std::forward<Args>(args)...);
     }
     ~simple_py_wrapper() {
         if(base) base->~T();
@@ -457,6 +449,11 @@ inline void setter_no_delete(PyObject *arg) {
         throw py_error_set();
     }
 }
+
+
+PyObject *immutable_copy_func(PyObject *self,PyObject*);
+constexpr PyMethodDef immutable_copy = {"__copy__",&immutable_copy_func,METH_NOARGS,NULL};
+constexpr PyMethodDef immutable_deepcopy = {"__deepcopy__",&immutable_copy_func,METH_O,NULL};
 
 
 inline void add_class(PyObject *module,const char *name,PyTypeObject *type) {
