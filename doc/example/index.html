@@ -63,7 +63,7 @@
 <span class="n">ntracer</span> <span class="o">=</span> <span class="n">NTracer</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
 
 <span class="n">data</span> <span class="o">=</span> <span class="n">wavefront_obj</span><span class="o">.</span><span class="n">load_obj</span><span class="p">(</span><span class="s">&#39;monkey.obj&#39;</span><span class="p">)</span>
-<span class="n">scene</span> <span class="o">=</span> <span class="n">build_composite_scene</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+<span class="n">scene</span> <span class="o">=</span> <span class="n">build_composite_scene</span><span class="p">(</span><span class="n">ntracer</span><span class="p">,</span><span class="n">data</span><span class="p">)</span>
 
 <span class="n">camera</span> <span class="o">=</span> <span class="n">ntracer</span><span class="o">.</span><span class="n">Camera</span><span class="p">()</span>
 <span class="n">camera</span><span class="o">.</span><span class="n">translate</span><span class="p">(</span><span class="n">ntracer</span><span class="o">.</span><span class="n">Vector</span><span class="o">.</span><span class="n">axis</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span><span class="o">-</span><span class="mi">5</span><span class="p">))</span>
