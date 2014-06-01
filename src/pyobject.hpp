@@ -471,8 +471,8 @@ namespace py {
         }
     };
     
-    template<typename... Args> tuple make_tuple(const Args&... args) {
-        return {make_object(args)...};
+    template<typename... Args> tuple make_tuple(Args&&... args) {
+        return {make_object(std::forward<Args>(args))...};
     }
 
 
@@ -1079,18 +1079,21 @@ namespace py {
 }
 
 
-namespace std {
-    template<> inline void swap(py::object &a,py::object &b) { a.swap(b); }
-    template<> inline void swap(py::tuple &a,py::tuple &b) { a.swap(b); }
-    template<> inline void swap(py::dict &a,py::dict &b) { a.swap(b); }
-    template<> inline void swap(py::list &a,py::list &b) { a.swap(b); }
-    template<> inline void swap(py::bytes &a,py::bytes &b) { a.swap(b); }
-    template<typename T> inline void swap(py::nullable<T> &a,py::nullable<T> &b) { a.swap(b); }
-    template<typename T> inline void swap(py::pyptr<T> &a,py::pyptr<T> &b) { a.swap(b); }
-}
+
+inline void swap(py::object &a,py::object &b) { a.swap(b); }
+inline void swap(py::tuple &a,py::tuple &b) { a.swap(b); }
+inline void swap(py::dict &a,py::dict &b) { a.swap(b); }
+inline void swap(py::list &a,py::list &b) { a.swap(b); }
+inline void swap(py::bytes &a,py::bytes &b) { a.swap(b); }
+template<typename T> inline void swap(py::nullable<T> &a,py::nullable<T> &b) { a.swap(b); }
+template<typename T> inline void swap(py::pyptr<T> &a,py::pyptr<T> &b) { a.swap(b); }
 
 template<typename T> inline T from_pyobject(const py::_object_base &o) {
     return from_pyobject<T>(o.ref());
+}
+
+template<> inline py::object from_pyobject<py::object>(PyObject *o) {
+    return py::borrowed_ref(o);
 }
 
 template<> inline py::tuple from_pyobject<py::tuple>(PyObject *o) {
@@ -1131,6 +1134,10 @@ inline PyObject *to_pyobject(py::borrowed_ref r) {
 
 template<typename T> inline PyObject *to_pyobject(const py::pyptr<T> &x) {
     return py::incref(x.ref());
+}
+
+template<typename... T> inline PyObject *to_pyobject(const std::tuple<T...> &x) {
+    return apply(&py::make_tuple<T...>,x).new_ref();
 }
 
 #endif

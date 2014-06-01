@@ -133,7 +133,9 @@ class NTracer(object):
             'PointLight',
             'GlobalLight',
             'dot',
-            'cross']:
+            'cross',
+            'build_kdtree',
+            'build_composite_scene']:
             setattr(obj,n,getattr(mod,n))
         
         if not force_generic:

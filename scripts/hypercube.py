@@ -8,7 +8,7 @@ import itertools
 import functools
 import argparse
 import pygame
-from ntracer import NTracer, build_composite_scene
+from ntracer import NTracer
 from ntracer.pygame_render import PygameRenderer
 from ntracer import wavefront_obj
 
@@ -307,7 +307,7 @@ if args.file:
             raise
         sys.exit('could not load file: ' + str(e))
         
-    scene = build_composite_scene(ntracer,triangles)
+    scene = ntracer.build_composite_scene(triangles)
 else:
     scene = ntracer.BoxScene()
 

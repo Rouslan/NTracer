@@ -563,8 +563,12 @@ callback_renderer::~callback_renderer() {
 PyObject *obj_Scene_calculate_color(obj_Scene *self,PyObject *args,PyObject *kwds) {
     try {
         auto &sc = self->get_base();
-        const char *names[] = {"x","y","width","height"};
-        auto vals = get_arg::get_args<int,int,int,int>("Scene.calculate_color",names,args,kwds);
+        
+        auto vals = get_arg::get_args("Scene.calculate_color",args,kwds,
+            param<int>("x"),
+            param<int>("y"),
+            param<int>("width"),
+            param<int>("height"));
         
         color r;
         
@@ -1136,8 +1140,10 @@ PyMethodDef obj_Color_methods[] = {
 
 PyObject *obj_Color_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
     try {
-        const char *names[] = {"r","g","b"};
-        auto vals = get_arg::get_args<float,float,float>("Color.__new__",names,args,kwds);
+        auto vals = get_arg::get_args("Color.__new__",args,kwds,
+            param<float>("r"),
+            param<float>("g"),
+            param<float>("b"));
 
         auto ptr = py::check_obj(type->tp_alloc(type,0));
         new(&reinterpret_cast<wrapped_type<color>*>(ptr)->alloc_base()) color(

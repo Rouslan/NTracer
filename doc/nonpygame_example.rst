@@ -8,7 +8,7 @@ The following code will load a 3D mesh, render it, and save it to a file, using
 .. code:: python
 
     from PIL import Image
-    from ntracer import NTracer,ImageFormat,Channel,BlockingRenderer,build_composite_scene
+    from ntracer import NTracer,ImageFormat,Channel,BlockingRenderer
     from ntracer import wavefront_obj
 
 
@@ -24,7 +24,7 @@ The following code will load a 3D mesh, render it, and save it to a file, using
     nt = NTracer(3)
 
     data = wavefront_obj.load_obj('monkey.obj')
-    scene = build_composite_scene(nt,data)
+    scene = nt.build_composite_scene(data)
 
     camera = nt.Camera()
     camera.translate(nt.Vector.axis(2,-5))
@@ -67,7 +67,7 @@ the padding will be explained later.
     nt = NTracer(3)
 
     data = wavefront_obj.load_obj('monkey.obj')
-    scene = build_composite_scene(nt,data)
+    scene = nt.build_composite_scene(data)
 
     camera = nt.Camera()
     camera.translate(nt.Vector.axis(2,-5))

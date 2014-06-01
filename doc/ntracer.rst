@@ -350,6 +350,8 @@ ntracer Package
         The byte size of one pixel.
         
         This is the sum of the bit sizes of the channels, rounded up.
+        
+        This attribute is read-only.
 
 
 .. py:class:: Material(color[,opacity=1,reflectivity=0,specular_intensity=1,specular_exp=8,specular_color=(1,1,1)])
@@ -434,8 +436,8 @@ ntracer Package
     exists, otherwise return :py:mod:`.tracern`.
     
     The results are cached, so calling this function multiple times with the
-    same parameter is fast (the cache does not increase the reference count and
-    unloaded modules automatically remove themselves from the cache).
+    same parameter is fast. The cache does not increase the reference count and
+    unloaded modules automatically remove themselves from the cache.
 
 
 
@@ -460,7 +462,7 @@ can't add a tuple and a :py:class:`Vector` together).
     An axis-aligned bounding box.
 
     This is not a displayable primitive, but is instead meant for spacial
-    partitioning of the primitives. This is used by :py:mod:`kdtree_builder`.
+    partitioning of the primitives.
 
     :param integer dimension: The dimension of the box.
     :param vector start: The lowest point of the box. It defaults to a vector
@@ -488,8 +490,8 @@ can't add a tuple and a :py:class:`Vector` together).
         ``skip``. This is equivalent to testing against a simplex that has been
         extruded infinitely far in the positive and negative directions along
         that axis. The simplex **must** be flat along that axis (i.e.
-        :code:`primitive.aabb_min[skip] == primitive.aabb_max[skip]` must be
-        true) for the return value to be correct.
+        :code:`primitive.boundary.start[skip] == primitive.boundary.end[skip]`
+        must be true) for the return value to be correct.
         
         This method is needed when a simplex is completely embedded in a split
         hyperplane and thus would fail the normal intersection test with any
@@ -554,15 +556,15 @@ can't add a tuple and a :py:class:`Vector` together).
 
         Set the scene's camera to a copy of the provided value.
 
-        If the scene has been locked by a :py:class:`.render.Renderer`, this
-        function will raise an exception instead.
+        If the scene has been locked by a renderer, this function will raise an
+        exception instead.
 
     .. py:method:: set_fov(fov)
 
         Set the field of vision.
 
-        If the scene has been locked by a :py:class:`.render.Renderer`, this
-        function will raise an exception instead.
+        If the scene has been locked by a renderer, this function will raise an
+        exception instead.
 
         :param fov: The new field of vision in radians.
 
@@ -653,20 +655,19 @@ can't add a tuple and a :py:class:`Vector` together).
         :code:`self.__setitem__(i,v)` <==> :code:`self[i]=v`
 
 
-.. py:class:: CompositeScene(aabb_min,aabb_max,data)
+.. py:class:: CompositeScene(boundary,data)
 
     Bases: :py:class:`.render.Scene`
 
     A scene that displays the contents of a k-d tree.
     
     You normally don't need to create this object directly, but instead call
-    :py:func:`.kdtree_builder.build_composite_scene`.
+    :py:func:`build_composite_scene`.
 
-    :param vector aabb_min: The minimum extent of the axis-aligned bounding-box
-        that encloses all the primitives of the scene.
-    :param vector aabb_max: The maximum extent of the axis-aligned bounding-box
-        that encloses all the primitives of the scene.
+    :param boundary: The axis-aligned bounding-box that encloses all the
+        primitives of the scene.
     :param data: The root node of a k-d tree.
+    :type boundary: :py:class:`AABB`
     :type data: :py:class:`KDNode`
     
     .. py:method:: add_light(light)
@@ -676,8 +677,8 @@ can't add a tuple and a :py:class:`Vector` together).
         The light will be added to :py:attr:`global_lights` or
         :py:attr:`point_lights` according to its type.
     
-        If the scene has been locked by a :py:class:`.render.Renderer`, this
-        method will raise an exception instead.
+        If the scene has been locked by a renderer, this method will raise an
+        exception instead.
         
         :param light: An instance of :py:class:`GlobalLight` or
             :py:class:`PointLight`.
@@ -690,8 +691,8 @@ can't add a tuple and a :py:class:`Vector` together).
     
         Set the value of :py:attr:`ambient_color`
         
-        If the scene has been locked by a :py:class:`.render.Renderer`, this
-        method will raise an exception instead.
+        If the scene has been locked by a renderer, this method will raise an
+        exception instead.
 
         :param color: An instance of :py:class:`.render.Color` or a tuple with
             three numbers.
@@ -701,8 +702,8 @@ can't add a tuple and a :py:class:`Vector` together).
         Set the values of :py:attr:`bg1`, :py:attr:`bg2`, :py:attr:`bg3` and
         :py:attr:`bg_gradient_axis`.
         
-        If the scene has been locked by a :py:class:`.render.Renderer`, this
-        method will raise an exception instead.
+        If the scene has been locked by a renderer, this method will raise an
+        exception instead.
         
         :param color c1: The new value for :py:attr:`bg1`.
         :param color c2: The new value for :py:attr:`bg2`.
@@ -714,8 +715,8 @@ can't add a tuple and a :py:class:`Vector` together).
 
         Set the scene's camera to a copy of the provided value.
 
-        If the scene has been locked by a :py:class:`.render.Renderer`, this
-        method will raise an exception instead.
+        If the scene has been locked by a renderer, this method will raise an
+        exception instead.
 
         :param camera: An instance of :py:class:`Camera`.
     
@@ -723,8 +724,8 @@ can't add a tuple and a :py:class:`Vector` together).
     
         Set the value of :py:attr:`camera_light`
         
-        If the scene has been locked by a :py:class:`.render.Renderer`, this
-        method will raise an exception instead.
+        If the scene has been locked by a renderer, this method will raise an
+        exception instead.
 
         :param boolean camera_light: The new value.
 
@@ -732,8 +733,8 @@ can't add a tuple and a :py:class:`Vector` together).
 
         Set the field of vision.
 
-        If the scene has been locked by a :py:class:`.render.Renderer`, this
-        method will raise an exception instead.
+        If the scene has been locked by a renderer, this method will raise an
+        exception instead.
 
         :param number fov: The new field of vision in radians.
         
@@ -741,8 +742,8 @@ can't add a tuple and a :py:class:`Vector` together).
 
         Set the value of :py:attr:`max_reflect_depth`.
 
-        If the scene has been locked by a :py:class:`.render.Renderer`, this
-        method will raise an exception instead.
+        If the scene has been locked by a renderer, this method will raise an
+        exception instead.
 
         :param integer depth: The new value.
     
@@ -750,24 +751,10 @@ can't add a tuple and a :py:class:`Vector` together).
     
         Set the value of :py:attr:`shadows`
         
-        If the scene has been locked by a :py:class:`.render.Renderer`, this
-        method will raise an exception instead.
+        If the scene has been locked by a renderer, this method will raise an
+        exception instead.
 
         :param boolean shadows: The new value.
-        
-    .. py:attribute:: aabb_max
-    
-        The maximum extent of the axis-aligned bounding-box that encloses all
-        the primitives of the scene.
-        
-        This attribute is read-only.
-    
-    .. py:attribute:: aabb_min
-    
-        The minimum extent of the axis-aligned bounding-box that encloses all
-        the primitives of the scene.
-        
-        This attribute is read-only.
         
     .. py:attribute:: ambient_color
     
@@ -816,6 +803,13 @@ can't add a tuple and a :py:class:`Vector` together).
         
         This attribute is read-only. To modify the value, use
         :py:meth:`set_background`.
+    
+    .. py:attribute:: boundary
+    
+        The :py:class:`AABB` that encloses all the primitives of the
+        scene.
+        
+        This attribute is read-only.
         
     .. py:attribute:: camera_light
     
@@ -849,7 +843,7 @@ can't add a tuple and a :py:class:`Vector` together).
 
         A boolean specifying whether or not the scene is locked.
 
-        This attribute cannot be modified in Python code.
+        This attribute is read-only.
     
     .. py:attribute:: max_reflect_depth
 
@@ -862,7 +856,7 @@ can't add a tuple and a :py:class:`Vector` together).
         A value of 0 disables reflections altogether.
 
         This attribute is read-only. To modify the value, use
-        :py:meth:`set_fov`.
+        :py:meth:`set_max_reflect_depth`.
     
     .. py:attribute:: point_lights
     
@@ -1292,19 +1286,13 @@ can't add a tuple and a :py:class:`Vector` together).
 
     This class cannot be instantiated directly in Python code.
 
-    .. py:method:: realize() -> Primitive
+    .. py:method:: primitive -> Primitive
 
-        Return the corresponding :py:class:`Primitive`.
+        The corresponding :py:class:`Primitive`.
 
-    .. py:attribute:: aabb_max
+    .. py:attribute:: boundary
 
-        A vector specifying the maximum extent of the primitive's axis aligned
-        bounding box.
-
-    .. py:attribute:: aabb_min
-
-        A vector specifying the minimum extent of the primitive's axis aligned
-        bounding box.
+        The :py:class:`AABB` of the primitive.
     
     .. py:attribute:: material
     
@@ -1616,6 +1604,44 @@ can't add a tuple and a :py:class:`Vector` together).
         The dimension of the vector.
 
 
+.. py:function:: build_composite_scene(primitives[,extra_threads=-1]) -> \
+    CompositeScene
+
+    Create a scene from a sequence of :py:class:`PrimitivePrototype` instances.
+    
+    By default, this will use all available processing cores to build the scene,
+    but this can be controlled by passing a non-negative integer to
+    ``extra_threads`` (a value of zero would make it run single-threaded). Note
+    that fewer threads may be used if the resulting k-d tree is too shallow.
+    
+    :param iterable primitives: One or more instances of
+        :py:class:`PrimitivePrototype`.
+    :param integer extra_threads: How many extra threads to use or -1 to use as
+        many extra threads as there are extra processing cores.
+
+
+.. py:function:: build_kdtree(primitives[,extra_threads=-1]) -> tuple
+
+    Create a k-d tree from a sequence of :py:class:`PrimitivePrototype`
+    instances.
+    
+    The return value is a tuple containing an instance of :py:class:`AABB`
+    followed by the root node of k-d tree (an instance of :py:class:`KDNode`).
+    The :py:class:`AABB` encloses all the primitives from ``primitives``. The
+    tuple's values can be passed directly to :py:class:`CompositeScene` (which
+    is exactly what :py:func:`build_composite_scene` does).
+    
+    By default, this will use all available processing cores to build the tree,
+    but this can be controlled by passing a non-negative integer to
+    ``extra_threads`` (a value of zero would make it run single-threaded). Note
+    that fewer threads may be used if the resulting tree is too shallow.
+    
+    :param sequence primitives: One or more instances of
+        :py:class:`PrimitivePrototype`.
+    :param integer extra_threads: How many extra threads to use or -1 to use as
+        many extra threads as there are extra processing cores.
+
+
 .. py:function:: cross(vectors) -> Vector
 
     A generalized cross product.
@@ -1623,17 +1649,10 @@ can't add a tuple and a :py:class:`Vector` together).
     :param vectors: A sequence of linearly independent vectors. The number of
         vectors must be one less than their dimension.
 
+
 .. py:function:: dot(a,b) -> float
 
     Compute the dot product of two vectors.
-
-
-
-:mod:`kdtree_builder` Module
-----------------------------
-
-.. automodule:: ntracer.kdtree_builder
-    :members:
 
 
 
@@ -1707,9 +1726,5 @@ unpickled, the specialized versions are used when available.
 
 Note that equivalent types between the generic and specific versions are not
 compatible with each other (e.g. an instance ``tracern.Vector`` cannot be added
-to an instance of ``tracer3.Vector`` even if they have the same dimension),
-however, they are interchangeable in the other modules (e.g.
-:py:func:`.kdtree_builder.build_composite_scene` is documented as taking
-instances of ``tracern.PrimitivePrototype``, but it will accept instances of
-``tracer3.PrimitivePrototype`` just as well).
+to an instance of ``tracer3.Vector`` even if they have the same dimension).
 

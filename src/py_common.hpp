@@ -274,6 +274,10 @@ template<> inline float from_pyobject<float>(PyObject *o) {
     return PyString_AsString(o);
 }*/
 
+template<> inline PyObject *from_pyobject<PyObject*>(PyObject *o) {
+    return o;
+}
+
 template<typename T> inline T py_to_xint(PyObject *o) {
     static_assert(std::numeric_limits<long>::max() >= std::numeric_limits<T>::max(),"py_to_xint will truncate T");
     return static_cast<T>(narrow(from_pyobject<long>(o),std::numeric_limits<T>::max(),std::numeric_limits<T>::min()));
@@ -360,9 +364,7 @@ template<typename T> int clear_idict(PyObject *self) {
 }
 
 
-template<typename T,typename Base,bool InPlace=(alignof(T) <= PYOBJECT_ALIGNMENT)> struct simple_py_wrapper : Base {
-    static constexpr bool contained = true;
-    
+template<typename T,typename Base,bool AllowIndirect=false,bool InPlace=(alignof(T) <= PYOBJECT_ALIGNMENT)> struct simple_py_wrapper : Base {
     T base;
     PY_MEM_NEW_DELETE
     template<typename... Args> simple_py_wrapper(Args&&... args) : base(std::forward<Args>(args)...) {
@@ -377,19 +379,18 @@ template<typename T,typename Base,bool InPlace=(alignof(T) <= PYOBJECT_ALIGNMENT
     T &get_base() { return base; }
 };
 
-template<typename T,typename Base> struct simple_py_wrapper<T,Base,false> : Base {
-    static constexpr bool contained = false;
-    
+template<typename T,typename Base> struct simple_py_wrapper<T,Base,false,false> : Base {
     T *base;
     PY_MEM_NEW_DELETE
     template<typename... Args> simple_py_wrapper(Args&&... args) {
         PyObject_Init(reinterpret_cast<PyObject*>(this),Base::pytype());
-        alloc_base();
-        new(base) T(std::forward<Args>(args)...);
+        new(&alloc_base()) T(std::forward<Args>(args)...);
     }
     ~simple_py_wrapper() {
-        if(base) base->~T();
-        simd::aligned_free(base);
+        if(base) {
+            base->~T();
+            simd::aligned_free(base);
+        }
     }
     
     T &alloc_base() {
@@ -402,10 +403,114 @@ template<typename T,typename Base> struct simple_py_wrapper<T,Base,false> : Base
     T &get_base() { return *base; }
 };
 
+template<typename T,typename Base> struct simple_py_wrapper<T,Base,true,true> : Base {
+    storage_mode mode;
+    union direct_indirect_data {
+        T direct;
+        struct {
+            T *ptr;
+            PyObject *owner;
+        } indirect;
+        
+        direct_indirect_data() {}
+        ~direct_indirect_data() {}
+    } base;
+    
+    PY_MEM_NEW_DELETE
+    
+    template<typename... Args> simple_py_wrapper(Args&&... args) {
+        PyObject_Init(reinterpret_cast<PyObject*>(this),Base::pytype());
+        new(&base.direct) T(std::forward<Args>(args)...);
+        mode = CONTAINS;
+    }
+    
+    simple_py_wrapper(PyObject *owner,T &base) {
+        PyObject_Init(reinterpret_cast<PyObject*>(this),Base::pytype());
+        this->base.indirect.ptr = &base;
+        this->base.indirect.owner = owner;
+        Py_INCREF(owner);
+        mode = INDIRECT;
+    }
+    
+    ~simple_py_wrapper() {
+        if(mode == CONTAINS) base.direct.~T();
+        else if(mode == INDIRECT) {
+            Py_DECREF(base.indirect.owner);
+        }
+    }
+    
+    T &alloc_base() {
+        assert(mode == UNINITIALIZED);
+        mode = CONTAINS;
+        return base.direct;
+    }
+    
+    T &cast_base() {
+        if(mode == CONTAINS) return base.direct;
+        
+        assert(mode == INDIRECT);
+        return *base.indirect.ptr;
+    }
+    T &get_base() { return cast_base(); }
+};
+
+template<typename T,typename Base> struct simple_py_wrapper<T,Base,true,false> : Base {
+    storage_mode mode;
+    T *base;
+    PyObject *owner;
+    
+    PY_MEM_NEW_DELETE
+    
+    template<typename... Args> simple_py_wrapper(Args&&... args) {
+        PyObject_Init(reinterpret_cast<PyObject*>(this),Base::pytype());
+        new(&alloc_base()) T(std::forward<Args>(args)...);
+        mode = CONTAINS;
+    }
+    
+    simple_py_wrapper(PyObject *owner,T &base) : mode(INDIRECT), base(&base), owner(owner) {
+        Py_INCREF(owner);
+        PyObject_Init(reinterpret_cast<PyObject*>(this),Base::pytype());
+    }
+    
+    ~simple_py_wrapper() {
+        if(mode == CONTAINS) {
+            base->~T();
+            simd::aligned_free(base);
+        } else if(mode == INDIRECT) {
+            Py_DECREF(owner);
+        }
+    }
+    
+    T &alloc_base() {
+        assert(!base);
+        base = reinterpret_cast<T*>(simd::aligned_alloc(alignof(T),sizeof(T)));
+        mode = CONTAINS;
+        return *base;
+    }
+    
+    T &cast_base() { return *base; }
+    T &get_base() { return *base; }
+};
+
 #define CONTAINED_PYTYPE_DEF \
     static PyTypeObject _pytype; \
     static constexpr PyTypeObject *pytype() { return &_pytype; }
 
+
+template<typename T> struct parameter {
+    typedef T type;
+    
+    const char *name;
+    explicit constexpr parameter(const char *name) : name(name) {}
+};
+
+template<typename T> struct opt_parameter {
+    typedef T type;
+    
+    const char *name;
+    const T def_value;
+    constexpr opt_parameter(const char *name,T def_value) : name(name), def_value(def_value) {}
+};
 
 class get_arg {
     struct get_arg_base {
@@ -420,9 +525,19 @@ class get_arg {
         void finished();
     } base;
     
-    template<typename... T,size_t... Indexes> static std::tuple<T...> _get_args(index_list<Indexes...>,const char *fname,const char **arg_names,PyObject *args,PyObject *kwds) {
-        get_arg_base ga(args,kwds,sizeof...(T),arg_names,fname);
-        std::tuple<T...> r{from_pyobject<T>(ga(Indexes,true))...};
+    template<typename T> static inline T as_param(const parameter<T> &p,size_t index,get_arg_base &ga) {
+        return from_pyobject<T>(ga(index,true));
+    }
+    
+    template<typename T> static inline T as_param(const opt_parameter<T> &p,size_t index,get_arg_base &ga) {
+        PyObject *tmp = ga(index,false);
+        return tmp ? from_pyobject<T>(tmp) : p.def_value;
+    }
+    
+    template<typename... P,size_t... Indexes> static inline std::tuple<typename P::type...> _get_args(index_list<Indexes...>,const char *fname,PyObject *args,PyObject *kwds,const P&... params) {
+        const char *arg_names[] = {params.name...};
+        get_arg_base ga(args,kwds,sizeof...(P),arg_names,fname);
+        std::tuple<typename P::type...> r{as_param(params,Indexes,ga)...};
         ga.finished();
         return r;
     }
@@ -436,10 +551,16 @@ public:
     PyObject *operator()(bool required) { return base(arg_index++,required); }
     void finished() { base.finished(); }
     
-    template<typename... T> static std::tuple<T...> get_args(const char *fname,const char **arg_names,PyObject *args,PyObject *kwds) {
-        return _get_args<T...>(make_index_list<sizeof...(T)>(),fname,arg_names,args,kwds);
+    template<typename... P> static std::tuple<typename P::type...> get_args(const char *fname,PyObject *args,PyObject *kwds,const P&... params) {
+        return _get_args<P...>(make_index_list<sizeof...(P)>(),fname,args,kwds,params...);
     }
 };
+
+constexpr parameter<PyObject*> param(const char *name) { return parameter<PyObject*>(name); }
+template<typename T> constexpr parameter<T> param(const char *name) { return parameter<T>(name); }
+constexpr opt_parameter<PyObject*> param(const char *name,PyObject *def_value) { return {name,def_value}; }
+template<typename T> constexpr opt_parameter<T> param(const char *name,T def_value) { return {name,def_value}; }
+
 
 void NoSuchOverload(PyObject *args);
 

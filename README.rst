@@ -11,7 +11,18 @@ GCC >= 4.7 and Clang >= 3.1.
 NTracer is a simple ray-tracer that can work with scenes with an arbitrary
 number of dimensions.
 
-.. image:: https://rouslan.github.io/NTracer/screenshots/ntracer_6d.png
+.. figure:: https://rouslan.github.io/NTracer/screenshots/ntracer_6d_thumb.png
+    :alt: sceenshot 1
+    :target: https://rouslan.github.io/NTracer/screenshots/ntracer_6d.png
+    
+    A three-dimension slice of a six-dimensional hypercube
+
+.. figure:: https://rouslan.github.io/NTracer/screenshots/ggs120cell_thumb.png
+    :alt: screenshot 2
+    :target: https://rouslan.github.io/NTracer/screenshots/ggs120cell.png
+    
+    A three-dimension slice of a `great grand stellated 120-cell
+    <http://en.wikipedia.org/wiki/Great_grand_stellated_120-cell>`_
 
 The renderer can use an arbitrary number of threads and by default uses as many
 threads as there are processing cores. For small dimensionalities (by default,

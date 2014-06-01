@@ -301,9 +301,10 @@ namespace impl {
             fill_with(b);
         }
         
-        template<typename B> FORCE_INLINE v_array<Store,T> &operator=(const v_expr<B> &b) {
+        template<typename B> FORCE_INLINE v_array &operator=(const v_expr<B> &b) {
             assert(_size() == b.size());
             fill_with(b);
+            return *this;
         }
         
         template<typename Op,typename B> struct _v_compound {
@@ -317,31 +318,31 @@ namespace impl {
                 Op::assign(self.template vec<Size>(n),b.template vec<Size>(n));
             }
         };
-        template<typename B> v_array<Store,T> &operator+=(const v_expr<B> &b) {
+        template<typename B> v_array &operator+=(const v_expr<B> &b) {
             assert(b.v_size() >= _v_size());
             v_rep(_v_size(),_v_compound<op_add,B>{*this,b});
             return *this;
         }
-        template<typename B> v_array<Store,T> &operator-=(const v_expr<B> &b) {
+        template<typename B> v_array &operator-=(const v_expr<B> &b) {
             assert(b.v_size() >= _v_size());
             v_rep(_v_size(),_v_compound<op_subtract,B>{*this,b});
             return *this;
         }
-        template<typename B> v_array<Store,T> &operator*=(const v_expr<B> &b) {
+        template<typename B> v_array &operator*=(const v_expr<B> &b) {
             assert(b.v_size() >= _v_size());
             v_rep(_v_size(),_v_compound<op_multiply,B>{*this,b});
             return *this;
         }
-        v_array<Store,T> &operator*=(T b) {
+        v_array &operator*=(T b) {
             v_rep(_v_size(),_v_compound<op_multiply,v_repeat<T> >{*this,v_repeat<T>{_size(),b}});
             return *this;
         }
-        template<typename B> v_array<Store,T> &operator/=(const v_expr<B> &b) {
+        template<typename B> v_array &operator/=(const v_expr<B> &b) {
             assert(b.v_size() >= _v_size());
             v_rep(_v_size(),_v_compound<op_divide,B>{*this,b});
             return *this;
         }
-        v_array<Store,T> &operator/=(T b) {
+        v_array &operator/=(T b) {
 #ifdef MULT_RECIPROCAL_INSTEAD_OF_DIV
             return operator*=(1/b);
 #else
@@ -349,17 +350,17 @@ namespace impl {
             return *this;
 #endif
         }
-        template<typename B> v_array<Store,T> &operator&=(const v_expr<B> &b) {
+        template<typename B> v_array &operator&=(const v_expr<B> &b) {
             assert(b.v_size() >= _v_size());
             v_rep(_v_size(),_v_compound<op_and,B>{*this,b});
             return *this;
         }
-        template<typename B> v_array<Store,T> &operator|=(const v_expr<B> &b) {
+        template<typename B> v_array &operator|=(const v_expr<B> &b) {
             assert(b.v_size() >= _v_size());
             v_rep(_v_size(),_v_compound<op_or,B>{*this,b});
             return *this;
         }
-        template<typename B> v_array<Store,T> &operator^=(const v_expr<B> &b) {
+        template<typename B> v_array &operator^=(const v_expr<B> &b) {
             assert(b.v_size() >= _v_size());
             v_rep(_v_size(),_v_compound<op_xor,B>{*this,b});
             return *this;
@@ -408,6 +409,11 @@ namespace impl {
         
         template<size_t Size> FORCE_INLINE simd::v_type<T,Size> vec(size_t n) const {
             return *reinterpret_cast<const simd::v_type<T,Size>*>(store.items + n);
+        }
+        
+        void swap(v_array &b) {
+            using std::swap;
+            swap(store,b.store);
         }
         
         typename Store::template type<v_item_count,T> store;
@@ -664,15 +670,27 @@ namespace impl {
         }
         
         v_op_expr<op_abs,T> abs() const { return {*this}; }
-        v_op_expr<op_max,T> max() const { return {*this}; }
-        v_op_expr<op_min,T> min() const { return {*this}; }
         
         s_item_t<T> reduce_add() const { return reduce<op_add,T>(*this); }
         s_item_t<T> reduce_max() const { return reduce<op_max,T>(*this); }
         s_item_t<T> reduce_min() const { return reduce<op_min,T>(*this); }
     };
+    
+    template<typename A,typename B> v_op_expr<op_min,A,B> min(const v_expr<A> &a,const v_expr<B> &b) {
+        return {a,b};
+    }
+    
+    template<typename A,typename B> v_op_expr<op_max,A,B> max(const v_expr<A> &a,const v_expr<B> &b) {
+        return {a,b};
+    }
 }
 
 using impl::v_array;
+using impl::min;
+using impl::max;
+
+template<typename Store,typename T> void swap(v_array<Store,T> &a,v_array<Store,T> &b) {
+    a.swap(b);
+}
 
 #endif

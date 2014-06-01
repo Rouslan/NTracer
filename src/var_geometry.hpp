@@ -96,6 +96,11 @@ namespace var {
             return size;
         }
         
+        void swap(item_array &b) {
+            std::swap(size,b.size);
+            std::swap(items,b.items);
+        }
+        
     private:
         void allocate() {
             assert(size > 0);
@@ -131,6 +136,10 @@ namespace var {
 
         template<typename RealItems,typename U=T> using type = item_array<RealItems,U>;
     };
+}
+
+template<typename RealItems,typename T> inline void swap(var::item_array<RealItems,T> &a,var::item_array<RealItems,T> &b) {
+    a.swap(b);
 }
 
 #endif

@@ -2,6 +2,11 @@
 #define tracer_hpp
 
 #include <memory>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <future>
+#include <deque>
 
 #include "geometry.hpp"
 #include "light.hpp"
@@ -11,12 +16,20 @@
 #include "instrumentation.hpp"
 
 
+#define ITR_RANGE(X) X.begin(),X.end()
+
+
 const real ROUNDING_FUZZ = std::numeric_limits<real>::epsilon() * 10;
 const size_t QUICK_LIST_PREALLOC = 10;
 
 /* Checking if anything occludes a light is expensive, so if the light from a
    point light is going to be dimmer than this, don't bother. */
 const real LIGHT_THRESHOLD = real(1)/512;
+
+const int KD_MAX_DEPTH = 18;
+
+// only split nodes if there are more than this many primitives
+const int KD_SPLIT_THRESHHOLD = 2;
 
 
 template<typename Store> class ray {
@@ -368,8 +381,7 @@ private:
         : primitive<Store>(m,pytype()), flex_base(p1.dimension()-1,edge_normals), p1(p1), face_normal(face_normal) {
         assert(p1.dimension() == face_normal.dimension() &&
             std::all_of(
-                this->items().begin(),
-                this->items().end(),
+                ITR_RANGE(this->items()),
                 [&](const vector<Store> &e){ return e.dimension() == p1.dimension(); }));
         recalculate_d();
     }
@@ -547,17 +559,19 @@ template<typename Store> struct kd_node_deleter {
     void operator()(kd_node<Store> *ptr) const;
 };
 
+template<typename Store> using kd_node_unique_ptr = std::unique_ptr<kd_node<Store>,kd_node_deleter<Store> >;
+
 template<typename Store> struct kd_branch : kd_node<Store> {
     int axis;
     real split;
-    std::unique_ptr<kd_node<Store>,kd_node_deleter<Store> > left; // < split
-    std::unique_ptr<kd_node<Store>,kd_node_deleter<Store> > right; // > split
+    kd_node_unique_ptr<Store> left; // < split
+    kd_node_unique_ptr<Store> right; // > split
     
-    kd_branch(int axis,real split,kd_node<Store> *left,kd_node<Store> *right) :
+    kd_branch(int axis,real split,kd_node<Store> *left=nullptr,kd_node<Store> *right=nullptr) :
         kd_node<Store>(BRANCH), axis(axis), split(split), left(left), right(right) {}
     
-    kd_branch(int axis,real split,std::unique_ptr<kd_node<Store> > &&left,std::unique_ptr<kd_node<Store> > &&right) :
-        kd_node<Store>(BRANCH), axis(axis), split(split), left(left), right(right) {}
+    kd_branch(int axis,real split,kd_node_unique_ptr<Store> &&left,kd_node_unique_ptr<Store> &&right) :
+        kd_node<Store>(BRANCH), axis(axis), split(split), left(std::move(left)), right(std::move(right)) {}
     
     real intersects(const ray<Store> &target,ray<Store> &normal,primitive<Store> *&p,ray_intersections<Store> &hits,real t_near,real t_far) const {
         assert(target.dimension() == normal.dimension());
@@ -806,36 +820,79 @@ template<typename Store> struct p_instance : p_instance_obj_common, primitive<St
 };
 
 
-template<typename Store> struct solid_prototype {
-    py::pyptr<solid<Store> > p;
+template<typename Store> struct solid_prototype;
+template<typename Store> struct triangle_prototype;
+
+template<typename Store> struct aabb {
+    aabb(int dimension) : start(dimension), end(dimension) {}
+    aabb(const vector<Store> &start,const vector<Store> &end) : start(start), end(end) {}
+
+    int dimension() const { return start.dimension(); }
+
+    vector<Store> start;
+    vector<Store> end;
+
+
+    /* All Prototype intersection tests should only return true if the
+       intersection between the AABB and the Primitive has a non-zero volume.
+       E.g. two cubes that share a face do not count as intersecting. This is
+       important because k-d tree split positions are always at Primitive
+       boundaries and a Primitive should end up on only one side of the split
+       (hyper)plane. */
+
+    bool intersects(const triangle_prototype<Store> &tp) const;
+    bool intersects_flat(const triangle_prototype<Store> &tp,int skip) const;
+    bool box_axis_test(const solid<Store> *c,const vector<Store> &axis) const;
+    bool intersects(const solid_prototype<Store> &sp) const;
     
-    vector<Store> aabb_max;
-    vector<Store> aabb_min;
+    void swap(aabb &b) {
+        start.swap(b.start);
+        end.swap(b.end);
+    }
+};
+
+template<typename Store> void swap(aabb<Store> &a,aabb<Store> &b) {
+    a.swap(b);
+}
+
+
+template<typename Store> struct primitive_prototype {
+    aabb<Store> boundary;
+    py::pyptr<primitive<Store> > p;
     
     int dimension() const {
-        return aabb_max.dimension();
+        return boundary.dimension();
+    }
+};
+
+template<typename Store> struct solid_prototype : primitive_prototype<Store> {
+    solid<Store> *ps() {
+        return static_cast<solid<Store>*>(this->p.get());
+    }
+    const solid<Store> *ps() const {
+        return static_cast<const solid<Store>*>(this->p.get());
     }
 };
 
 template<typename Store> struct triangle_point {
     vector<Store> point;
-    vector<Store> edge_normal;
+    const vector<Store> &edge_normal;
     
     triangle_point(const vector<Store> &point,const vector<Store> &edge_normal) : point(point), edge_normal(edge_normal) {}
 };
 
-template<typename Store> struct triangle_prototype : flexible_struct<triangle_prototype<Store>,triangle_point<Store> > {
-    vector<Store> face_normal;
-    vector<Store> aabb_max;
-    vector<Store> aabb_min;
-    py::pyptr<material> m;
+template<typename Store> struct triangle_prototype : primitive_prototype<Store>, flexible_struct<triangle_prototype<Store>,triangle_point<Store> > {
+    triangle<Store> *pt() {
+        return static_cast<triangle<Store>*>(this->p.get());
+    }
+    const triangle<Store> *pt() const {
+        return static_cast<const triangle<Store>*>(this->p.get());
+    }
+
+    vector<Store> first_edge_normal;
     
     size_t _item_size() const {
-        return dimension();
-    }
-    
-    int dimension() const {
-        return face_normal.dimension();
+        return this->dimension();
     }
 };
 
@@ -856,146 +913,136 @@ template<typename Store> real skip_dot(const vector<Store> &a,const vector<Store
     return tot;
 }
 
-template<typename Store> struct aabb {
-    aabb(const vector<Store> &start,const vector<Store> &end) : start(start), end(end) {}
 
-    int dimension() const { return start.dimension(); }
+/* All Prototype intersection tests should only return true if the intersection
+   between the AABB and the Primitive has a non-zero volume. E.g. two cubes that
+   share a face do not count as intersecting. This is important because k-d tree
+   split positions are always at Primitive boundaries and a Primitive should end
+   up on only one side of the split (hyper)plane. */
 
-    vector<Store> start;
-    vector<Store> end;
-
-
-    /* All Prototype intersection tests should only return true if the
-       intersection between the AABB and the Primitive has a non-zero volume.
-       E.g. two cubes that share a face do not count as intersecting. This is
-       important because k-d tree split positions are always at Primitive
-       boundaries and a Primitive should end up on only one side of the split
-       (hyper)plane. */
-
-    bool intersects(const triangle_prototype<Store> &tp) const {
-        INSTRUMENTATION_TIMER;
+template<typename Store> bool aabb<Store>::intersects(const triangle_prototype<Store> &tp) const {
+    INSTRUMENTATION_TIMER;
+    
+    if((v_expr(tp.boundary.start) >= v_expr(end) || v_expr(tp.boundary.end) <= v_expr(start)).any()) return false;
+    
+    real n_offset = dot(tp.pt()->face_normal,tp.items()[0].point);
+    vector<Store> origin = (start + end) * 0.5;
+    
+    real po = dot(origin,tp.pt()->face_normal);
+    
+    real b_max = (v_expr(end - start)/2 * v_expr(tp.pt()->face_normal)).abs().reduce_add();
+    real b_min = po - b_max;
+    b_max += po;
+    
+    if(b_max < n_offset || b_min > n_offset) return false;
+    
+    for(int i=0; i<dimension(); ++i) {
+        const vector<Store> &axis = tp.items()[i].edge_normal;
         
-        if((v_expr(tp.aabb_min) >= v_expr(end) || v_expr(tp.aabb_max) <= v_expr(start)).any()) return false;
+        for(int j=0; j<dimension(); ++j) {
+            /*real t_max = skip_dot(tp.items()[0].point,axis,j);
+            real t_min = skip_dot(tp.items()[i ? i : 1].point,axis,j);
+            if(t_min > t_max) std::swap(t_max,t_min);*/
+            real t_min = std::numeric_limits<real>::max();
+            real t_max = std::numeric_limits<real>::lowest();
+            for(auto &pd : tp.items()) {
+                real val = skip_dot(pd.point,axis,j);
+                if(val < t_min) t_min = val;
+                if(val > t_max) t_max = val;
+            }
+            
+            po = skip_dot(origin,axis,j);
+            
+            b_max = 0;
+            for(int k=0; k<dimension(); ++k) {
+                if(k != j) b_max += std::abs((end[k] - start[k])/2 * axis[k]);
+            }
+            b_min = po - b_max;
+            b_max += po;
+            
+            if(b_max <= t_min || b_min >= t_max) return false;
+        }
+    }
+    
+    return true;
+}
+
+template<typename Store> bool aabb<Store>::intersects_flat(const triangle_prototype<Store> &tp,int skip) const {
+    for(int i=0; i<dimension(); ++i) {
+        if(i != skip && (tp.boundary.start[i] >= end[i] || tp.boundary.end[i] <= start[i])) return false;
+    }
+    
+    vector<Store> origin = (start + end) * 0.5;
+
+    for(int i=0; i<dimension(); ++i) {
+        const vector<Store> &axis = tp.items()[i].edge_normal;
         
-        real n_offset = dot(tp.face_normal,tp.items()[0].point);
-        vector<Store> origin = (start + end) * 0.5;
+        real t_max = skip_dot(tp.items()[0].point,axis,skip);
+        real t_min = skip_dot(tp.items()[i ? i : 1].point,axis,skip);
+        if(t_min > t_max) std::swap(t_max,t_min);
         
-        real po = dot(origin,tp.face_normal);
+        real po = skip_dot(origin,axis,skip);
         
-        real b_max = (v_expr(end - start)/2 * v_expr(tp.face_normal)).abs().reduce_add();
+        real b_max = 0;
+        for(int k=0; k<dimension(); ++k) {
+            if(k != skip) b_max += std::abs((end[k] - start[k])/2 * axis[k]);
+        }
         real b_min = po - b_max;
         b_max += po;
         
-        if(b_max < n_offset || b_min > n_offset) return false;
+        if(b_max <= t_min || b_min >= t_max) return false;
+    }
+    
+    return true;
+}
+
+template<typename Store> bool aabb<Store>::box_axis_test(const solid<Store> *c,const vector<Store> &axis) const {
+    real a_po = dot(c->position,axis);
+    real b_po = dot((start + end) * 0.5,axis);
+    
+    real a_max = 0;
+    for(int i=0; i<dimension(); ++i) a_max += std::abs(dot(c->cube_component(i),axis));
+    
+    real b_max = (v_expr(end - start)/2 * v_expr(axis)).abs().reduce_add();
+    
+    return b_po+b_max < a_po-a_max || b_po-b_max > a_po+a_max;
+}
+
+template<typename Store> bool aabb<Store>::intersects(const solid_prototype<Store> &sp) const {
+    if(sp.ps()->type == CUBE) {
+        if((v_expr(end) <= v_expr(sp.boundary.start) || v_expr(start) >= v_expr(sp.boundary.end)).any()) return false;
         
         for(int i=0; i<dimension(); ++i) {
-            const vector<Store> &axis = tp.items()[i].edge_normal;
+            vector<Store> normal = sp.ps()->cube_normal(i);
             
+            if(box_axis_test(sp.ps(),normal)) return false;
+            
+            // try projecting the normal onto each orthogonal hyperplane
             for(int j=0; j<dimension(); ++j) {
-                /*real t_max = skip_dot(tp.items()[0].point,axis,j);
-                real t_min = skip_dot(tp.items()[i ? i : 1].point,axis,j);
-                if(t_min > t_max) std::swap(t_max,t_min);*/
-                real t_min = std::numeric_limits<real>::max();
-                real t_max = std::numeric_limits<real>::lowest();
-                for(auto &pd : tp.items()) {
-                    real val = skip_dot(pd.point,axis,j);
-                    if(val < t_min) t_min = val;
-                    if(val > t_max) t_max = val;
-                }
+                vector<Store> axis = normal * -normal[j];
+                axis[j] += normal.square();
                 
-                po = skip_dot(origin,axis,j);
-                
-                b_max = 0;
-                for(int k=0; k<dimension(); ++k) {
-                    if(k != j) b_max += std::abs((end[k] - start[k])/2 * axis[k]);
-                }
-                b_min = po - b_max;
-                b_max += po;
-                
-                if(b_max <= t_min || b_min >= t_max) return false;
+                if(box_axis_test(sp.ps(),axis)) return false;
             }
         }
         
         return true;
     }
     
-    bool intersects_flat(const triangle_prototype<Store> &tp,int skip) const {
-        for(int i=0; i<dimension(); ++i) {
-            if(i != skip && (tp.aabb_min[i] >= end[i] || tp.aabb_max[i] <= start[i])) return false;
-        }
-        
-        vector<Store> origin = (start + end) * 0.5;
+    assert(sp.ps()->type == SPHERE);
 
-        for(int i=0; i<dimension(); ++i) {
-            const vector<Store> &axis = tp.items()[i].edge_normal;
-            
-            real t_max = skip_dot(tp.items()[0].point,axis,skip);
-            real t_min = skip_dot(tp.items()[i ? i : 1].point,axis,skip);
-            if(t_min > t_max) std::swap(t_max,t_min);
-            
-            real po = skip_dot(origin,axis,skip);
-            
-            real b_max = 0;
-            for(int k=0; k<dimension(); ++k) {
-                if(k != skip) b_max += std::abs((end[k] - start[k])/2 * axis[k]);
-            }
-            real b_min = po - b_max;
-            b_max += po;
-            
-            if(b_max <= t_min || b_min >= t_max) return false;
-        }
-        
-        return true;
+    vector<Store> box_p = sp.ps()->position - sp.ps()->inv_orientation * ((start + end) * 0.5);
+    
+    vector<Store> closest(dimension(),0);
+    
+    for(int i=0; i<dimension(); ++i) {
+        // equivalent to: sp.p->orientation.transpose() * vector<Store>::axis(dimension(),i,(end[i] - start[i])/2)
+        vector<Store> component = sp.ps()->orientation[i] * ((end[i] - start[i])/2);
+        closest += clamp(dot(box_p,component)/component.square()) * component;
     }
-
-    bool box_axis_test(const solid<Store> *c,const vector<Store> &axis) const {
-        real a_po = dot(c->position,axis);
-        real b_po = dot((start + end) * 0.5,axis);
-        
-        real a_max = 0;
-        for(int i=0; i<dimension(); ++i) a_max += std::abs(dot(c->cube_component(i),axis));
-        
-        real b_max = (v_expr(end - start)/2 * v_expr(axis)).abs().reduce_add();
-        
-        return b_po+b_max < a_po-a_max || b_po-b_max > a_po+a_max;
-    }
-
-    bool intersects(const solid_prototype<Store> &sp) const {
-        if(sp.p->type == CUBE) {
-            if((v_expr(end) <= v_expr(sp.aabb_min) || v_expr(start) >= v_expr(sp.aabb_max)).any()) return false;
-            
-            for(int i=0; i<dimension(); ++i) {
-                vector<Store> normal = sp.p->cube_normal(i);
-                
-                if(box_axis_test(sp.p.get(),normal)) return false;
-                
-                // try projecting the normal onto each orthogonal hyperplane
-                for(int j=0; j<dimension(); ++j) {
-                    vector<Store> axis = normal * -normal[j];
-                    axis[j] += normal.square();
-                    
-                    if(box_axis_test(sp.p.get(),axis)) return false;
-                }
-            }
-            
-            return true;
-        }
-        
-        assert(sp.p->type == SPHERE);
-
-        vector<Store> box_p = sp.p->position - sp.p->inv_orientation * ((start + end) * 0.5);
-        
-        vector<Store> closest(dimension(),0);
-        
-        for(int i=0; i<dimension(); ++i) {
-            // equivalent to: sp.p->orientation.transpose() * vector<Store>::axis(dimension(),i,(end[i] - start[i])/2)
-            vector<Store> component = sp.p->orientation[i] * ((end[i] - start[i])/2);
-            closest += clamp(dot(box_p,component)/component.square()) * component;
-        }
-        
-        return (sp.p->position - closest).square() < 1;
-    }
-};
+    
+    return (sp.ps()->position - closest).square() < 1;
+}
 
 
 template<typename Store> struct point_light {
@@ -1041,12 +1088,12 @@ template<typename Store> struct composite_scene : scene {
     int bg_gradient_axis;
     color ambient, bg1, bg2, bg3;
     camera<Store> cam;
-    vector<Store> aabb_min, aabb_max;
+    aabb<Store> boundary;
     std::unique_ptr<kd_node<Store>,kd_node_deleter<Store> > root;
     std::vector<point_light<Store> > point_lights;
     std::vector<global_light<Store> > global_lights;
 
-    composite_scene(const vector<Store> &aabb_min,const vector<Store> &aabb_max,kd_node<Store> *data)
+    composite_scene(const aabb<Store> &boundary,kd_node<Store> *data)
         : locked(0),
           shadows(false),
           camera_light(true),
@@ -1057,12 +1104,9 @@ template<typename Store> struct composite_scene : scene {
           bg1(1,1,1),
           bg2(0,0,0),
           bg3(0,1,1),
-          cam(aabb_min.dimension()),
-          aabb_min(aabb_min),
-          aabb_max(aabb_max),
-          root(data) {
-        assert(aabb_min.dimension() == aabb_max.dimension());
-    }
+          cam(boundary.dimension()),
+          boundary(boundary),
+          root(data) {}
     
     bool light_reaches(const ray<Store> &target,real ldistance,const primitive<Store> *source,color &filtered) const {
         ray_intersections<Store> transparent_hits;
@@ -1191,7 +1235,7 @@ template<typename Store> struct composite_scene : scene {
         
         for(int i=0; i<dimension(); ++i) {
             if(target.direction[i]) {
-                real o = target.direction[i] > 0 ? aabb_min[i] : aabb_max[i];
+                real o = target.direction[i] > 0 ? boundary.start[i] : boundary.end[i];
                 real dist = (o - target.origin[i]) / target.direction[i];
                 int skip = i;
                 if(dist < 0) {
@@ -1202,7 +1246,7 @@ template<typename Store> struct composite_scene : scene {
                 for(int j=0; j<dimension(); ++j) {
                     if(j != skip) {
                         o = target.direction[j] * dist + target.origin[j];
-                        if(o >= aabb_max[j] || o <= aabb_min[j]) goto miss;
+                        if(o >= boundary.end[j] || o <= boundary.start[j]) goto miss;
                     }
                 }
                 return dist;
@@ -1222,5 +1266,403 @@ template<typename Store> struct composite_scene : scene {
         --locked;
     }
 };
+
+
+
+/* These values were found through experimentation, although the scenes used
+   were rather primitive, so further fine-tuning will likely help. */
+
+real cost_traversal(int d) {
+    switch(d) {
+    case 3: return 0;
+    case 4: return 1;
+    case 5: return 8;
+    case 6: return 500;
+    default: return 700;
+    }
+}
+
+real cost_intersection(int d) {
+    switch(d) {
+    case 3: return 0.5;
+    default: return 0.1;
+    }
+}
+
+template<typename Store> using proto_array = std::vector<primitive_prototype<Store>*>;
+
+template<typename Store> bool find_split(const aabb<Store> &boundary,int axis,const proto_array<Store> &contain_p,const proto_array<Store> &overlap_p,real &pos) {
+    real best_cost = std::numeric_limits<real>::max();
+    
+    vector<Store> cube_range = boundary.end - boundary.start;
+    real side_area = 1;
+    for(int i=0; i<boundary.dimension(); ++i) {
+        if(i != axis) side_area *= cube_range[i];
+    }
+    
+    real shaft_area_factor = 0;
+    for(int i=0; i<boundary.dimension(); ++i) {
+        if(i != axis) {
+            real tmp = 1;
+            for(int j=0; j<boundary.dimension(); ++j) {
+                if(j != i && j != axis) tmp *= cube_range[j];
+            }
+            shaft_area_factor += tmp;
+        }
+    }
+    
+    /* we actually only compute a value that is one half the surface area of
+       each box, but since we only need the ratios between areas, it doesn't
+       make any difference */
+    real area = side_area + shaft_area_factor * cube_range[axis];
+    
+    auto split_cost = [=,&boundary](size_t l_count,size_t r_count,real split) -> real {
+        real shaft_area = shaft_area_factor * (split - boundary.start[axis]);
+        real l_area = side_area + shaft_area;
+        real r_area = area - shaft_area;
+
+        return (cost_traversal(boundary.dimension()) + cost_intersection(boundary.dimension())
+            * (l_area/area * l_count + r_area/area * r_count));
+    };
+
+    proto_array<Store> search_l;
+    search_l.reserve(contain_p.size()+overlap_p.size());
+    search_l.insert(search_l.end(),ITR_RANGE(contain_p));
+    search_l.insert(search_l.end(),ITR_RANGE(overlap_p));
+    std::sort(ITR_RANGE(search_l),[=](const primitive_prototype<Store> *a,const primitive_prototype<Store> *b){ return a->boundary.start[axis] < b->boundary.start[axis]; });
+
+    proto_array<Store> search_r{search_l};
+    std::sort(ITR_RANGE(search_r),[=](const primitive_prototype<Store> *a,const primitive_prototype<Store> *b){ return a->boundary.end[axis] < b->boundary.end[axis]; });
+    
+    size_t il = 1;
+    size_t ir = 0;
+    real last_split = search_l[0]->boundary.start[axis];
+    size_t last_il = 0;
+    while(il < search_l.size()) {
+        real split = std::min(search_l[il]->boundary.start[axis],search_r[ir]->boundary.end[axis]);
+        
+        /* Note: this test is not an optimization. Removing it will produce
+           incorrect values for the l_count and r_count parameters. */
+        if(split != last_split) {
+            if(boundary.end[axis] > last_split && last_split > boundary.start[axis]) {
+                real cost = split_cost(last_il,search_l.size()-ir,last_split);
+                if(cost < best_cost) {
+                    best_cost = cost;
+                    pos = last_split;
+                }
+            }
+            
+            last_il = il;
+            last_split = split;
+        }
+            
+        if(search_l[il]->boundary.start[axis] <= search_r[ir]->boundary.end[axis]) ++il;
+        else ++ir;
+    }
+    
+    assert(il == search_l.size());
+    
+    while(ir < search_l.size()) {
+        real split = search_r[ir]->boundary.end[axis];
+        if(split != last_split) {
+            if(boundary.end[axis] > last_split && last_split > boundary.start[axis]) {
+                real cost = split_cost(search_l.size(),search_l.size()-ir,last_split);
+                if(cost < best_cost) {
+                    best_cost = cost;
+                    pos = last_split;
+                }
+            }
+            last_split = split;
+        }
+        ++ir;
+    }
+
+    real compare = search_l.size();
+    for(int i=0; i<boundary.dimension(); ++i) compare *= boundary.end[i] - boundary.start[i];
+    return best_cost < compare;
+}
+
+template<typename Store> int best_axis(const aabb<Store> &boundary) {
+    vector<Store> widths = boundary.end - boundary.start;
+    real width = widths[0];
+    int axis = 0;
+    
+    for(int i=1; i<boundary.dimension(); ++i) {
+        if(widths[i] > width) {
+            width = widths[i];
+            axis = i;
+        }
+    }
+    return axis;
+}
+
+template<typename Store> bool overlap_intersects(const aabb<Store> &bound,const primitive_prototype<Store> *pp,int skip,int axis,bool right) {
+    if(skip < 0) {
+        if(Py_TYPE(pp->p.ref()) == triangle_obj_common::pytype()) return bound.intersects(*static_cast<const triangle_prototype<Store>*>(pp));
+        assert(Py_TYPE(pp->p.ref()) == solid_obj_common::pytype());
+        return bound.intersects(*static_cast<const solid_prototype<Store>*>(pp));
+    }
+    
+    if(skip == axis) return right ? pp->boundary.start[axis] >= bound.start[axis] : pp->boundary.start[axis] < bound.end[axis];
+    
+    assert(Py_TYPE(pp->p.ref()) == triangle_obj_common::pytype());
+    return bound.intersects_flat(*static_cast<const triangle_prototype<Store>*>(pp),skip);
+}
+
+template<typename Store> class split_boundary {
+    aabb<Store> &boundary;
+    const int axis;
+    const real split;
+    const real original_s;
+    const real original_e;
+    
+public:
+    split_boundary(aabb<Store> &boundary,int axis,real split)
+        : boundary(boundary), axis(axis), split(split), original_s(boundary.start[axis]), original_e(boundary.end[axis]) {}
+    ~split_boundary() {
+        boundary.start[axis] = original_s;
+        boundary.end[axis] = original_e;
+    }
+    
+    aabb<Store> &left() {
+        boundary.start[axis] = original_s;
+        boundary.end[axis] = split;
+        return boundary;
+    }
+    
+    aabb<Store> &right() {
+        boundary.start[axis] = split;
+        boundary.end[axis] = original_e;
+        return boundary;
+    }
+};
+
+
+template<typename Store> class kd_node_worker_pool;
+
+/* The primitives are divided into the lists: contain_p and overlap_p.
+   Primitives in contain_p are entirely inside boundary, and are much easier to
+   partition. The rest of the primitives are in overlap_p.
+
+   Primitives should only be part of a side (left or right) if some point within
+   the primitive exists where the distance between the plane and the point is
+   greater than zero. The exception is if a primitive is completely inside the
+   split (hyper)plane, in which case it should be on the right side. */
+template<typename Store> kd_node_unique_ptr<Store> create_node(kd_node_worker_pool<Store> &wpool,int depth,aabb<Store> &boundary,const proto_array<Store> &contain_p,const proto_array<Store> &overlap_p);
+
+
+template<typename Store> class kd_node_worker_pool {
+    std::vector<std::thread> threads;
+    unsigned int max_threads;
+    volatile unsigned int busy_threads;
+    volatile enum {NORMAL,FINISHING,QUITTING} state;
+    
+    std::mutex mut;
+    std::condition_variable start;
+    
+    typedef std::tuple<kd_node_unique_ptr<Store>*,int,aabb<Store>,proto_array<Store>,proto_array<Store> > job_values;
+    std::deque<job_values> jobs;
+    
+    std::exception_ptr exc;
+    
+    void worker() {
+        std::unique_lock<std::mutex> lock{mut};
+
+        for(;;) {
+            --busy_threads;
+            
+            while(jobs.empty()) {
+                if(state == QUITTING) return;
+                /* we wait until all threads are idle in case a thread will add
+                   another job */
+                else if(state == FINISHING && !busy_threads) {
+                    lock.unlock();
+                    start.notify_all();
+                    return;
+                }
+                
+                start.wait(lock);
+            }
+            
+            if(state == QUITTING) return;
+            
+            ++busy_threads;
+
+            auto values = std::move(jobs.front());
+            jobs.pop_front();
+            
+            lock.unlock();
+            try {
+                *std::get<0>(values) = ::create_node(*this,std::get<1>(values),std::get<2>(values),std::get<3>(values),std::get<4>(values));
+            } catch(...) {
+                lock.lock();
+
+                if(!exc) exc = std::current_exception();
+                state = QUITTING;
+                --busy_threads;
+                
+                lock.unlock();
+                
+                start.notify_all();
+                return;
+            }
+            lock.lock();
+        }
+    }
+    
+public:
+    kd_node_worker_pool(int _max_threads=-1)
+        : max_threads(_max_threads >= 0 ? _max_threads : (std::thread::hardware_concurrency()-1)), busy_threads(0), state(NORMAL) {
+        if(max_threads) threads.reserve(max_threads);
+    }
+    
+    ~kd_node_worker_pool() {
+        if(!threads.empty()) finish(true);
+        assert(!busy_threads);
+    }
+    
+    bool create_node(kd_node_unique_ptr<Store> &dest,int depth,aabb<Store> &boundary,proto_array<Store> &&contain_p,proto_array<Store> &&overlap_p) {
+        {
+            std::lock_guard<std::mutex> lock{mut};
+            
+            if(state == QUITTING) return false;
+            
+            jobs.emplace_back(&dest,depth,boundary,std::move(contain_p),std::move(overlap_p));
+
+            if(threads.size() < max_threads && busy_threads == threads.size()) {
+                ++busy_threads;
+                threads.push_back(std::thread(&kd_node_worker_pool::worker,this));
+            }
+        }
+        start.notify_one();
+        
+        return true;
+    }
+    
+    void finish(bool quit=false) {
+        {
+            std::unique_lock<std::mutex> lock{mut};
+            
+            if(quit) state = QUITTING;
+            else if(state == NORMAL) state = FINISHING;
+            
+            start.notify_all();
+            
+            while((busy_threads || !jobs.empty()) && state != QUITTING) {
+                if(jobs.empty()) {
+                    start.wait(lock);
+                } else {
+                    auto values = std::move(jobs.front());
+                    jobs.pop_front();
+                    
+                    lock.unlock();
+                    try {
+                        *std::get<0>(values) = ::create_node(*this,std::get<1>(values),std::get<2>(values),std::get<3>(values),std::get<4>(values));
+                    } catch(...) {
+                        lock.lock();
+                        
+                        if(!exc) exc = std::current_exception();
+                        state = QUITTING;
+                        break;
+                    }
+                    lock.lock();
+                }
+            }
+        }
+
+        for(auto &t : threads) t.join();
+        threads.clear();
+        
+        if(exc) std::rethrow_exception(exc);
+    }
+    
+    operator bool() const {
+        return max_threads != 0;
+    }
+};
+
+
+template<typename Store> kd_node_unique_ptr<Store> create_node(kd_node_worker_pool<Store> &wpool,int depth,aabb<Store> &boundary,const proto_array<Store> &contain_p,const proto_array<Store> &overlap_p) {
+    ++depth;
+    int axis = best_axis(boundary);
+    
+    if(contain_p.empty() && overlap_p.empty()) return nullptr;
+    
+    real split;
+    if(depth >= KD_MAX_DEPTH
+        || contain_p.size() + overlap_p.size() <= KD_SPLIT_THRESHHOLD
+        || !find_split(boundary,axis,contain_p,overlap_p,split))
+        return kd_node_unique_ptr<Store>(kd_leaf<Store>::create(
+            contain_p.size() + overlap_p.size(),
+            [&](int i){ return py::borrowed_ref((i < contain_p.size() ? contain_p[i] : overlap_p[i-contain_p.size()])->p.ref()); }));
+    
+    proto_array<Store> l_contain_p, r_contain_p, l_overlap_p, r_overlap_p;
+    
+    for(auto p : contain_p) {
+        if(p->boundary.start[axis] < split) {
+            if(p->boundary.end[axis] <= split) {
+                l_contain_p.push_back(p);
+            } else {
+                l_overlap_p.push_back(p);
+                r_overlap_p.push_back(p);
+            }
+        } else {
+            r_contain_p.push_back(p);
+        }
+    }
+    
+    split_boundary<Store> sb{boundary,axis,split};
+
+    for(auto p : overlap_p) {
+        /* If p is flat along any axis, p could be embedded in the hull of
+           "boundary" and intersect neither b_left nor b_right. Thus, an
+           alternate algorithm is used when p is flat along an axis other than
+           "axis", that disregards that axis. */
+        int skip = -1;
+        if(Py_TYPE(p->p.ref()) == triangle_obj_common::pytype()) {
+            for(int i=0; i<boundary.dimension(); ++i) {
+                if(p->boundary.start[i] == p->boundary.end[i]) {
+                    skip = i;
+                    break;
+                }
+            }
+        }
+        
+        if(overlap_intersects(sb.left(),p,skip,axis,false)) {
+            l_overlap_p.push_back(p);
+            if(overlap_intersects(sb.right(),p,skip,axis,true)) r_overlap_p.push_back(p);
+        } else {
+            r_overlap_p.push_back(p);
+        }
+    }
+    
+    auto branch = new kd_branch<Store>(axis,split);
+    kd_node_unique_ptr<Store> r{branch};
+    
+    if(wpool) {
+        if(!wpool.create_node(branch->left,depth,sb.left(),std::move(l_contain_p),std::move(l_overlap_p))) return nullptr;
+    } else branch->left = create_node<Store>(wpool,depth,sb.left(),l_contain_p,l_overlap_p);
+
+    branch->right = create_node<Store>(wpool,depth,sb.right(),r_contain_p,r_overlap_p);
+
+    return r;
+}
+
+
+template<typename Store> std::tuple<aabb<Store>,kd_node<Store>*> build_kdtree(const proto_array<Store> &primitives,int max_threads) {
+    assert(primitives.size());
+    
+    aabb<Store> boundary = primitives[0]->boundary;
+    for(int i=1; i<primitives.size(); ++i) {
+        v_expr(boundary.start) = min(v_expr(boundary.start),v_expr(primitives[i]->boundary.start));
+        v_expr(boundary.end) = max(v_expr(boundary.end),v_expr(primitives[i]->boundary.end));
+    }
+    
+    kd_node_worker_pool<Store> wpool(max_threads);
+    auto n = create_node(wpool,-1,boundary,primitives,{});
+    wpool.finish();
+
+    return std::tuple<aabb<Store>,kd_node<Store>*>(boundary,n.release());
+}
 
 #endif

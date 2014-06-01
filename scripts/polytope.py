@@ -11,7 +11,7 @@ import sys
 import subprocess
 import time
 from itertools import combinations,islice
-from ntracer import NTracer,Material,ImageFormat,Channel,BlockingRenderer,build_composite_scene,CUBE
+from ntracer import NTracer,Material,ImageFormat,Channel,BlockingRenderer,CUBE
 from ntracer.pygame_render import PygameRenderer
 
 
@@ -515,7 +515,7 @@ try:
 except AttributeError:
     timer = time.clock
     if args.benchmark and not sys.platform.startswith('win'):
-        print('''warning: on multi-core systems, Python\'s high-resolution timer may include
+        print('''warning: on multi-core systems, Python\'s high-resolution timer may combine
 time spent on all cores, making the reported time spent rendering, much higher
 than the actual time''',file=sys.stderr)
 
@@ -576,7 +576,7 @@ else:
 
     print('partitioning scene...')
     timing = timer()
-    scene = build_composite_scene(nt,hull)
+    scene = nt.build_composite_scene(hull)
     timing = timer() - timing
     print('done in {0} seconds'.format(timing))
     

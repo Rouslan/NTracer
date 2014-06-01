@@ -108,6 +108,10 @@ namespace impl {
         static v_axis<Store> axis(int d,int n,item_t length = 1) {
             return {d,n,length};
         }
+        
+        void swap(vector &b) {
+            return base_t::swap(b);
+        }
     };
     
     
@@ -194,6 +198,10 @@ namespace impl {
 
 using impl::dot;
 using impl::vector;
+
+template<typename Store> void swap(vector<Store> &a,vector<Store> &b) {
+    a.swap(b);
+}
 
 
 template<class Store> struct matrix;

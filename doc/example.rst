@@ -6,14 +6,14 @@ The following code will load a 3D mesh and display it.
 .. code:: python
 
     import pygame
-    from ntracer import NTracer, build_composite_scene
+    from ntracer import NTracer
     from ntracer.pygame_render import PygameRenderer
     from ntracer import wavefront_obj
 
     ntracer = NTracer(3)
 
     data = wavefront_obj.load_obj('monkey.obj')
-    scene = build_composite_scene(ntracer,data)
+    scene = ntracer.build_composite_scene(data)
 
     camera = ntracer.Camera()
     camera.translate(ntracer.Vector.axis(2,-5))
@@ -67,7 +67,7 @@ geometry.
 
 .. code:: python
 
-    data = build_composite_scene(ntracer,data)
+    data = ntracer.build_composite_scene(data)
     
 We create a :py:class:`.Scene` object from it.
     
