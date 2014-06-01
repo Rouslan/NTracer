@@ -6,7 +6,7 @@
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     
-    <title>Basic Usage &mdash; NTracer 0.5 documentation</title>
+    <title>Basic Usage &mdash; NTracer 0.6 documentation</title>
     
     <link rel="stylesheet" href="../_static/nature.css" type="text/css" />
     <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
@@ -14,7 +14,7 @@
     <script type="text/javascript">
       var DOCUMENTATION_OPTIONS = {
         URL_ROOT:    '../',
-        VERSION:     '0.5',
+        VERSION:     '0.6',
         COLLAPSE_INDEX: false,
         FILE_SUFFIX: '',
         HAS_SOURCE:  true
@@ -23,7 +23,7 @@
     <script type="text/javascript" src="../_static/jquery.js"></script>
     <script type="text/javascript" src="../_static/underscore.js"></script>
     <script type="text/javascript" src="../_static/doctools.js"></script>
-    <link rel="top" title="NTracer 0.5 documentation" href="../" />
+    <link rel="top" title="NTracer 0.6 documentation" href="../" />
     <link rel="next" title="Using without Pygame" href="../nonpygame_example/" />
     <link rel="prev" title="Welcome to NTracer’s documentation!" href="../" /> 
   </head>
@@ -43,7 +43,7 @@
         <li class="right" >
           <a href="../" title="Welcome to NTracer’s documentation!"
              accesskey="P">previous</a> |</li>
-        <li><a href="../">NTracer 0.5 documentation</a> &raquo;</li> 
+        <li><a href="../">NTracer 0.6 documentation</a> &raquo;</li> 
       </ul>
     </div>  
 
@@ -56,14 +56,14 @@
 <h1>Basic Usage<a class="headerlink" href="#basic-usage" title="Permalink to this headline">¶</a></h1>
 <p>The following code will load a 3D mesh and display it.</p>
 <div class="code python highlight-python"><div class="highlight"><pre><span class="kn">import</span> <span class="nn">pygame</span>
-<span class="kn">from</span> <span class="nn">ntracer</span> <span class="kn">import</span> <span class="n">NTracer</span><span class="p">,</span> <span class="n">build_composite_scene</span>
+<span class="kn">from</span> <span class="nn">ntracer</span> <span class="kn">import</span> <span class="n">NTracer</span>
 <span class="kn">from</span> <span class="nn">ntracer.pygame_render</span> <span class="kn">import</span> <span class="n">PygameRenderer</span>
 <span class="kn">from</span> <span class="nn">ntracer</span> <span class="kn">import</span> <span class="n">wavefront_obj</span>
 
 <span class="n">ntracer</span> <span class="o">=</span> <span class="n">NTracer</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
 
 <span class="n">data</span> <span class="o">=</span> <span class="n">wavefront_obj</span><span class="o">.</span><span class="n">load_obj</span><span class="p">(</span><span class="s">&#39;monkey.obj&#39;</span><span class="p">)</span>
-<span class="n">scene</span> <span class="o">=</span> <span class="n">build_composite_scene</span><span class="p">(</span><span class="n">ntracer</span><span class="p">,</span><span class="n">data</span><span class="p">)</span>
+<span class="n">scene</span> <span class="o">=</span> <span class="n">ntracer</span><span class="o">.</span><span class="n">build_composite_scene</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
 
 <span class="n">camera</span> <span class="o">=</span> <span class="n">ntracer</span><span class="o">.</span><span class="n">Camera</span><span class="p">()</span>
 <span class="n">camera</span><span class="o">.</span><span class="n">translate</span><span class="p">(</span><span class="n">ntracer</span><span class="o">.</span><span class="n">Vector</span><span class="o">.</span><span class="n">axis</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span><span class="o">-</span><span class="mi">5</span><span class="p">))</span>
@@ -108,7 +108,7 @@ NTracer&#8217;s constructor is automatically used for that parameter.</p>
 loads 3D meshes. It&#8217;s not very useful in the context of hyperspace, but it&#8217;s a
 very simple format and is included for testing and as an example for creating
 geometry.</p>
-<div class="code python highlight-python"><div class="highlight"><pre><span class="n">data</span> <span class="o">=</span> <span class="n">build_composite_scene</span><span class="p">(</span><span class="n">ntracer</span><span class="p">,</span><span class="n">data</span><span class="p">)</span>
+<div class="code python highlight-python"><div class="highlight"><pre><span class="n">data</span> <span class="o">=</span> <span class="n">ntracer</span><span class="o">.</span><span class="n">build_composite_scene</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
 </pre></div>
 </div>
 <p>We create a <a class="reference internal" href="../ntracer/#ntracer.render.Scene" title="ntracer.render.Scene"><tt class="xref py py-class docutils literal"><span class="pre">Scene</span></tt></a> object from it.</p>
@@ -204,7 +204,7 @@ use it here. We flip the display buffer to make our image appear.
         <li class="right" >
           <a href="../" title="Welcome to NTracer’s documentation!"
              >previous</a> |</li>
-        <li><a href="../">NTracer 0.5 documentation</a> &raquo;</li> 
+        <li><a href="../">NTracer 0.6 documentation</a> &raquo;</li> 
       </ul>
     </div>
     <div class="footer">
