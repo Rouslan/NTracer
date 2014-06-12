@@ -38,6 +38,51 @@ included example scripts, hypercube.py and polytope.py, depend on it.
 Documentation is available at http://rouslan.github.io/NTracer/doc.
 
 
+Building and Installing from Source
+==========================================
+
+Unix-like systems
+..........................................
+
+To install from source, type "``python setup.py install``" in the source's
+directory (where setup.py is located).
+
+Alternatively a package manager such as `pip
+<http://pip.readthedocs.org/en/latest>`_ can be used (``pip install ntracer``)
+to download, build and install this package in one step.
+
+Windows
+..........................................
+
+At the time of this writing, the default windows compiler (Microsoft Visual C++)
+doesn't support enough C++11 features to build this package and MinGW lacks the
+C++ thread library. Instead, `MinGW-w64 <http://mingw-w64.sourceforge.net>`_ can
+be used (despite the name, it doesn't require a 64-bit version of Windows).
+
+To build with MinGW-w64, execute the following commands in the package source
+directory (where setup.py is located):
+
+.. code:: bat
+
+    set PATH=<base path of MinGW-w64>\bin;%PATH%
+    set LIBRARY_PATH=<base path of MinGW-x64>\lib
+    <Python install directory>\python.exe setup.py build --compiler=mingw32 install
+
+By default, the ``build`` command will also copy any MinGW DLLs that the
+binaries require into the installation directory. To suppress this behaviour
+(which you may want to do if the MinGW ``bin`` directory is already in the
+system-wide path), use ``--copy-mingw-deps=false``.
+
+Customization
+..........................................
+
+When compiling under GCC or Clang, the setup script will use the
+``-march=native`` parameter to use the most recent instruction set that the
+current CPU supports. To override this or for any other customization, the
+``build`` command supports the flag ``--cpp-opts=<options>`` which will add the
+specified options to the end of the argument list when invoking the compiler.
+
+
 Dealing with Higher-Dimensional Space
 ==========================================
 

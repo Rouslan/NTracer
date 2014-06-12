@@ -1,8 +1,9 @@
 
-#include <Python.h>
+#include "py_common.hpp"
+
 #include <assert.h>
 
-#include "py_common.hpp"
+#include "pyobject.hpp"
 #include "fixed_geometry.hpp"
 #include "var_geometry.hpp"
 #include "tracer.hpp"

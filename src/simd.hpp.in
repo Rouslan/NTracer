@@ -107,8 +107,6 @@ namespace simd {
             }
     #endif
             
-            // TODO: add SIMD operations
-            
             FORCE_INLINE operator double() const {
                 return _mm_cvtsd_f64(data);
             }
@@ -130,10 +128,17 @@ namespace simd {
             }
     #endif
             
-            // TODO: add SIMD operations
-            
             FORCE_INLINE operator int64_t() const {
+    #if defined(__x86_64__) || defined(_M_X64)
                 return _mm_cvtsi128_si64(data);
+    #else
+                union {
+                    __m128i p;
+                    int64_t s;
+                } tmp;
+                tmp.p = data;
+                return tmp.s;
+    #endif
             }
             
             __m128i data;
@@ -152,8 +157,6 @@ namespace simd {
                 data = _mm256_castsi256_si128(b);
             }
     #endif
-
-            // TODO: add SIMD operations
             
             FORCE_INLINE operator int32_t() const {
                 return _mm_cvtsi128_si32(data);
@@ -170,8 +173,6 @@ namespace simd {
                 data = _mm256_castsi256_si128(b);
             }
     #endif
-
-            // TODO: add SIMD operations
             
             FORCE_INLINE operator int16_t() const {
                 return _mm_cvtsi128_si32(data) >> 16;
@@ -188,8 +189,6 @@ namespace simd {
                 data = _mm256_castsi256_si128(b);
             }
     #endif
-
-            // TODO: add SIMD operations
             
             FORCE_INLINE operator int8_t() const {
                 return _mm_cvtsi128_si32(data) >> 24;
@@ -213,8 +212,6 @@ namespace simd {
                 data = _mm256_castps256_ps128(b);
             }
     #endif
-
-            // TODO: add SIMD operations
             
             FORCE_INLINE operator float() const {
                 return _mm_cvtss_f32(data);

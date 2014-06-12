@@ -1,12 +1,11 @@
 #ifndef pyobject_hpp
 #define pyobject_hpp
 
-#include <Python.h>
+#include "py_common.hpp"
+
 #include <algorithm>
 #include <iterator>
 #include <structmember.h>
-
-#include "py_common.hpp"
 
 
 #define THROW_PYERR_STRING(exception,message) PyErr_SetString(PyExc_##exception,message), throw py_error_set()

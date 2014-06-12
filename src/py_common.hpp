@@ -2,6 +2,10 @@
 #ifndef py_common_hpp
 #define py_common_hpp
 
+/* needs to be included before Python.h to prevent an erroneous redefinition
+   under MinGW */
+#include <cmath>
+
 #include <Python.h>
 #include <structmember.h>
 #include <new>
@@ -246,15 +250,22 @@ template<> inline unsigned long long from_pyobject<unsigned long long>(PyObject 
 }
 #endif
 
-#if INT_MAX != LONG_MAX && INT_MAX != SHORT_MAX
+
 template<> inline int from_pyobject<int>(PyObject *o) {
-    return static_cast<int>(from_pyobject<long>(o));
+#if INT_MAX < LONG_MAX
+    return py_to_xint<int>(o);
+#else
+    return from_pyobject<long>(o);
+#endif
 }
 
 template<> inline unsigned int from_pyobject<unsigned int>(PyObject *o) {
-    return static_cast<unsigned int>(from_pyobject<long>(o));
-}
+#if INT_MAX < LONG_MAX
+    return py_to_xint<unsigned int>(o);
+#else
+    return from_pyobject<unsigned long>(o);
 #endif
+}
 
 template<> inline bool from_pyobject<bool>(PyObject *o) {
     return static_cast<bool>(PyObject_IsTrue(o));

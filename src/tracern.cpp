@@ -1,4 +1,4 @@
-#include <Python.h>
+#include "py_common.hpp"
 #include "var_geometry.hpp"
 
 typedef var::item_store<real> module_store;

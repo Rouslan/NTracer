@@ -1678,6 +1678,7 @@ extern "C" SHARED(PyObject) * PyInit_render(void) {
 
 extern "C" SHARED(void) initrender(void) {
 #endif
+    if(!PyEval_ThreadsInitialized()) PyEval_InitThreads();
 
     obj_CallbackRenderer::pytype()->tp_new = PyType_GenericNew;
     obj_BlockingRenderer::pytype()->tp_new = PyType_GenericNew;

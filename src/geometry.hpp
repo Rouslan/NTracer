@@ -253,6 +253,9 @@ namespace impl {
             return a.get(row,n);
         }
         
+        // to disambiguate from operator typename Store::item_t*
+        template<typename T> typename Store::item_t &operator[](T n) const { return operator[](size_t(n)); }
+        
         template<size_t Size> simd::v_type<typename Store::item_t,Size> vec(size_t n) const {
             ASSUME((row*a.dimension() + n) < std::numeric_limits<ptrdiff_t>::max());
             
@@ -290,6 +293,9 @@ namespace impl {
             assert(n >= 0 && n < a.dimension());
             return a.get(row,n);
         }
+        
+        // to disambiguate from operator typename Store::item_t*
+        template<typename T> typename Store::item_t operator[](T n) const { return operator[](size_t(n)); }
         
         template<size_t Size> simd::v_type<typename Store::item_t,Size> vec(size_t n) const {
             ASSUME((row*a.dimension() + n) < std::numeric_limits<ptrdiff_t>::max());

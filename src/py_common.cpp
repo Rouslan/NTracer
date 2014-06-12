@@ -124,8 +124,8 @@ void NoSuchOverload(PyObject *args) {
     const char *const format = "no overload takes (%s)";
     if(PyTuple_Check(args)) {
         if(PyTuple_GET_SIZE(args)) {
-            unsigned int needed = PyTuple_GET_SIZE(args); // (len(args) - 1) commas and a terminating NUL
-            for(unsigned int i = 0; i < PyTuple_GET_SIZE(args); ++i) {
+            Py_ssize_t needed = PyTuple_GET_SIZE(args); // (len(args) - 1) commas and a terminating NUL
+            for(Py_ssize_t i = 0; i < PyTuple_GET_SIZE(args); ++i) {
                 assert(PyTuple_GET_ITEM(args,i)->ob_type && PyTuple_GET_ITEM(args,i)->ob_type->tp_name);
                 needed += strlen(PyTuple_GET_ITEM(args,i)->ob_type->tp_name);
             }
@@ -133,7 +133,7 @@ void NoSuchOverload(PyObject *args) {
             char *msg = reinterpret_cast<char*>(py::malloc(needed));
             char *cur = msg;
 
-            for(unsigned int i = 0; i < PyTuple_GET_SIZE(args); ++i) {
+            for(Py_ssize_t i = 0; i < PyTuple_GET_SIZE(args); ++i) {
                 if(i) *cur++ = ',';
                 const char *other = PyTuple_GET_ITEM(args,i)->ob_type->tp_name;
                 while(*other) *cur++ = *other++;
