@@ -1,5 +1,6 @@
 
-#include <Python.h>
+#include "py_common.hpp"
+
 #include <structmember.h>
 #include <exception>
 #include <assert.h>

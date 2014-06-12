@@ -173,15 +173,17 @@ inline PyObject *to_pyobject(unsigned long long x) {
 }
 #endif
 
-#if INT_MAX != LONG_MAX && INT_MAX != SHORT_MAX
 inline PyObject *to_pyobject(int x) {
     return _compat_Int_FromLong(x);
 }
 
 inline PyObject *to_pyobject(unsigned int x) {
+#if INT_MAX < LONG_MAX
     return _compat_Int_FromLong(x);
-}
+#else
+    return PyLong_FromUnsignedLong(x);
 #endif
+}
 
 inline PyObject *to_pyobject(bool x) {
     PyObject *r = x ? Py_True : Py_False;
