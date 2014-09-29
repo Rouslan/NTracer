@@ -18,21 +18,21 @@
 #include "index_list.hpp"
 
 
-#define PY_MEM_NEW_DELETE void *operator new(size_t s) {            \
+#define PY_MEM_NEW_DELETE static void *operator new(size_t s) {     \
         void *ptr = PyObject_Malloc(s);                             \
         if(!ptr) throw std::bad_alloc();                            \
         return ptr;                                                 \
     }                                                               \
-    void operator delete(void *ptr) {                               \
+    static void operator delete(void *ptr) {                        \
         PyObject_Free(ptr);                                         \
     }
 
-#define PY_MEM_GC_NEW_DELETE void *operator new(size_t s) {         \
+#define PY_MEM_GC_NEW_DELETE static void *operator new(size_t s) {  \
         void *ptr = _PyObject_GC_Malloc(s);                         \
         if(!ptr) throw std::bad_alloc();                            \
         return ptr;                                                 \
     }                                                               \
-    void operator delete(void *ptr) {                               \
+    static void operator delete(void *ptr) {                        \
         PyObject_GC_Del(ptr);                                       \
     }
 
@@ -44,7 +44,7 @@
 #if PY_MAJOR_VERSION == 3 && PY_MINOR_VERSION == 3
     // TODO: find the earliest version this was defined in
     #define PyObject_LengthHint _PyObject_LengthHint
-#elif PY_MAJOR_VERSION < 3 || (PY_MARJOR_VERSION == 3 && PY_MINOR_VERSION < 3)
+#elif PY_MAJOR_VERSION < 3 || (PY_MAJOR_VERSION == 3 && PY_MINOR_VERSION < 3)
     Py_ssize_t PyObject_LengthHint(PyObject *o,Py_ssize_t defaultlen);
 #endif
 
@@ -209,7 +209,10 @@ inline PyObject *to_pyobject(PyObject *x) {
 }
 
 
-template<typename T> inline T from_pyobject(PyObject *o);
+template<typename T> inline T from_pyobject(PyObject *o) {
+    static_assert(sizeof(T) == 0,"no conversion to this type defined");
+    return T();
+}
 
 
 template<> inline short from_pyobject<short>(PyObject *o) {
@@ -395,7 +398,7 @@ template<typename T,typename Base,bool AllowIndirect=false,bool InPlace=(alignof
 template<typename T,typename Base> struct simple_py_wrapper<T,Base,false,false> : Base {
     T *base;
     PY_MEM_NEW_DELETE
-    template<typename... Args> simple_py_wrapper(Args&&... args) {
+    template<typename... Args> simple_py_wrapper(Args&&... args) : base(nullptr) {
         PyObject_Init(reinterpret_cast<PyObject*>(this),Base::pytype());
         new(&alloc_base()) T(std::forward<Args>(args)...);
     }
@@ -569,10 +572,8 @@ public:
     }
 };
 
-constexpr parameter<PyObject*> param(const char *name) { return parameter<PyObject*>(name); }
-template<typename T> constexpr parameter<T> param(const char *name) { return parameter<T>(name); }
-constexpr opt_parameter<PyObject*> param(const char *name,PyObject *def_value) { return {name,def_value}; }
-template<typename T> constexpr opt_parameter<T> param(const char *name,T def_value) { return {name,def_value}; }
+template<typename T=PyObject*> constexpr parameter<T> param(const char *name) { return parameter<T>(name); }
+template<typename T=PyObject*> constexpr opt_parameter<T> param(const char *name,T def_value) { return {name,def_value}; }
 
 
 void NoSuchOverload(PyObject *args);

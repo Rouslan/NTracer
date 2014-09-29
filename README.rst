@@ -65,12 +65,12 @@ directory (where setup.py is located):
 .. code:: bat
 
     set PATH=<base path of MinGW-w64>\bin;%PATH%
-    set LIBRARY_PATH=<base path of MinGW-x64>\lib
+    set LIBRARY_PATH=<base path of MinGW-w64>\lib
     <Python install directory>\python.exe setup.py build --compiler=mingw32 install
 
-By default, the ``build`` command will also copy any MinGW DLLs that the
+By default, the ``build`` command will also copy any MinGW-w64 DLLs that the
 binaries require into the installation directory. To suppress this behaviour
-(which you may want to do if the MinGW ``bin`` directory is already in the
+(which you may want to do if the MinGW-w64 ``bin`` directory is already in the
 system-wide path), use ``--copy-mingw-deps=false``.
 
 Customization

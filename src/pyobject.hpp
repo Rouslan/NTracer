@@ -12,15 +12,38 @@
 
 
 namespace py {
+    /* We can't use C++ inheritance with PyObject so this is provided to
+       indicate which classes' pointers can be safely cast to PyObject* */
+    struct pyobj_subclass {};
+    
+    struct pyobj_ptr {
+        PyObject *ptr;
+        pyobj_ptr() {}
+        pyobj_ptr(PyObject *ptr) : ptr(ptr) {}
+        pyobj_ptr(pyobj_subclass *ptr) : ptr(reinterpret_cast<PyObject*>(ptr)) {}
+        
+        operator PyObject*() const { return ptr; }
+        operator bool() const { return ptr != nullptr; }
+    };
+    
+    inline PyObject *ref(pyobj_ptr o) { return o; }
+
 
     // Exception-safe alternative to Py_BEGIN_ALLOW_THREADS and Py_END_ALLOW_THREADS
     class allow_threads {
 #ifdef WITH_THREAD
         PyThreadState *save;
     public:
-        allow_threads() { save = PyEval_SaveThread(); }
+        allow_threads() : save(PyEval_SaveThread()) {}
         ~allow_threads() { PyEval_RestoreThread(save); }
 #endif
+    };
+    
+    class acquire_gil {
+        PyGILState_STATE gilstate;
+    public:
+        acquire_gil() : gilstate(PyGILState_Ensure()) {}
+        ~acquire_gil() { PyGILState_Release(gilstate); }
     };
 
     inline PyObject *check_obj(PyObject *o) {
@@ -28,43 +51,43 @@ namespace py {
         return o;
     }
 
-    inline PyObject *incref(PyObject *o) {
+    inline PyObject *incref(pyobj_ptr o) {
         assert(o);
-        Py_INCREF(o);
+        Py_INCREF(o.ptr);
         return o;
     }
 
-    inline PyObject *xincref(PyObject *o) {
-        Py_XINCREF(o);
+    inline PyObject *xincref(pyobj_ptr o) {
+        Py_XINCREF(o.ptr);
         return o;
     }
     
     /* wrapping it in a function prevents evaluating an expression more than
        once due to macro expansion */
-    inline void decref(PyObject *o) {
-        Py_DECREF(o);
+    inline void decref(pyobj_ptr o) {
+        Py_DECREF(o.ptr);
     }
     
     /* wrapping it in a function prevents evaluating an expression more than
        once due to macro expansion */
-    inline void xdecref(PyObject *o) {
-        Py_XDECREF(o);
+    inline void xdecref(pyobj_ptr o) {
+        Py_XDECREF(o.ptr);
     }
 
     struct borrowed_ref {
         PyObject *_ptr;
-        explicit borrowed_ref(PyObject *ptr) : _ptr(ptr) {}
+        explicit borrowed_ref(pyobj_ptr ptr) : _ptr(ptr) {}
     };
 
     struct new_ref {
         PyObject *_ptr;
-        explicit new_ref(PyObject *ptr) : _ptr(ptr) {}
+        explicit new_ref(pyobj_ptr ptr) : _ptr(ptr) {}
     };
     
     // alias for classes to use, that have new_ref function
     typedef new_ref _new_ref;
     
-    inline new_ref check_new_ref(PyObject *o) {
+    inline new_ref check_new_ref(pyobj_ptr o) {
         return new_ref(check_obj(o));
     }
     
@@ -815,6 +838,15 @@ namespace py {
         template<typename U,typename=typename std::enable_if<std::is_convertible<U*,T*>::value>::type> pyptr<T> &operator=(const pyptr<U> &b) {
             _obj = b._obj;
         }
+        
+        pyptr &operator=(new_ref r) {
+            _obj = r;
+            return *this;
+        }
+        pyptr &operator=(borrowed_ref r) {
+            _obj = r;
+            return *this;
+        }
 
         T &operator*() const { return *get(); }
         T *operator->() const { return get(); }
@@ -1129,6 +1161,10 @@ inline PyObject *to_pyobject(py::new_ref r) {
 
 inline PyObject *to_pyobject(py::borrowed_ref r) {
     return py::incref(r._ptr);
+}
+
+inline PyObject *to_pyobject(py::object &x) {
+    return x.new_ref();
 }
 
 template<typename T> inline PyObject *to_pyobject(const py::pyptr<T> &x) {

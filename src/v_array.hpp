@@ -446,7 +446,7 @@ namespace impl {
         }
     };
     template<typename Op,typename T> inline s_item_t<T> reduce(const v_expr<T> &a) {
-        s_item_t<T> r_small = 0;
+        s_item_t<T> r_small = simd::support<s_item_t<T> >::zeros();
         if(v_reduce<Op,T>::v_score < V_SCORE_THRESHHOLD || size_t(a.size()) < v_reduce<Op,T>::smallest_vec()) {
             for(size_t i=0; i<a.size(); ++i) r_small = Op::op(r_small,static_cast<const T&>(a).template vec<1>(i)[0]);
             return r_small;

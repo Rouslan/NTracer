@@ -204,9 +204,11 @@ class CustomBuildExt(build_ext):
                     if not ('gcc' in cc or 'g++' in cc or 'clang' in cc):
                         return False
 
+            py_debug = sysconfig.get_config_var('Py_DEBUG') == 1
             for e in self.extensions:
                 e.extra_compile_args = GCC_EXTRA_COMPILE_ARGS[:]
-                e.extra_compile_args += GCC_OPTIMIZE_COMPILE_ARGS
+                if not (py_debug and self.debug):
+                    e.extra_compile_args += GCC_OPTIMIZE_COMPILE_ARGS
                 if not self.debug:
                     e.extra_link_args = ['-s']
             return True

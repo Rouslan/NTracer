@@ -38,14 +38,14 @@ namespace impl {
     template<typename Op,typename... T> using vector_op_expr = vector_expr_adapter<v_op_expr<Op,T...> >;
 
     
-    template<typename Store> struct v_axis;
-    template<typename Store,size_t Size> struct _v_item_t<v_axis<Store>,Size> {
+    template<typename Store,typename T=typename Store::item_t> struct v_axis;
+    template<typename Store,typename T,size_t Size> struct _v_item_t<v_axis<Store,T>,Size> {
         typedef simd::v_type<typename Store::item_t,Size> type;
     };
-    template<typename Store> struct v_axis : vector_expr<v_axis<Store> > {
-        friend struct v_expr<v_axis<Store> >;
+    template<typename Store,typename T> struct v_axis : vector_expr<v_axis<Store,T> > {
+        friend struct v_expr<v_axis>;
         
-        typedef typename Store::item_t item_t;
+        typedef T item_t;
         static constexpr bool temporary = true;
         
         static const int v_score = 0;
@@ -66,33 +66,83 @@ namespace impl {
         v_axis(int d,int axis,item_t length) : _dimension(d), axis(axis), length(length) {}
     };
     
-    struct vector_item_count {
-        static constexpr int get(int d) { return d; }
+    // T::item_t is expected to be an instantiation of simd::v_type
+    template<typename T> struct v_interleave1;
+    template<typename T,size_t Size> struct _v_item_t<v_interleave1<T>,Size> {
+        typedef simd::v_type<typename T::item_t::item_t,Size> type;
+    };
+    template<typename T> struct v_interleave1 : vector_expr<v_interleave1<T> > {
+        friend struct v_expr<v_interleave1>;
+        
+        typedef typename T::item_t::item_t item_t;
+        static constexpr bool temporary = true;
+        
+        static const int v_score = -5;
+        
+        v_expr_store<T> a;
+        size_t index;
+        
+        size_t _size() const { return a._size(); }
+        size_t _v_size() const { return a._v_size(); }
+        
+        template<size_t Size> simd::v_type<item_t,Size> vec(size_t n) const {
+            simd::v_type<item_t,Size> r;
+            for(size_t i=0; i<Size; ++i) r[i] = a[n+i][index];
+            return r;
+        }
+        
+        v_interleave1(const T &a,size_t index) : a(a), index(index) {}
+    };
+    
+    template<typename T,size_t TSize> struct v_broadcast;
+    template<typename T,size_t TSize,size_t Size> struct _v_item_t<v_broadcast<T,TSize>,Size> {
+        static_assert(Size == 1,"vectorized elements cannot be further vectorized");
+        typedef simd::scalar<simd::v_type<typename T::item_t,TSize> > type;
+    };
+    template<typename T,size_t TSize> struct v_broadcast : vector_expr<v_broadcast<T,TSize> > {
+        friend struct v_expr<v_broadcast>;
+        
+        typedef simd::v_type<typename T::item_t,TSize> item_t;
+        static constexpr bool temporary = true;
+        static const int v_score = 0; // the value of this doesn't matter
+        
+        v_expr_store<T> a;
+        
+        size_t _size() const { return a._size(); }
+        size_t _v_size() const { return a._size(); }
+        
+        template<size_t Size> simd::scalar<item_t> vec(size_t n) const {
+            static_assert(Size == 1,"vectorized elements cannot be further vectorized");
+            
+            return item_t::repeat(a.template vec<1>(n)[0]);
+        }
+        
+        v_broadcast(const T &a) : a(a) {}
     };
 
-    template<typename Store> struct vector;
-    template<typename Store,size_t Size> struct _v_item_t<vector<Store>,Size> : _v_item_t<v_array<Store,typename Store::item_t>,Size> {};
-    template<typename Store> struct vector : vector_expr_adapter<v_array<Store,typename Store::item_t> > {
+    template<typename Store,typename T=typename Store::item_t> struct vector;
+    template<typename Store,typename T,size_t Size> struct _v_item_t<vector<Store,T>,Size> : _v_item_t<v_array<Store,T>,Size> {};
+    template<typename Store,typename T> struct vector : vector_expr_adapter<v_array<Store,T> > {
         typedef typename vector::vector_expr_adapter base_t;
-        typedef typename Store::item_t item_t;
+        typedef T item_t;
 
         explicit vector(int d) : base_t(d) {}
         template<typename F> vector(int d,F f) : base_t(d,f) {}    
         template<typename B,typename Base> FORCE_INLINE vector(const vector_expr<B,Base> &b) : base_t(::v_expr(b)) {}
 
-        template<typename B,typename Base> FORCE_INLINE vector<Store> &operator+=(const vector_expr<B,Base> &b) {
+        template<typename B,typename Base> FORCE_INLINE vector &operator+=(const vector_expr<B,Base> &b) {
             ::v_expr(*this) += ::v_expr(b);
             return *this;
         }
-        template<typename B,typename Base> FORCE_INLINE vector<Store> &operator-=(const vector_expr<B,Base> &b) {
+        template<typename B,typename Base> FORCE_INLINE vector &operator-=(const vector_expr<B,Base> &b) {
             ::v_expr(*this) -= ::v_expr(b);
             return *this;
         }
-        vector<Store> &operator*=(item_t b) {
+        vector &operator*=(T b) {
             ::v_expr(*this) *= b;
             return *this;
         }
-        vector<Store> &operator/=(item_t b) {
+        vector &operator/=(T b) {
             ::v_expr(*this) /= b;
             return *this;
         }
@@ -105,15 +155,32 @@ namespace impl {
         
         void normalize() { operator/=(this->absolute()); }
         
-        static v_axis<Store> axis(int d,int n,item_t length = 1) {
+        static v_axis<Store,T> axis(int d,int n,T length = 1) {
             return {d,n,length};
         }
         
         void swap(vector &b) {
-            return base_t::swap(b);
+            base_t::swap(b);
         }
     };
     
+    template<typename Store,typename T,typename B> struct v_deinterleave1 {
+        typedef typename T::item_t item_t;
+        static const int v_score = B::v_score - 5;
+        
+        vector<Store,T> &self;
+        v_expr_store<B> b;
+        size_t index;
+        
+        template<size_t Size> void operator()(size_t n) const {
+            if(Size == 1) {
+                self[n][index] = b.template vec<Size>(n)[0];
+            } else {
+                auto vals = b.template vec<Size>(n);
+                for(size_t i=0; i<std::min(Size,self.dimension()-1-n); ++i) self[i+n][index] = vals[i];
+            }
+        }
+    };
     
     template<typename T> using vector_multiply = vector_op_expr<op_multiply,T,v_repeat<s_item_t<T> > >;
     template<typename T> using vector_divide = vector_op_expr<
@@ -130,6 +197,8 @@ namespace impl {
         
         friend Base &::v_expr<T,Base>(vector_expr &e);
         friend const Base &::v_expr<T,Base>(const vector_expr &e);
+        
+        using Base::size;
         
         operator T &() { return *static_cast<T*>(this); }
         operator const T &() const { return *static_cast<const T*>(this); }
@@ -199,8 +268,43 @@ namespace impl {
 using impl::dot;
 using impl::vector;
 
-template<typename Store> void swap(vector<Store> &a,vector<Store> &b) {
+template<typename Store,typename T> void swap(vector<Store,T> &a,vector<Store,T> &b) {
     a.swap(b);
+}
+
+template<typename Store,size_t Size=simd::v_sizes<typename Store::item_t>::value[0]>
+using vector_batch = vector<Store,simd::v_type<typename Store::item_t,Size> >;
+
+/* This function only accepts actual vectors because using a batch vector
+   expression to compute a single vector is wasteful. It is better to call
+   interleave1 on each batch vector in the expression. */
+template<typename Store,size_t Size=simd::v_sizes<typename Store::item_t>::value[0]>
+impl::v_interleave1<vector_batch<Store,Size> > interleave1(const vector_batch<Store,Size> &a,size_t index) {
+    return {a,index};
+}
+
+template<typename Store,size_t Size=simd::v_sizes<typename Store::item_t>::value[0],typename F>
+vector_batch<Store,Size> deinterleave(int dimension,F f) {
+    vector_batch<Store,Size> r(dimension);
+    
+    for(size_t i=0; i<Size; ++i) {
+        auto b = f(i);
+        assert(dimension == v_expr(b).size());
+        impl::v_rep(v_expr(b).v_size(),impl::v_deinterleave1<Store,typename vector_batch<Store,Size>::item_t,decltype(b)>{r,b,i});
+    }
+    
+    return r;
+}
+
+/* Equivalent to deinterleave<Store,Size>(a.dimension(),[](int){ return a; })
+
+   This function only accepts actual vectors so that a supplied vector
+   expression could be vectorized (in the SIMD sense), which otherwise wouldn't
+   happen because this turns each scalar value into a v_type value and
+   v_item_t<v_type<v_type,X>,Y> type where Y > 1, is not a valid type. */
+template<typename Store,size_t Size=simd::v_sizes<typename Store::item_t>::value[0]>
+impl::v_broadcast<vector<Store>,Size> broadcast(const vector<Store> &a) {
+    return a;
 }
 
 
@@ -525,7 +629,7 @@ template<class Store> struct matrix {
     item_t determinant_(matrix<Store> &RESTRICT tmp) const {
         assert(dimension() == tmp.dimension());
         
-        typename Store::template type<impl::vector_item_count,size_t> pivot(dimension());
+        typename Store::template type<impl::v_item_count,size_t> pivot(dimension());
         int swapped = decompose(tmp,pivot.items);
         if(swapped < 0) return 0;
         
@@ -537,7 +641,7 @@ template<class Store> struct matrix {
     void inverse_(matrix<Store> &RESTRICT inv,matrix<Store> &RESTRICT tmp) const {
         assert(dimension() == inv.dimension() && dimension() == tmp.dimension());
 
-        typename Store::template type<impl::vector_item_count,size_t> pivot(dimension());
+        typename Store::template type<impl::v_item_count,size_t> pivot(dimension());
         int swapped = decompose(tmp,pivot.items);
         if(swapped < 0) throw std::domain_error("matrix is singular (uninvertible)");
 

@@ -16,7 +16,7 @@
 #include "instrumentation.hpp"
 
 
-#define ITR_RANGE(X) X.begin(),X.end()
+#define ITR_RANGE(X) std::begin(X),std::end(X)
 
 
 const real ROUNDING_FUZZ = std::numeric_limits<real>::epsilon() * 10;
@@ -29,7 +29,7 @@ const real LIGHT_THRESHOLD = real(1)/512;
 const int KD_MAX_DEPTH = 18;
 
 // only split nodes if there are more than this many primitives
-const int KD_SPLIT_THRESHHOLD = 2;
+const int KD_SPLIT_THRESHOLD = 2;
 
 
 template<typename Store> class ray {
@@ -107,7 +107,7 @@ template<typename Store> real hypercube_intersects(const ray<Store> &target,ray<
             }
         }
     }
-        
+    
     return 0;
 }
 
@@ -129,7 +129,9 @@ template<typename Store> real hypersphere_intersects(const ray<Store> &target,ra
 }
 
 
-template<typename Store> struct primitive {
+typedef simd::v_type<real> v_real;
+
+template<typename Store> struct primitive : py::pyobj_subclass {
     real intersects(const ray<Store> &target,ray<Store> &normal) const;
     int dimension() const;
     
@@ -141,11 +143,31 @@ template<typename Store> struct primitive {
     }
     
 protected:
-    primitive(material *m,PyTypeObject *t) : m(py::borrowed_ref(reinterpret_cast<PyObject*>(m))) {
-        PyObject_Init(reinterpret_cast<PyObject*>(this),t);
+    primitive(material *m,PyTypeObject *t) : m(py::borrowed_ref(m)) {
+        PyObject_Init(py::ref(this),t);
     }
     
     ~primitive() = default;
+};
+
+template<typename Store> struct primitive_batch : py::pyobj_subclass {
+    real intersects(const ray<Store> &target,ray<Store> &normal,int &index) const;
+    int dimension() const;
+    
+    PyObject_HEAD
+    py::pyptr<material> m[v_real::size];
+    
+    bool opaque(unsigned int index) const {
+        return m[index]->opacity >= 1;
+    }
+    
+protected:
+    template<typename F> primitive_batch(F fm,PyTypeObject *t) {
+        PyObject_Init(py::ref(this),t);
+        for(size_t i=0; i<v_real::size; ++i) m[i] = fm(i);
+    }
+    
+    ~primitive_batch() = default;
 };
 
 
@@ -161,17 +183,16 @@ template<typename Store> struct solid : solid_obj_common, primitive<Store> {
     matrix<Store> orientation;
     matrix<Store> inv_orientation;
     vector<Store> position;
-    py::pyptr<material> m;
     
     solid(solid_type type,const matrix<Store> &o,const matrix<Store> &io,const vector<Store> &p,material *m)
-        : primitive<Store>(m,pytype()), type(type), orientation(o), inv_orientation(io), position(p), m(py::borrowed_ref(reinterpret_cast<PyObject*>(m))) {
+        : primitive<Store>(m,pytype()), type(type), orientation(o), inv_orientation(io), position(p) {
         assert(o.dimension() == p.dimension() && o.dimension() == io.dimension());
     }
     
     solid(solid_type type,const matrix<Store> &o,const vector<Store> &p,material *m) : solid(type,o,o.inverse(),p,m) {}
     
     solid(int dimension,solid_type type,material *m)
-        : primitive<Store>(m,pytype()), type(type), orientation(dimension), inv_orientation(dimension), position(dimension), m(py::borrowed_ref(reinterpret_cast<PyObject*>(m))) {}
+        : primitive<Store>(m,pytype()), type(type), orientation(dimension), inv_orientation(dimension), position(dimension) {}
     
     real intersects(const ray<Store> &target,ray<Store> &normal) const {
         ray<Store> transformed(inv_orientation * target.origin - position,inv_orientation * target.direction);
@@ -222,14 +243,15 @@ template<typename T,typename Item> struct flexible_struct {
     static const size_t base_size;
     static const size_t item_size;
     
-    void *operator new(size_t size,size_t item_count) {
+    static void *operator new(size_t size,size_t item_count) {
         assert(size == sizeof(T));
         return (std::max(alignof(T),alignof(Item)) <= PYOBJECT_ALIGNMENT) ?
-            py::malloc(item_offset + sizeof(Item)*item_count) :
+            ::operator new(item_offset + sizeof(Item)*item_count) :
             simd::aligned_alloc(std::max(alignof(T),alignof(Item)),item_offset + sizeof(Item)*item_count);
     }
-    void operator delete(void *ptr) {
-        if(alignof(T) <= PYOBJECT_ALIGNMENT) py::free(ptr);
+    static void *operator new(size_t size,void *ptr) { return ptr; }
+    static void operator delete(void *ptr) {
+        if(alignof(T) <= PYOBJECT_ALIGNMENT) ::operator delete(ptr);
         else simd::aligned_free(ptr);
     }
     
@@ -407,6 +429,116 @@ template<typename Store> int primitive<Store>::dimension() const {
 }
 
 
+struct triangle_batch_obj_common {
+    CONTAINED_PYTYPE_DEF
+};
+
+template<typename Store> struct triangle_batch : triangle_batch_obj_common, primitive_batch<Store>, flexible_struct<triangle_batch<Store>,vector_batch<Store> > {
+    typedef typename triangle_batch::flexible_struct flex_base;
+    
+    v_real d;
+    vector_batch<Store> p1;
+    vector_batch<Store> face_normal;
+    
+    int dimension() const {
+        return p1.dimension();
+    }
+    
+    size_t _item_size() const {
+        return size_t(dimension()-1);
+    }
+    
+    real intersects(const ray<Store> &target,ray<Store> &normal,int &index) const {
+        INSTRUMENTATION_TIMER;
+        auto zeros = v_real::zeros();
+        
+        auto denom = dot(face_normal,broadcast(target.direction));
+        auto mask = denom != zeros;
+        
+        auto t = -(dot(face_normal,broadcast(target.origin)) + d) / denom;
+        mask = mask && t >= zeros;
+        
+        //if(!mask.any()) return 0;
+        
+        vector_batch<Store> P = broadcast(target.origin) + t * broadcast(target.direction);
+        vector_batch<Store> pside = p1 - P;
+        
+        auto a_min = v_real::repeat(-ROUNDING_FUZZ);
+        auto tot_area = zeros;
+        for(int i=0; i<dimension()-1; ++i) {
+            v_real area = dot(this->items()[i],pside);
+            mask = mask && area >= a_min;
+            if(!mask.any()) return 0;
+            tot_area += area;
+        }
+        
+        auto a_max = v_real::repeat(1+ROUNDING_FUZZ);
+        mask = mask && tot_area <= a_max;
+ 
+        t = t.zfilter(mask);
+        
+        real min_t = std::numeric_limits<real>::max();
+        int r_index=-1;
+        for(int i=0; size_t(i)<v_real::size; ++i) {
+            if(i != index && t[i] && t[i] < min_t) {
+                min_t = t[i];
+                r_index = i;
+            }
+        }
+        
+        if(r_index == -1) return 0;
+        
+        index = r_index;
+        normal.origin = interleave1(P,r_index);
+        normal.direction = interleave1(face_normal,r_index).unit();
+        if(denom[r_index] > 0) normal.direction = -normal.direction;
+        return min_t;
+    }
+    
+    /* NOTE: multiple invocations of "triangles" with the same argument must
+       return the same instance */
+    template<typename F> static triangle_batch *from_triangles(F triangles) {
+        int n = triangles(0)->dimension();
+        
+        return create(
+            deinterleave<Store,v_real::size>(n,[=](int i){ return triangles(i)->p1; }),
+            deinterleave<Store,v_real::size>(n,[=](int i){ return triangles(i)->face_normal; }),
+            [=](int i) { return deinterleave<Store,v_real::size>(n,[=](int j){ return triangles(j)->items()[i]; }); },
+            [=](int i) { return triangles(i)->m; });
+    }
+    
+    template<typename Fe,typename Fm> static triangle_batch *create(const vector_batch<Store> &p1,const vector_batch<Store> &face_normal,Fe edge_normals,Fm m) {
+        return new(p1.dimension()-1) triangle_batch(p1,face_normal,edge_normals,m);
+    }
+    
+    void recalculate_d() {
+        d = -dot(face_normal,p1);
+    }
+    
+private:
+    template<typename Fe,typename Fm> triangle_batch(const vector_batch<Store> &p1,const vector_batch<Store> &face_normal,Fe edge_normals,Fm m)
+        : primitive_batch<Store>(m,pytype()), flex_base(p1.dimension()-1,edge_normals), p1(p1), face_normal(face_normal) {
+        assert(p1.dimension() == face_normal.dimension() &&
+            std::all_of(
+                ITR_RANGE(this->items()),
+                [&](const vector_batch<Store> &e){ return e.dimension() == p1.dimension(); }));
+        recalculate_d();
+    }
+};
+
+template<typename Store> real primitive_batch<Store>::intersects(const ray<Store> &target,ray<Store> &normal,int &index) const {
+    assert(Py_TYPE(this) == triangle_batch_obj_common::pytype());
+    return static_cast<const triangle_batch<Store>*>(this)->intersects(target,normal,index);
+}
+
+template<typename Store> int primitive_batch<Store>::dimension() const {
+    if(Store::required_d) return Store::required_d;
+    
+    assert(Py_TYPE(this) == triangle_batch_obj_common::pytype());
+    return static_cast<const triangle_batch<Store>*>(this)->dimension();
+}
+
+
 /* A dynamic array that stores items in a static buffer while it can */
 template<typename T> class quick_list {
     size_t _size;
@@ -495,7 +627,11 @@ public:
     void sort_and_unique() {
         T *d = data();
         std::sort(d,d+_size);
-        std::unique(d,d+_size);
+        size_t new_size = std::unique(d,d+_size) - d;
+        while(_size > new_size) {
+            --_size;
+            d[_size].~T();
+        }
     }
     
     void remove_at(size_t i) {
@@ -508,20 +644,55 @@ public:
 };
 
 
+template<typename Store,bool=(v_real::size>1)> struct intersection_target {
+    primitive<Store> *p;
+    
+    bool operator==(intersection_target b) const {
+        return p == b.p;
+    }
+    
+    material *mat() const { 
+        assert(p);
+        return p->m.get();
+    }
+};
+template<typename Store> struct intersection_target<Store,true> {
+    PyObject *p;
+    int index;
+    
+    bool operator==(intersection_target b) const {
+        return p == b.p && index == b.index;
+    }
+    
+    material *mat() const {
+        assert(p);
+        
+        if(index >= 0) {
+            assert(Py_TYPE(p) == triangle_batch<Store>::pytype());
+            return reinterpret_cast<primitive_batch<Store>*>(p)->m[index].get();
+        }
+        
+        assert(Py_TYPE(p) != triangle_batch<Store>::pytype());
+        return reinterpret_cast<primitive<Store>*>(p)->m.get();
+    }
+};
+
 template<typename Store> struct ray_intersection {
     real dist;
-    primitive<Store> *p;
+    intersection_target<Store> target;
     ray<Store> normal;
     
-    template<typename Ntype> ray_intersection(real dist,primitive<Store> *p,Ntype &&normal) : dist(dist), p(p), normal(std::forward<Ntype>(normal)) {}
+    ray_intersection(int dimension) : normal(dimension) {}
+    template<typename Ntype> ray_intersection(real dist,intersection_target<Store> target,Ntype &&normal) : dist(dist), target(target), normal(std::forward<Ntype>(normal)) {}
     
     bool operator<(const ray_intersection &b) const {
         return dist < b.dist;
     }
     bool operator==(const ray_intersection &b) const {
-        return p == b.p;
+        return target == b.target;
     }
 };
+
 template<typename Store> using ray_intersections = quick_list<ray_intersection<Store> >;
 
 template<typename Store> void trim_intersections(ray_intersections<Store> &hits,real dist,size_t from=0) {
@@ -539,15 +710,8 @@ template<typename Store> struct kd_node {
        manually */
     node_type type;
     
-    real intersects(const ray<Store> &target,ray<Store> &normal,primitive<Store> *&p,ray_intersections<Store> &hits,real t_near,real t_far) const;
-    real occludes(const ray<Store> &target,real ldistance,const primitive<Store> *source,ray_intersections<Store> &hits,real t_near,real t_far) const;
-    
-    void *operator new(size_t size) {
-        return py::malloc(size);
-    }
-    void operator delete(void *ptr) {
-        py::free(ptr);
-    }
+    bool intersects(const ray<Store> &target,intersection_target<Store> skip,ray_intersection<Store> &o_hit,ray_intersections<Store> &hits,real t_near,real t_far) const;
+    bool occludes(const ray<Store> &target,real ldistance,intersection_target<Store> skip,ray_intersections<Store> &hits,real t_near,real t_far) const;
     
 protected:
     kd_node(node_type type) : type(type) {}
@@ -573,13 +737,13 @@ template<typename Store> struct kd_branch : kd_node<Store> {
     kd_branch(int axis,real split,kd_node_unique_ptr<Store> &&left,kd_node_unique_ptr<Store> &&right) :
         kd_node<Store>(BRANCH), axis(axis), split(split), left(std::move(left)), right(std::move(right)) {}
     
-    real intersects(const ray<Store> &target,ray<Store> &normal,primitive<Store> *&p,ray_intersections<Store> &hits,real t_near,real t_far) const {
-        assert(target.dimension() == normal.dimension());
+    bool intersects(const ray<Store> &target,intersection_target<Store> skip,ray_intersection<Store> &o_hit,ray_intersections<Store> &t_hits,real t_near,real t_far) const {
+        assert(target.dimension() == o_hit.normal.dimension());
         
         if(target.direction[axis]) {
             if(target.origin[axis] == split) {
                 auto node = (target.direction[axis] > 0 ? right : left).get();
-                return node ? node->intersects(target,normal,p,hits,t_near,t_far) : 0;
+                return node && node->intersects(target,skip,o_hit,t_hits,t_near,t_far);
             }
             
             real t = (split - target.origin[axis]) / target.direction[axis];
@@ -591,16 +755,15 @@ template<typename Store> struct kd_branch : kd_node<Store> {
                 n_far = left.get();
             }
 
-            if(t < 0 || t > t_far) return n_near ? n_near->intersects(target,normal,p,hits,t_near,t_far) : 0;
-            if(t < t_near) return n_far ? n_far->intersects(target,normal,p,hits,t_near,t_far) : 0;
+            if(t < 0 || t > t_far) return n_near && n_near->intersects(target,skip,o_hit,t_hits,t_near,t_far);
+            if(t < t_near) return n_far && n_far->intersects(target,skip,o_hit,t_hits,t_near,t_far);
 
             if(n_near) {
-                size_t h_start = hits.size();
-                primitive<Store> *new_p = p;
-                real dist = n_near->intersects(target,normal,p,hits,t_near,t);
-                if((dist && dist <= t) || !n_far) return dist;
+                size_t h_start = t_hits.size();
+                bool hit = n_near->intersects(target,skip,o_hit,t_hits,t_near,t);
+                if((hit && o_hit.dist <= t) || !n_far) return hit;
                 
-                if(dist) {
+                if(hit) {
                     /* If dist is greater than t, the intersection was in a
                        farther division (a primitive can span multiple
                        divisions) and a closer primitive may exist, but if the
@@ -609,31 +772,26 @@ template<typename Store> struct kd_branch : kd_node<Store> {
                        error from limited precision, so we can't assume the
                        primitive is also in t_far. */
                     
-                    ray<Store> new_normal(target.dimension());
-                    real new_dist = n_far->intersects(target,new_normal,new_p,hits,t,t_far);
-                    if(new_dist && new_dist < dist) {
-                        dist = new_dist;
-                        normal = new_normal;
-                        p = new_p;
-                    }
-                    trim_intersections(hits,dist,h_start);
-                    return dist;
+                    ray_intersection<Store> new_hit(target.dimension());
+                    if(n_far->intersects(target,skip,new_hit,t_hits,t,t_far) && new_hit.dist < o_hit.dist) o_hit = new_hit;
+                    trim_intersections(t_hits,o_hit.dist,h_start);
+                    return true;
                 }
             }
             
             assert(n_far);
-            return n_far->intersects(target,normal,p,hits,t,t_far);
+            return n_far->intersects(target,skip,o_hit,t_hits,t,t_far);
         }
 
         auto node = (target.origin[axis] >= split ? right : left).get();
-        return node ? node->intersects(target,normal,p,hits,t_near,t_far) : 0;
+        return node && node->intersects(target,skip,o_hit,t_hits,t_near,t_far);
     }
     
-    bool occludes(const ray<Store> &target,real ldistance,const primitive<Store> *source,ray_intersections<Store> &hits,real t_near,real t_far) const {
+    bool occludes(const ray<Store> &target,real ldistance,intersection_target<Store> skip,ray_intersections<Store> &hits,real t_near,real t_far) const {
         if(target.direction[axis]) {
             if(target.origin[axis] == split) {
                 auto node = (target.direction[axis] > 0 ? right : left).get();
-                return node ? node->occludes(target,ldistance,source,hits,t_near,t_far) : false;
+                return node && node->occludes(target,ldistance,skip,hits,t_near,t_far);
             }
             
             real t = (split - target.origin[axis]) / target.direction[axis];
@@ -645,24 +803,99 @@ template<typename Store> struct kd_branch : kd_node<Store> {
                 n_far = left.get();
             }
 
-            if(t < 0 || t > t_far) return n_near ? n_near->occludes(target,ldistance,source,hits,t_near,t_far) : false;
-            if(t < t_near) return n_far ? n_far->occludes(target,ldistance,source,hits,t_near,t_far) : false;
+            if(t < 0 || t > t_far) return n_near && n_near->occludes(target,ldistance,skip,hits,t_near,t_far);
+            if(t < t_near) return n_far && n_far->occludes(target,ldistance,skip,hits,t_near,t_far);
 
             if(n_near) {
-                if(n_near->occludes(target,ldistance,source,hits,t_near,t)) return true;
+                if(n_near->occludes(target,ldistance,skip,hits,t_near,t)) return true;
                 if(!n_far) return false;
             }
             
             assert(n_far);
-            return t < ldistance ? n_far->occludes(target,ldistance,source,hits,t,t_far) : false;
+            return t < ldistance && n_far->occludes(target,ldistance,skip,hits,t,t_far);
         }
 
         auto node = (target.origin[axis] >= split ? right : left).get();
-        return node ? node->occludes(target,ldistance,source,hits,t_near,t_far) : false;
+        return node && node->occludes(target,ldistance,skip,hits,t_near,t_far);
     }
 };
 
-template<typename Store> struct kd_leaf : kd_node<Store>, flexible_struct<kd_leaf<Store>,py::pyptr<primitive<Store> > > {
+#if 0
+template<typename Store> struct nodes_by_dist {
+    const kd_node<Store> *near;
+    const kd_node<Store> *far;
+};
+
+template<typename Store> real kd_branch_intersects(
+        const kd_branch<Store> **branches,
+        const ray<Store,v_real> &targets,
+        ray<Store,v_real> &normals,
+        primitive<Store> *&p,
+        ray_intersections<Store> *hits,
+        v_real t_near,
+        v_real t_far) const {
+    assert(target.dimension() == normal.dimension());
+    
+    if(target.direction[axis]) {
+        if(target.origin[axis] == split) {
+            auto node = (target.direction[axis] > 0 ? right : left).get();
+            return node ? node->intersects(target,normal,p,hits,t_near,t_far) : 0;
+        }
+        
+        real t = (split - target.origin[axis]) / target.direction[axis];
+        
+        typename Store::init_array<nodes_by_dist> nodes{[](int i) -> nodes_by_dist {
+            auto n_near = branches[i]->left.get();
+            auto n_far = branches[i]->right.get();
+
+            if(targets.origin[branches[i]->axis][i] > branches[i]->split) {
+                n_near = branches[i]->right.get();
+                n_far = branches[i]->left.get();
+            }
+
+            return {n_near,n_far};
+        }};
+
+        if(t < 0 || t > t_far) return n_near ? n_near->intersects(target,normal,p,hits,t_near,t_far) : 0;
+        if(t < t_near) return n_far ? n_far->intersects(target,normal,p,hits,t_near,t_far) : 0;
+
+        if(n_near) {
+            size_t h_start = hits.size();
+            primitive<Store> *new_p = p;
+            real dist = n_near->intersects(target,normal,p,hits,t_near,t);
+            if((dist && dist <= t) || !n_far) return dist;
+            
+            if(dist) {
+                /* If dist is greater than t, the intersection was in a
+                   farther division (a primitive can span multiple
+                   divisions) and a closer primitive may exist, but if the
+                   intersection is with a primitive that is embedded in the
+                   split plane, dist can also be greater than t due to an
+                   error from limited precision, so we can't assume the
+                   primitive is also in t_far. */
+                
+                ray<Store> new_normal(target.dimension());
+                real new_dist = n_far->intersects(target,new_normal,new_p,hits,t,t_far);
+                if(new_dist && new_dist < dist) {
+                    dist = new_dist;
+                    normal = new_normal;
+                    p = new_p;
+                }
+                trim_intersections(hits,dist,h_start);
+                return dist;
+            }
+        }
+        
+        assert(n_far);
+        return n_far->intersects(target,normal,p,hits,t,t_far);
+    }
+
+    auto node = (target.origin[axis] >= split ? right : left).get();
+    return node ? node->intersects(target,normal,p,hits,t_near,t_far) : 0;
+}
+#endif
+
+template<typename Store,bool Batched=(v_real::size>1)> struct kd_leaf : kd_node<Store>, flexible_struct<kd_leaf<Store,Batched>,py::pyptr<primitive<Store> > > {
     typedef typename kd_leaf::flexible_struct flex_base;
     
     using flex_base::operator delete;
@@ -674,73 +907,72 @@ template<typename Store> struct kd_leaf : kd_node<Store>, flexible_struct<kd_lea
         return size;
     }
     
-    template<typename F> static kd_leaf<Store> *create(size_t size,F f) {
-        return new(size) kd_leaf<Store>(size,f);
+    template<typename F> static kd_leaf *create(size_t size,F f) {
+        return new(size) kd_leaf(size,f);
     }
     
-    real intersects(const ray<Store> &target,ray<Store> &normal,primitive<Store> *&p,ray_intersections<Store> &hits) const {
-        assert(dimension() == target.dimension() && dimension() == normal.dimension());
+    bool intersects(const ray<Store> &target,intersection_target<Store> skip,ray_intersection<Store> &o_hit,ray_intersections<Store> &t_hits) const {
+        assert(dimension() == target.dimension() && dimension() == o_hit.normal.dimension());
         
-        size_t h_start = hits.size();
+        size_t h_start = t_hits.size();
         
         real dist;
         size_t i=0;
-        primitive<Store> *old_p = p;
         while(i<size) {
             auto item = this->items()[i++].get();
-            if(item != p) {
-                dist = item->intersects(target,normal);
+            if(item != skip.p) {
+                dist = item->intersects(target,o_hit.normal);
                 
                 if(dist) {
                     if(item->opaque()) {
-                        p = item;
+                        o_hit.dist = dist;
+                        o_hit.target.p = item;
                         goto hit;
                     } else {
-                        hits.add({dist,item,normal});
+                        t_hits.add({dist,{item},o_hit.normal});
                     }
                 }
             }
         }
-        return 0;
+        return false;
         
     hit:
         // is there anything closer?
-        real new_dist;
         ray<Store> new_normal(target.dimension());
         while(i<size) {
             auto item = this->items()[i++].get();
-            if(item != old_p) {
-                new_dist = item->intersects(target,new_normal);
-                if(new_dist && new_dist < dist) {
+            if(item != skip.p) {
+                dist = item->intersects(target,new_normal);
+                if(dist && dist < o_hit.dist) {
                     if(item->opaque()) {
-                        dist = new_dist;
-                        normal = new_normal;
-                        p = item;
+                        o_hit.dist = dist;
+                        o_hit.normal = new_normal;
+                        o_hit.target.p = item;
                     } else {
-                        hits.add({new_dist,item,new_normal});
+                        t_hits.add({dist,{item},new_normal});
                     }
                 }
             }
         }
         
-        trim_intersections(hits,dist,h_start);
-        return dist;
+        trim_intersections(t_hits,dist,h_start);
+        return true;
     }
     
-    bool occludes(const ray<Store> &target,real ldistance,const primitive<Store> *source,ray_intersections<Store> &hits) const {
+    bool occludes(const ray<Store> &target,real ldistance,intersection_target<Store> skip,ray_intersections<Store> &hits) const {
         assert(dimension() == target.dimension());
 
         real dist;
         ray<Store> normal(dimension());
         for(size_t i=0; i<size; ++i) {
             auto item = this->items()[i].get();
-            if(item != source) {
+            if(item != skip.p) {
                 dist = item->intersects(target,normal);
                 
                 if(dist && dist < ldistance) {
                     if(item->opaque()) return true;
 
-                    hits.add({dist,item,normal});
+                    hits.add({dist,{item},normal});
                 }
             }
         }
@@ -756,18 +988,205 @@ private:
     template<typename F> kd_leaf(size_t size,F f) : kd_node<Store>(LEAF), flex_base(size,f), size(size) {}
 };
 
-template<typename Store> real kd_node<Store>::intersects(const ray<Store> &target,ray<Store> &normal,primitive<Store> *&p,ray_intersections<Store> &hits,real t_near,real t_far) const {
-    if(type == LEAF) return static_cast<const kd_leaf<Store>*>(this)->intersects(target,normal,p,hits);
+template<typename Store> struct kd_leaf<Store,true> : kd_node<Store>, flexible_struct<kd_leaf<Store,true>,py::object> {
+    typedef typename kd_leaf::flexible_struct flex_base;
+    
+    using flex_base::operator delete;
+    using flex_base::operator new;
+
+    size_t size;
+    size_t batches;
+    
+    size_t _item_size() const {
+        return size;
+    }
+    
+    template<typename F> static kd_leaf *create(size_t size,size_t batches,F f) {
+        return new(size) kd_leaf(size,batches,f);
+    }
+    template<typename F> static kd_leaf *create(size_t size,F f) {
+        return new(size) kd_leaf(size,f);
+    }
+    
+    bool intersects(const ray<Store> &target,intersection_target<Store> skip,ray_intersection<Store> &o_hit,ray_intersections<Store> &t_hits) const {
+        assert(dimension() == target.dimension() && dimension() == o_hit.normal.dimension());
+        
+        size_t h_start = t_hits.size();
+        
+        real dist;
+        size_t i=0;
+
+        while(i<size) {
+            auto item = this->items()[i++].ref();
+            if(i < batches) {
+                assert(Py_TYPE(item) == triangle_batch<Store>::pytype());
+                
+                int index = skip.p == item ? skip.index : -1;
+                auto p = reinterpret_cast<triangle_batch<Store>*>(item);
+                
+                dist = p->intersects(target,o_hit.normal,index);
+                
+                if(dist) {
+                    if(p->opaque(index)) {
+                        o_hit.dist = dist;
+                        o_hit.target.p = item;
+                        o_hit.target.index = index;
+                        goto hit;
+                    }
+                    
+                    t_hits.add({dist,{item,index},o_hit.normal});
+                }
+            } else if(item != skip.p) {
+                assert(Py_TYPE(item) != triangle_batch<Store>::pytype());
+                
+                auto p = reinterpret_cast<primitive<Store>*>(item);
+                
+                dist = p->intersects(target,o_hit.normal);
+                
+                if(dist) {
+                    if(p->opaque()) {
+                        o_hit.dist = dist;
+                        o_hit.target.p = item;
+                        o_hit.target.index = -1;
+                        goto hit;
+                    }
+                    
+                    t_hits.add({dist,{item,-1},o_hit.normal});
+                }
+            }
+        }
+        return false;
+        
+    hit:
+        // is there anything closer?
+        ray<Store> new_normal(target.dimension());
+        
+        while(i<size) {
+            auto item = this->items()[i++].ref();
+            if(i < batches) {
+                assert(Py_TYPE(item) == triangle_batch<Store>::pytype());
+                
+                int index = skip.p == item ? skip.index : -1;
+                auto p = reinterpret_cast<triangle_batch<Store>*>(item);
+                
+                dist = p->intersects(target,o_hit.normal,index);
+                
+                if(dist && dist < o_hit.dist) {
+                    if(p->opaque(index)) {
+                        o_hit.dist = dist;
+                        std::swap(o_hit.normal,new_normal);
+                        o_hit.target.p = item;
+                        o_hit.target.index = index;
+                    } else {
+                        t_hits.add({dist,{item,index},o_hit.normal});
+                    }
+                }
+            } else if(item != skip.p) {
+                assert(Py_TYPE(item) != triangle_batch<Store>::pytype());
+                
+                auto p = reinterpret_cast<primitive<Store>*>(item);
+                
+                dist = p->intersects(target,new_normal);
+                if(dist && dist < o_hit.dist) {
+                    if(p->opaque()) {
+                        o_hit.dist = dist;
+                        std::swap(o_hit.normal,new_normal);
+                        o_hit.target.p = item;
+                        o_hit.target.index = -1;
+                    } else {
+                        t_hits.add({dist,{item,-1},new_normal});
+                    }
+                }
+            }
+        }
+        
+        trim_intersections(t_hits,dist,h_start);
+        return true;
+    }
+    
+    bool occludes(const ray<Store> &target,real ldistance,intersection_target<Store> skip,ray_intersections<Store> &hits) const {
+        assert(dimension() == target.dimension());
+
+        real dist;
+        ray<Store> normal(dimension());
+        for(size_t i=0; i<size; ++i) {
+            auto item = this->items()[i];
+            
+            if(i < batches) {
+                assert(item.type() == triangle_batch<Store>::pytype());
+                
+                int index = skip.p == item.ref() ? skip.index : -1;
+                auto p = reinterpret_cast<triangle_batch<Store>*>(item.ref());
+                
+                dist = p->intersects(target,normal,index);
+                
+                if(dist && dist < ldistance) {
+                    if(p->opaque(index)) return true;
+
+                    hits.add({dist,{item.ref(),index},normal});
+                }
+            } else if(item.ref() != skip.p) {
+                assert(item.type() != triangle_batch<Store>::pytype());
+                
+                auto p = reinterpret_cast<primitive<Store>*>(item.ref());
+                
+                dist = p->intersects(target,normal);
+                
+                if(dist && dist < ldistance) {
+                    if(p->opaque()) return true;
+
+                    hits.add({dist,{item.ref(),-1},normal});
+                }
+            }
+        }
+        return false;
+    }
+    
+    int dimension() const {
+        assert(size);
+        auto item = this->items()[0].ref();
+        return batches ?
+            reinterpret_cast<primitive_batch<Store>*>(item)->dimension() : 
+            reinterpret_cast<primitive<Store>*>(item)->dimension();
+    }
+    
+private:
+    static bool is_batch(py::object x) {
+        // this assumes triangle_batch is the only batch primitive
+        assert(x.type() == solid<Store>::pytype() || x.type() == triangle<Store>::pytype() || x.type() == triangle_batch<Store>::pytype());
+        
+        return x.type() == triangle_batch<Store>::pytype();
+    }
+    
+    template<typename F> kd_leaf(size_t size,size_t batches,F f) : kd_node<Store>(LEAF), flex_base(size,f), size(size), batches(batches) {
+        assert(size > 0 && batches <= size && std::is_partitioned(ITR_RANGE(this->items()),is_batch));
+    }
+    
+    template<typename F> kd_leaf(size_t size,F f) : kd_node<Store>(LEAF), flex_base(size,f), size(size) {
+        assert(size > 0);
+
+        batches = std::partition(ITR_RANGE(this->items()),is_batch) - this->items().begin();
+    }
+};
+
+template<typename Store> bool kd_node<Store>::intersects(const ray<Store> &target,intersection_target<Store> skip,ray_intersection<Store> &o_hit,ray_intersections<Store> &t_hits,real t_near,real t_far) const {
+    if(type == LEAF) {
+        bool r = static_cast<const kd_leaf<Store>*>(this)->intersects(target,skip,o_hit,t_hits);
+        assert(!r || o_hit.target.p);
+        return r;
+    }
     
     assert(type == BRANCH);
-    return static_cast<const kd_branch<Store>*>(this)->intersects(target,normal,p,hits,t_near,t_far);
+    bool r = static_cast<const kd_branch<Store>*>(this)->intersects(target,skip,o_hit,t_hits,t_near,t_far);
+    assert(!r || o_hit.target.p);
+    return r;
 }
 
-template<typename Store> real kd_node<Store>::occludes(const ray<Store> &target,real ldistance,const primitive<Store> *source,ray_intersections<Store> &hits,real t_near,real t_far) const {
-    if(type == LEAF) return static_cast<const kd_leaf<Store>*>(this)->occludes(target,ldistance,source,hits);
+template<typename Store> bool kd_node<Store>::occludes(const ray<Store> &target,real ldistance,intersection_target<Store> skip,ray_intersections<Store> &hits,real t_near,real t_far) const {
+    if(type == LEAF) return static_cast<const kd_leaf<Store>*>(this)->occludes(target,ldistance,skip,hits);
     
     assert(type == BRANCH);
-    return static_cast<const kd_branch<Store>*>(this)->occludes(target,ldistance,source,hits,t_near,t_far);
+    return static_cast<const kd_branch<Store>*>(this)->occludes(target,ldistance,skip,hits,t_near,t_far);
 }
 
 template<typename Store> inline void kd_node_deleter<Store>::operator()(kd_node<Store> *ptr) const {
@@ -779,6 +1198,7 @@ template<typename Store> inline void kd_node_deleter<Store>::operator()(kd_node<
     }
 }
 
+/*
 struct p_instance_obj_common {
     CONTAINED_PYTYPE_DEF
     PyObject_HEAD
@@ -817,11 +1237,12 @@ template<typename Store> struct p_instance : p_instance_obj_common, primitive<St
         
         return 0;
     }
-};
+};*/
 
 
 template<typename Store> struct solid_prototype;
 template<typename Store> struct triangle_prototype;
+template<typename Store> struct triangle_batch_prototype;
 
 template<typename Store> struct aabb {
     aabb(int dimension) : start(dimension), end(dimension) {}
@@ -831,17 +1252,15 @@ template<typename Store> struct aabb {
 
     vector<Store> start;
     vector<Store> end;
-
-
-    /* All Prototype intersection tests should only return true if the
-       intersection between the AABB and the Primitive has a non-zero volume.
-       E.g. two cubes that share a face do not count as intersecting. This is
-       important because k-d tree split positions are always at Primitive
-       boundaries and a Primitive should end up on only one side of the split
-       (hyper)plane. */
+    
+    decltype((std::declval<vector<Store> >() + std::declval<vector<Store> >()) * 0.5) center() const {
+        return (start + end) * 0.5;
+    }
 
     bool intersects(const triangle_prototype<Store> &tp) const;
     bool intersects_flat(const triangle_prototype<Store> &tp,int skip) const;
+    bool intersects(const triangle_batch_prototype<Store> &tp) const;
+    bool intersects_flat(const triangle_batch_prototype<Store> &tp,int skip) const;
     bool box_axis_test(const solid<Store> *c,const vector<Store> &axis) const;
     bool intersects(const solid_prototype<Store> &sp) const;
     
@@ -858,19 +1277,22 @@ template<typename Store> void swap(aabb<Store> &a,aabb<Store> &b) {
 
 template<typename Store> struct primitive_prototype {
     aabb<Store> boundary;
-    py::pyptr<primitive<Store> > p;
+    py::object p;
     
     int dimension() const {
         return boundary.dimension();
     }
+    
+    explicit primitive_prototype(int dimension) : boundary(dimension) {}
+    template<typename T> primitive_prototype(const aabb<Store> &boundary,T &&p) : boundary(boundary), p(p) {}
 };
 
 template<typename Store> struct solid_prototype : primitive_prototype<Store> {
     solid<Store> *ps() {
-        return static_cast<solid<Store>*>(this->p.get());
+        return reinterpret_cast<solid<Store>*>(this->p.ref());
     }
     const solid<Store> *ps() const {
-        return static_cast<const solid<Store>*>(this->p.get());
+        return reinterpret_cast<const solid<Store>*>(this->p.ref());
     }
 };
 
@@ -883,16 +1305,58 @@ template<typename Store> struct triangle_point {
 
 template<typename Store> struct triangle_prototype : primitive_prototype<Store>, flexible_struct<triangle_prototype<Store>,triangle_point<Store> > {
     triangle<Store> *pt() {
-        return static_cast<triangle<Store>*>(this->p.get());
+        return reinterpret_cast<triangle<Store>*>(this->p.ref());
     }
     const triangle<Store> *pt() const {
-        return static_cast<const triangle<Store>*>(this->p.get());
+        return reinterpret_cast<const triangle<Store>*>(this->p.ref());
     }
 
     vector<Store> first_edge_normal;
     
     size_t _item_size() const {
         return this->dimension();
+    }
+};
+
+template<typename Store> struct triangle_batch_point {
+    vector_batch<Store> point;
+    const vector_batch<Store> &edge_normal;
+    
+    triangle_batch_point(const vector_batch<Store> &point,const vector_batch<Store> &edge_normal) : point(point), edge_normal(edge_normal) {}
+    triangle_batch_point(vector_batch<Store> &&point,const vector_batch<Store> &edge_normal) : point(std::move(point)), edge_normal(edge_normal) {}
+};
+
+template<typename Store> struct triangle_batch_prototype : primitive_prototype<Store>, flexible_struct<triangle_batch_prototype<Store>,triangle_batch_point<Store> > {
+    typedef typename triangle_batch_prototype::flexible_struct flexible_struct;
+    
+    triangle_batch<Store> *pt() {
+        return reinterpret_cast<triangle_batch<Store>*>(this->p.ref());
+    }
+    const triangle_batch<Store> *pt() const {
+        return reinterpret_cast<const triangle_batch<Store>*>(this->p.ref());
+    }
+
+    vector_batch<Store> first_edge_normal;
+    
+    size_t _item_size() const {
+        return this->dimension();
+    }
+
+    /* NOTE: multiple invocations of t_prototypes with the same argument must
+       return the same instance */
+    template<typename F> triangle_batch_prototype(int dimension,F t_prototypes) :
+        primitive_prototype<Store>(t_prototypes(0)->boundary,py::new_ref(triangle_batch<Store>::from_triangles([=](int i){ return t_prototypes(i)->pt(); }))),
+        flexible_struct(dimension,[=](int i) {
+            return triangle_batch_point<Store>(
+                deinterleave<Store>(dimension,[=](int j){ return t_prototypes(i)->items()[j].point; }),
+                i > 0 ? pt()->items()[i-1] : first_edge_normal);
+        }),
+        first_edge_normal(deinterleave<Store>(dimension,[=](int i){ return t_prototypes(i)->first_edge_normal; })) {
+        for(size_t i=1; i<v_real::size; ++i) {
+            const aabb<Store> &ibound = t_prototypes(i)->boundary;
+            v_expr(this->boundary.start) = min(v_expr(this->boundary.start),v_expr(ibound.start));
+            v_expr(this->boundary.end) = max(v_expr(this->boundary.end),v_expr(ibound.end));
+        }
     }
 };
 
@@ -903,12 +1367,12 @@ real clamp(real x) {
     return x;
 }
 
-template<typename Store> real skip_dot(const vector<Store> &a,const vector<Store> &b,int skip) {
-    assert(a.dimension() == b.dimension());
+template<typename A,typename B> typename A::item_t skip_dot(const A &a,const B &b,int skip) {
+    assert(a.size() == b.size());
     
-    real tot = 0;
-    for(int i=0; i<a.dimension(); ++i) {
-        if(i != skip) tot += a[i] * b[i];
+    typename A::item_t tot = simd::support<typename A::item_t>::zeros();
+    for(int i=0; i<a.size(); ++i) {
+        if(i != skip) tot += a.template vec<1>(i).data * b.template vec<1>(i).data;
     }
     return tot;
 }
@@ -917,8 +1381,8 @@ template<typename Store> real skip_dot(const vector<Store> &a,const vector<Store
 /* All Prototype intersection tests should only return true if the intersection
    between the AABB and the Primitive has a non-zero volume. E.g. two cubes that
    share a face do not count as intersecting. This is important because k-d tree
-   split positions are always at Primitive boundaries and a Primitive should end
-   up on only one side of the split (hyper)plane. */
+   split positions are always at Primitive boundaries and those Primitives
+   should end up on only one side of the split (hyper)plane. */
 
 template<typename Store> bool aabb<Store>::intersects(const triangle_prototype<Store> &tp) const {
     INSTRUMENTATION_TIMER;
@@ -926,7 +1390,7 @@ template<typename Store> bool aabb<Store>::intersects(const triangle_prototype<S
     if((v_expr(tp.boundary.start) >= v_expr(end) || v_expr(tp.boundary.end) <= v_expr(start)).any()) return false;
     
     real n_offset = dot(tp.pt()->face_normal,tp.items()[0].point);
-    vector<Store> origin = (start + end) * 0.5;
+    vector<Store> origin = center();
     
     real po = dot(origin,tp.pt()->face_normal);
     
@@ -972,7 +1436,7 @@ template<typename Store> bool aabb<Store>::intersects_flat(const triangle_protot
         if(i != skip && (tp.boundary.start[i] >= end[i] || tp.boundary.end[i] <= start[i])) return false;
     }
     
-    vector<Store> origin = (start + end) * 0.5;
+    vector<Store> origin = center();
 
     for(int i=0; i<dimension(); ++i) {
         const vector<Store> &axis = tp.items()[i].edge_normal;
@@ -996,9 +1460,93 @@ template<typename Store> bool aabb<Store>::intersects_flat(const triangle_protot
     return true;
 }
 
+template<typename Store> bool aabb<Store>::intersects(const triangle_batch_prototype<Store> &tp) const {
+    INSTRUMENTATION_TIMER;
+    
+    if((v_expr(tp.boundary.start) >= v_expr(end) || v_expr(tp.boundary.end) <= v_expr(start)).any()) return false;
+    
+    v_real n_offset = dot(tp.pt()->face_normal,tp.items()[0].point);
+    vector<Store> origin = center();
+    
+    v_real po = dot(broadcast(origin),tp.pt()->face_normal);
+    
+    v_real b_max = (v_expr(end - start)/2 * v_expr(tp.pt()->face_normal)).abs().reduce_add();
+    v_real b_min = po - b_max;
+    b_max += po;
+    
+    v_real::mask miss = b_max < n_offset || b_min > n_offset;
+    
+    if(miss.all()) return false;
+    
+    for(int i=0; i<dimension(); ++i) {
+        const vector_batch<Store> &axis = tp.items()[i].edge_normal;
+        
+        for(int j=0; j<dimension(); ++j) {
+            v_real t_min = v_real::repeat(std::numeric_limits<real>::max());
+            v_real t_max = v_real::repeat(std::numeric_limits<real>::lowest());
+            for(auto &pd : tp.items()) {
+                v_real val = skip_dot(pd.point,axis,j);
+                t_min.mask_set(val < t_min,val);
+                t_max.mask_set(val > t_max,val);
+            }
+            
+            po = skip_dot(broadcast(origin),axis,j);
+            
+            b_max = v_real::zeros();
+            for(int k=0; k<dimension(); ++k) {
+                if(k != j) b_max += (((end[k] - start[k])/2) * axis[k]).abs();
+            }
+            b_min = po - b_max;
+            b_max += po;
+            
+            miss = miss || b_max <= t_min || b_min >= t_max;
+            
+            if(miss.all()) return false;
+        }
+    }
+    
+    return true;
+}
+
+template<typename Store> bool aabb<Store>::intersects_flat(const triangle_batch_prototype<Store> &tp,int skip) const {
+    for(int i=0; i<dimension(); ++i) {
+        if(i != skip && (tp.boundary.start[i] >= end[i] || tp.boundary.end[i] <= start[i])) return false;
+    }
+    
+    vector<Store> origin = center();
+
+    v_real::mask miss = v_real::mask::zeros();
+    
+    for(int i=0; i<dimension(); ++i) {
+        const vector_batch<Store> &axis = tp.items()[i].edge_normal;
+        
+        v_real tmp1 = skip_dot(tp.items()[0].point,axis,skip);
+        v_real tmp2 = skip_dot(tp.items()[i ? i : 1].point,axis,skip);
+        
+        v_real::mask cmp = tmp1 > tmp2;
+        v_real t_max = simd::mask_blend(cmp,tmp1,tmp2);
+        v_real t_min = simd::mask_blend(cmp,tmp2,tmp1);
+        
+        v_real po = skip_dot(broadcast(origin),axis,skip);
+        
+        v_real b_max = v_real::zeros();
+        for(int k=0; k<dimension(); ++k) {
+            if(k != skip) b_max += (((end[k] - start[k])/2) * axis[k]).abs();
+        }
+        v_real b_min = po - b_max;
+        b_max += po;
+        
+        miss = miss || b_max <= t_min || b_min >= t_max;
+        
+        if(miss.all()) return false;
+    }
+    
+    return true;
+}
+
 template<typename Store> bool aabb<Store>::box_axis_test(const solid<Store> *c,const vector<Store> &axis) const {
     real a_po = dot(c->position,axis);
-    real b_po = dot((start + end) * 0.5,axis);
+    real b_po = dot(center(),axis);
     
     real a_max = 0;
     for(int i=0; i<dimension(); ++i) a_max += std::abs(dot(c->cube_component(i),axis));
@@ -1031,7 +1579,7 @@ template<typename Store> bool aabb<Store>::intersects(const solid_prototype<Stor
     
     assert(sp.ps()->type == SPHERE);
 
-    vector<Store> box_p = sp.ps()->position - sp.ps()->inv_orientation * ((start + end) * 0.5);
+    vector<Store> box_p = sp.ps()->position - sp.ps()->inv_orientation * center();
     
     vector<Store> closest(dimension(),0);
     
@@ -1108,26 +1656,26 @@ template<typename Store> struct composite_scene : scene {
           boundary(boundary),
           root(data) {}
     
-    bool light_reaches(const ray<Store> &target,real ldistance,const primitive<Store> *source,color &filtered) const {
+    bool light_reaches(const ray<Store> &target,real ldistance,intersection_target<Store> skip,color &filtered) const {
         ray_intersections<Store> transparent_hits;
 
-        if(root->occludes(target,ldistance,source,transparent_hits,0,std::numeric_limits<real>::max())) return false;
+        if(root->occludes(target,ldistance,skip,transparent_hits,0,std::numeric_limits<real>::max())) return false;
         
         if(transparent_hits) {
             transparent_hits.sort_and_unique();
             
             auto data = transparent_hits.data();
             for(auto itr = data + (transparent_hits.size()-1); itr >= data; --itr) {
-                assert(itr->p->m->opacity != 1);
-                filtered *= 1 - itr->p->m->opacity;
+                assert(itr->target.mat()->opacity != 1);
+                filtered *= 1 - itr->target.mat()->opacity;
             }
         }
         
         return true;
     }
     
-    color base_color(const ray<Store> &target,const ray<Store> &normal,primitive<Store> *p,int depth) const {
-        auto m = p->m.get();
+    color base_color(const ray<Store> &target,const ray<Store> &normal,intersection_target<Store> source,int depth) const {
+        auto m = source.mat();
         
         auto light = color(0,0,0);
         
@@ -1145,7 +1693,7 @@ template<typename Store> struct composite_scene : scene {
                 if(shadows) {
                     if(std::max(pl.c.r(),std::max(pl.c.g(),pl.c.b())) * strength * sine > LIGHT_THRESHOLD) {
                         color filtered = pl.c;
-                        if(light_reaches(ray<Store>(normal.origin,lv),dist,p,filtered)) {
+                        if(light_reaches(ray<Store>(normal.origin,lv),dist,source,filtered)) {
                             filtered *= strength;
                             light += filtered * sine;
                             if(m->specular_intensity) append_specular(specular,spec_a,m,filtered,target.direction,normal.direction,lv);
@@ -1161,7 +1709,7 @@ template<typename Store> struct composite_scene : scene {
             if(sine > 0) {
                 if(shadows) {
                     color filtered = gl.c;
-                    if(light_reaches(ray<Store>(normal.origin,-gl.direction),std::numeric_limits<real>::max(),p,filtered)) {
+                    if(light_reaches(ray<Store>(normal.origin,-gl.direction),std::numeric_limits<real>::max(),source,filtered)) {
                         light += filtered * sine;
                         if(m->specular_intensity) append_specular<Store>(specular,spec_a,m,filtered,target.direction,normal.direction,-gl.direction);
                     }
@@ -1188,20 +1736,20 @@ template<typename Store> struct composite_scene : scene {
             r = m->c * ray_color(
                 ray<Store>(normal.origin,target.direction - normal.direction * (-2 * sine)),
                 depth+1,
-                p) * m->reflectivity + r * (1 - m->reflectivity);
+                source) * m->reflectivity + r * (1 - m->reflectivity);
         }
 
         return specular + r * (1 - spec_a);
     }
     
-    color ray_color(const ray<Store> &target,int depth=0,primitive<Store> *source=nullptr) const {
-        ray<Store> normal{target.dimension()};
+    color ray_color(const ray<Store> &target,int depth=0,intersection_target<Store> source=intersection_target<Store>()) const {
+        ray_intersection<Store> hit{target.dimension()};
         ray_intersections<Store> transparent_hits;
         color r;
         
         real dist = aabb_distance(target);
-        if(dist >= 0 && (dist = root->intersects(target,normal,source,transparent_hits,dist,std::numeric_limits<real>::max()))) {
-            r = base_color(target,normal,source,depth);
+        if(dist >= 0 && root->intersects(target,source,hit,transparent_hits,dist,std::numeric_limits<real>::max())) {
+            r = base_color(target,hit.normal,hit.target,depth);
         } else {
             real intensity = target.direction[bg_gradient_axis];
             r = intensity >= 0 ? bg1 * intensity + bg2 * (1 - intensity) : bg3 * -intensity + bg2 * (1 + intensity);
@@ -1212,10 +1760,10 @@ template<typename Store> struct composite_scene : scene {
             
             auto data = transparent_hits.data();
             for(auto itr = data + (transparent_hits.size()-1); itr >= data; --itr) {
-                assert(itr->p->m->opacity != 1);
-                auto base = base_color(target,itr->normal,itr->p,depth);
+                assert(itr->target.mat()->opacity != 1);
+                auto base = base_color(target,itr->normal,itr->target,depth);
                 
-                r = base * itr->p->m->opacity + r * (1 - itr->p->m->opacity);
+                r = base * itr->target.mat()->opacity + r * (1 - itr->target.mat()->opacity);
             }
         }
         
@@ -1398,15 +1946,19 @@ template<typename Store> int best_axis(const aabb<Store> &boundary) {
 
 template<typename Store> bool overlap_intersects(const aabb<Store> &bound,const primitive_prototype<Store> *pp,int skip,int axis,bool right) {
     if(skip < 0) {
-        if(Py_TYPE(pp->p.ref()) == triangle_obj_common::pytype()) return bound.intersects(*static_cast<const triangle_prototype<Store>*>(pp));
-        assert(Py_TYPE(pp->p.ref()) == solid_obj_common::pytype());
-        return bound.intersects(*static_cast<const solid_prototype<Store>*>(pp));
+        if(pp->p.type() == triangle_obj_common::pytype()) return bound.intersects(*static_cast<const triangle_prototype<Store>*>(pp));
+        if(pp->p.type() == solid_obj_common::pytype()) return bound.intersects(*static_cast<const solid_prototype<Store>*>(pp));
+        
+        assert(pp->p.type() == triangle_batch_obj_common::pytype());
+        return bound.intersects(*static_cast<const triangle_batch_prototype<Store>*>(pp));
     }
     
     if(skip == axis) return right ? pp->boundary.start[axis] >= bound.start[axis] : pp->boundary.start[axis] < bound.end[axis];
     
-    assert(Py_TYPE(pp->p.ref()) == triangle_obj_common::pytype());
-    return bound.intersects_flat(*static_cast<const triangle_prototype<Store>*>(pp),skip);
+    if(pp->p.type() == triangle_obj_common::pytype()) return bound.intersects_flat(*static_cast<const triangle_prototype<Store>*>(pp),skip);
+    
+    assert(pp->p.type() == triangle_batch_obj_common::pytype());
+    return bound.intersects_flat(*static_cast<const triangle_batch_prototype<Store>*>(pp),skip);
 }
 
 template<typename Store> class split_boundary {
@@ -1582,6 +2134,14 @@ public:
 };
 
 
+
+
+template<typename Store> kd_node_unique_ptr<Store> create_leaf(const proto_array<Store> &contain_p,const proto_array<Store> &overlap_p) {
+    return kd_node_unique_ptr<Store>(kd_leaf<Store>::create(
+        contain_p.size() + overlap_p.size(),
+        [&](int i){ return py::borrowed_ref((i < contain_p.size() ? contain_p[i] : overlap_p[i-contain_p.size()])->p.ref()); }));
+}
+
 template<typename Store> kd_node_unique_ptr<Store> create_node(kd_node_worker_pool<Store> &wpool,int depth,aabb<Store> &boundary,const proto_array<Store> &contain_p,const proto_array<Store> &overlap_p) {
     ++depth;
     int axis = best_axis(boundary);
@@ -1590,13 +2150,12 @@ template<typename Store> kd_node_unique_ptr<Store> create_node(kd_node_worker_po
     
     real split;
     if(depth >= KD_MAX_DEPTH
-        || contain_p.size() + overlap_p.size() <= KD_SPLIT_THRESHHOLD
+        || contain_p.size() + overlap_p.size() <= KD_SPLIT_THRESHOLD
         || !find_split(boundary,axis,contain_p,overlap_p,split))
-        return kd_node_unique_ptr<Store>(kd_leaf<Store>::create(
-            contain_p.size() + overlap_p.size(),
-            [&](int i){ return py::borrowed_ref((i < contain_p.size() ? contain_p[i] : overlap_p[i-contain_p.size()])->p.ref()); }));
+        return create_leaf(contain_p,overlap_p);
     
-    proto_array<Store> l_contain_p, r_contain_p, l_overlap_p, r_overlap_p;
+    proto_array<Store> l_contain_p, r_contain_p;
+    proto_array<Store> l_overlap_p, r_overlap_p;
     
     for(auto p : contain_p) {
         if(p->boundary.start[axis] < split) {
@@ -1649,7 +2208,65 @@ template<typename Store> kd_node_unique_ptr<Store> create_node(kd_node_worker_po
 }
 
 
-template<typename Store> std::tuple<aabb<Store>,kd_node<Store>*> build_kdtree(const proto_array<Store> &primitives,int max_threads) {
+template<typename Store,bool=v_real::size==1> struct group_primitives {
+    group_primitives(proto_array<Store>&,int) {}
+};
+
+template<typename Store> void add_sorted(const vector<Store> &origin,std::vector<typename proto_array<Store>::iterator> &batch,typename proto_array<Store>::iterator pitr) {
+    for(auto bitr = std::begin(batch); bitr != std::end(batch); ++bitr) {
+        if((origin - (*pitr)->boundary.center()).absolute() < (origin - (**bitr)->boundary.center()).absolute()) {
+            assert(batch.size() <= v_real::size);
+            if(batch.size() == v_real::size) batch.pop_back();
+            batch.insert(bitr,pitr);
+            return;
+        }
+    }
+    if(batch.size() < v_real::size) {
+        batch.push_back(pitr);
+    }
+}
+
+template<typename Store> struct group_primitives<Store,false> {
+    group_primitives(proto_array<Store> &primitives,int axis) {
+        int dimension = primitives[0]->dimension();
+        
+        /*std::sort(ITR_RANGE(primitives),[=](const primitive_prototype<Store> *a,const primitive_prototype<Store> *b){
+            return a->boundary.center()[axis] < b->boundary.center()[axis];
+        });*/
+        
+        std::vector<typename proto_array<Store>::iterator> batch;
+        batch.reserve(v_real::size);
+
+        for(auto pitr = std::begin(primitives); pitr != std::end(primitives); ++pitr) {
+            if(!*pitr || (*pitr)->p.type() != triangle_obj_common::pytype()) continue;
+            
+            vector<Store> origin = (*pitr)->boundary.center();
+            batch.push_back(pitr);
+            
+            for(auto pnitr = pitr+1; pnitr != std::end(primitives); ++pnitr) {
+                if(pnitr == pitr || !*pnitr || (*pnitr)->p.type() != triangle_obj_common::pytype()) continue;
+                add_sorted(origin,batch,pnitr);
+            }
+            
+            if(batch.size() < v_real::size) break;
+            
+            auto tb = new wrapped_type<triangle_batch_prototype<Store> >(dimension,[&](int i){ return static_cast<triangle_prototype<Store>*>(*batch[i]); });
+            private_allocs.emplace_back(py::new_ref(tb));
+            *batch[0] = &tb->get_base();
+            for(int i=1; i<v_real::size; ++i) {
+                *batch[i] = nullptr;
+            }
+            batch.clear();
+        }
+        
+        primitives.resize(std::remove(ITR_RANGE(primitives),nullptr) - primitives.begin());
+    }
+    
+private:
+    std::vector<py::pyptr<triangle_batch_prototype<Store> > > private_allocs;
+};
+
+template<typename Store> std::tuple<aabb<Store>,kd_node<Store>*> build_kdtree(proto_array<Store> &primitives,int max_threads) {
     assert(primitives.size());
     
     aabb<Store> boundary = primitives[0]->boundary;
@@ -1657,6 +2274,8 @@ template<typename Store> std::tuple<aabb<Store>,kd_node<Store>*> build_kdtree(co
         v_expr(boundary.start) = min(v_expr(boundary.start),v_expr(primitives[i]->boundary.start));
         v_expr(boundary.end) = max(v_expr(boundary.end),v_expr(primitives[i]->boundary.end));
     }
+    
+    group_primitives<Store> tmp{primitives,best_axis(boundary)};
     
     kd_node_worker_pool<Store> wpool(max_threads);
     auto n = create_node(wpool,-1,boundary,primitives,{});

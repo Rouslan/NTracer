@@ -500,7 +500,7 @@ void callback_worker(obj_CallbackRenderer *self) {
                 
                 r.sc->unlock();
                 
-                PyGILState_STATE gilstate = PyGILState_Ensure();
+                py::acquire_gil gil;
                 
                 PyBuffer_Release(&r.buffer);
                 
@@ -526,8 +526,6 @@ void callback_worker(obj_CallbackRenderer *self) {
 
                 Py_DECREF(r.callback);
                 Py_DECREF(self);
-                
-                PyGILState_Release(gilstate);
             }
             
             while(finished == r.job) {

@@ -54,6 +54,14 @@ reduce_meth = """        FORCE_INLINE {item_type} {extra}() const {{
             return {intr}(this->data.p);
         }}
 """
+mask_meth = """        FORCE_INLINE {wrap_type} {extra}(mask m) const {{
+            return {intr}(m.data,this->data.p);
+        }}
+"""
+pseudo_maskz_move = """        FORCE_INLINE {wrap_type} {extra}(mask m) const {{
+            return {intr}(reinterpret_cast<{base_type}>(m.data),this->data.p);
+        }}
+"""
 
 have_vec_reduce_add = '        static constexpr bool has_vec_reduce_add = true;\n'
 reduce_add_meth = reduce_meth + have_vec_reduce_add
@@ -112,8 +120,12 @@ cmp_func = """    FORCE_INLINE {wrap_type}::mask {extra[0]}({wrap_type} a,{wrap_
     }}
 """
 
-mask_func = """    FORCE_INLINE mask{ssize}_v_{psize} {extra}({args_a}) {{
-        return
+testz_func = """    FORCE_INLINE int {extra}({wrap_type} a,{wrap_type} b) {{
+        return {intr}(a.data.p,b.data.p);
+    }}
+    FORCE_INLINE int {extra}({wrap_type} a) {{
+        return {intr}(a.data.p,a.data.p);
+    }}
 """
 
 def print_mask_function(output,swidth,pwidth,func,args,body,fallback,explicit_cast=True):
@@ -282,6 +294,56 @@ class RepeatTransform(FTransform):
             r += 'x'
         return r
 
+class BlendTransformBase(FTransform):
+    def __init__(self):
+        super(BlendTransformBase,self).__init__(None,self.template)
+    
+    def intrinsic(self,type,width):
+        base = 'mask_blend'
+        if width < 512:
+            base = 'blendv'
+            if type.float == INTEGER:
+                # The only integer versions of the blendv instructions operate
+                # on 8bit types, but as long as each value in the mask is all
+                # ones or all zeros, the result is the same for any integer
+                # size.
+                type = types['int8_t']
+        return generic_intrinsic_name(type,width,base)
+    
+    def output(self,type,width,intr):
+        params = self.base_params
+        mparam = 'm.data'
+        if type.float == INTEGER and type.size >= 32:
+            mparam = 'reinterpret_cast<{0}>({1})'.format(base_type(type,width),mparam)
+        
+        if width < 512:
+            params += ',' + mparam
+        else:
+            params = mparam + ',' + params
+        
+        return self.template.format(
+            type.size,
+            width,
+            wrap_type(type,width),
+            intr['name'],
+            params)
+
+class MaskSetTransform(BlendTransformBase):
+    base_params = 'this->data.p,b.data.p'
+    template = '''        FORCE_INLINE {2} &mask_set(mask{0}_v_{1} m,{2} b) {{
+            {3}({4});
+            return *this;
+        }}
+'''
+
+class BlendTransform(BlendTransformBase):
+    # parameters are reversed to match "A ? B : C" syntax
+    base_params = 'b.data.p,a.data.p'
+    template = '''    FORCE_INLINE {2} mask_blend(mask{0}_v_{1} m,{2} a,{2} b) {{
+        return {3}({4});
+    }}
+'''
+
 class CastTransform(object):
     def supported(self,type,width,src_width,inline):
         return not (width == src_width or
@@ -328,6 +390,7 @@ mixed_method_transforms = [
 
 reduce_add = FTransform('reduce_add',reduce_add_meth)
 repeat_a = BroadcastTransform()
+maskz_mov = FTransform('maskz_mov',mask_meth,'zfilter')
 
 method_transforms = [MixedFTransformAdapter(w,mmt) for w in widths for mmt in mixed_method_transforms] + [
     FTransform('add',binary_op,'+'),
@@ -359,16 +422,26 @@ method_transforms = [MixedFTransformAdapter(w,mmt) for w in widths for mmt in mi
     repeat_a,
     ShuffleTransform(prefer=repeat_a),
     RepeatTransform('set1',set1_meth,'repeat'),
-    AltIFTransform('setzero',setzero_meth,'zeros')]
+    maskz_mov,
+    FTransform('and',pseudo_maskz_move,'zfilter',prefer=maskz_mov),
+    
+    # if maskz_mov is available, use the fallback nzfilter (see simd.hpp.in)
+    # method instead this
+    FTransform('andnot',pseudo_maskz_move,'nzfilter',prefer=maskz_mov),
+    
+    AltIFTransform('setzero',setzero_meth,'zeros'),
+    MaskSetTransform()]
 
 function_transforms = [
     FTransform('max',binary_func),
     FTransform('min',binary_func),
     AltIFTransform('andnot',binary_func,'and_not'),
+    AltIFTransform('testz',testz_func,'test_z'),
     CmpFTransform('cmp_nlt',cmp_func,'nlt'),
     CmpFTransform('cmp_nle',cmp_func,'nle'),
     CmpFTransform('cmp_ngt',cmp_func,'ngt'),
-    CmpFTransform('cmp_nge',cmp_func,'nge')]
+    CmpFTransform('cmp_nge',cmp_func,'nge'),
+    BlendTransform()]
 
 
 def data_args(args):
