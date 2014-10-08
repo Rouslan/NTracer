@@ -331,7 +331,7 @@ class BlendTransformBase(FTransform):
 class MaskSetTransform(BlendTransformBase):
     base_params = 'this->data.p,b.data.p'
     template = '''        FORCE_INLINE {2} &mask_set(mask{0}_v_{1} m,{2} b) {{
-            {3}({4});
+            this->data.p = {3}({4});
             return *this;
         }}
 '''

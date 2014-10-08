@@ -173,12 +173,8 @@ namespace impl {
         size_t index;
         
         template<size_t Size> void operator()(size_t n) const {
-            if(Size == 1) {
-                self[n][index] = b.template vec<Size>(n)[0];
-            } else {
-                auto vals = b.template vec<Size>(n);
-                for(size_t i=0; i<std::min(Size,self.dimension()-1-n); ++i) self[i+n][index] = vals[i];
-            }
+            auto vals = b.template vec<Size>(n);
+            for(size_t i=0; i<Size; ++i) self[i+n][index] = vals[i];
         }
     };
     

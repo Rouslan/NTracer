@@ -291,8 +291,8 @@ namespace simd {
             Item reduce_min() const { return reduce(&std::min<Item>); }
             Item reduce_add() const { return reduce(std::plus<Item>()); }
             T &mask_set(v_mask<sizeof(Item),size> m,T b)  {
-                data.p = static_cast<T*>(this)->nzfilter(m) | b.zfilter(m);
-                return *this;
+                data.p = (static_cast<T*>(this)->nzfilter(m) | b.zfilter(m)).data.p;
+                return *static_cast<T*>(this);
             }
             T nzfilter(v_mask<sizeof(Item),size> m) const {
                 return static_cast<T*>(this)->zfilter(!m);
@@ -1123,12 +1123,16 @@ namespace simd {
     }
 
     // fall-back implementations for missing SIMD functions
-    template<typename T,size_t Size> int test_z(v_type<T,Size> a,v_type<T,Size> b) {
-        return ((a & b) == v_type<T,Size>::zeros()).all() ? 1 : 0;
+    template<typename T> FORCE_INLINE int test_z(T a,T b) {
+        return ((a & b) == T::zeros()).all() ? 1 : 0;
     }
 
-    template<typename T,size_t Size> int test_z(v_type<T,Size> a) {
-        return (a == v_type<T,Size>::zeros()).all() ? 1 : 0;
+    template<typename T> FORCE_INLINE int test_z(T a) {
+        return (a == T::zeros()).all() ? 1 : 0;
+    }
+
+    template<typename T> FORCE_INLINE T mask_blend(typename T::mask m,T a,T b)  {
+        return a.zfilter(m) | b.nzfilter(m);
     }
     // end of fall-back functions
 

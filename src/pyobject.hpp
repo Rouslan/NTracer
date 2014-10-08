@@ -1024,7 +1024,7 @@ namespace py {
         };
     }
     
-    template<typename Item,const char* FullName,bool GC,bool ReadOnly> struct obj_array_adapter : impl::array_adapter_alloc<Item,FullName,GC,ReadOnly> {
+    template<typename Item,const char* FullName,bool GC,bool ReadOnly> struct obj_array_adapter : impl::array_adapter_alloc<Item,FullName,GC,ReadOnly>, pyobj_subclass {
         static PySequenceMethods seq_methods;
         CONTAINED_PYTYPE_DEF
         PyObject_HEAD

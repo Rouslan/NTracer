@@ -32,6 +32,13 @@ const int KD_MAX_DEPTH = 18;
 const int KD_SPLIT_THRESHOLD = 2;
 
 
+#ifdef NO_SIMD_BATCHES
+typedef simd::scalar<real> v_real;
+#else
+typedef simd::v_type<real> v_real;
+#endif
+
+
 template<typename Store> class ray {
 public:
     ray(int d) : origin(d), direction(d) {}
@@ -128,8 +135,6 @@ template<typename Store> real hypersphere_intersects(const ray<Store> &target,ra
     return dist;
 }
 
-
-typedef simd::v_type<real> v_real;
 
 template<typename Store> struct primitive : py::pyobj_subclass {
     real intersects(const ray<Store> &target,ray<Store> &normal) const;
@@ -279,6 +284,13 @@ template<typename T,typename Item> struct flexible_struct {
     
     item_array<flexible_struct<T,Item> > items() { return this; }
     item_array<const flexible_struct<T,Item> > items() const { return this; }
+    
+#if defined(__GNUC__) && !defined(NDEBUG)
+    // a simpler version of "items" that GDB can evaluate
+    const Item *_items() const __attribute__((used)) {
+        return reinterpret_cast<const Item*>(reinterpret_cast<const char*>(this) + item_offset);
+    }
+#endif
     
     /* a "size" parameter is required because T::_item_size might not work until
        after T's constructor returns */
@@ -457,8 +469,6 @@ template<typename Store> struct triangle_batch : triangle_batch_obj_common, prim
         
         auto t = -(dot(face_normal,broadcast(target.origin)) + d) / denom;
         mask = mask && t >= zeros;
-        
-        //if(!mask.any()) return 0;
         
         vector_batch<Store> P = broadcast(target.origin) + t * broadcast(target.direction);
         vector_batch<Store> pside = p1 - P;
@@ -938,7 +948,7 @@ template<typename Store,bool Batched=(v_real::size>1)> struct kd_leaf : kd_node<
         
     hit:
         // is there anything closer?
-        ray<Store> new_normal(target.dimension());
+        ray<Store> new_normal{target.dimension()};
         while(i<size) {
             auto item = this->items()[i++].get();
             if(item != skip.p) {
@@ -963,7 +973,7 @@ template<typename Store,bool Batched=(v_real::size>1)> struct kd_leaf : kd_node<
         assert(dimension() == target.dimension());
 
         real dist;
-        ray<Store> normal(dimension());
+        ray<Store> normal{dimension()};
         for(size_t i=0; i<size; ++i) {
             auto item = this->items()[i].get();
             if(item != skip.p) {
@@ -1016,8 +1026,8 @@ template<typename Store> struct kd_leaf<Store,true> : kd_node<Store>, flexible_s
         real dist;
         size_t i=0;
 
-        while(i<size) {
-            auto item = this->items()[i++].ref();
+        for(; i<size; ++i) {
+            auto item = this->items()[i].ref();
             if(i < batches) {
                 assert(Py_TYPE(item) == triangle_batch<Store>::pytype());
                 
@@ -1059,26 +1069,26 @@ template<typename Store> struct kd_leaf<Store,true> : kd_node<Store>, flexible_s
         
     hit:
         // is there anything closer?
-        ray<Store> new_normal(target.dimension());
+        ray<Store> new_normal{target.dimension()};
         
-        while(i<size) {
-            auto item = this->items()[i++].ref();
+        for(; i<size; ++i) {
+            auto item = this->items()[i].ref();
             if(i < batches) {
                 assert(Py_TYPE(item) == triangle_batch<Store>::pytype());
                 
                 int index = skip.p == item ? skip.index : -1;
                 auto p = reinterpret_cast<triangle_batch<Store>*>(item);
                 
-                dist = p->intersects(target,o_hit.normal,index);
+                dist = p->intersects(target,new_normal,index);
                 
                 if(dist && dist < o_hit.dist) {
                     if(p->opaque(index)) {
                         o_hit.dist = dist;
-                        std::swap(o_hit.normal,new_normal);
+                        o_hit.normal = new_normal;
                         o_hit.target.p = item;
                         o_hit.target.index = index;
                     } else {
-                        t_hits.add({dist,{item,index},o_hit.normal});
+                        t_hits.add({dist,{item,index},new_normal});
                     }
                 }
             } else if(item != skip.p) {
@@ -1090,7 +1100,7 @@ template<typename Store> struct kd_leaf<Store,true> : kd_node<Store>, flexible_s
                 if(dist && dist < o_hit.dist) {
                     if(p->opaque()) {
                         o_hit.dist = dist;
-                        std::swap(o_hit.normal,new_normal);
+                        o_hit.normal = new_normal;
                         o_hit.target.p = item;
                         o_hit.target.index = -1;
                     } else {
@@ -1108,7 +1118,7 @@ template<typename Store> struct kd_leaf<Store,true> : kd_node<Store>, flexible_s
         assert(dimension() == target.dimension());
 
         real dist;
-        ray<Store> normal(dimension());
+        ray<Store> normal{dimension()};
         for(size_t i=0; i<size; ++i) {
             auto item = this->items()[i];
             
@@ -1191,10 +1201,10 @@ template<typename Store> bool kd_node<Store>::occludes(const ray<Store> &target,
 
 template<typename Store> inline void kd_node_deleter<Store>::operator()(kd_node<Store> *ptr) const {
     if(ptr->type == LEAF) {
-        delete static_cast<const kd_leaf<Store>*>(ptr);
+        delete static_cast<kd_leaf<Store>*>(ptr);
     } else {
         assert(ptr->type == BRANCH);
-        delete static_cast<const kd_branch<Store>*>(ptr);
+        delete static_cast<kd_branch<Store>*>(ptr);
     }
 }
 
@@ -1348,7 +1358,7 @@ template<typename Store> struct triangle_batch_prototype : primitive_prototype<S
         primitive_prototype<Store>(t_prototypes(0)->boundary,py::new_ref(triangle_batch<Store>::from_triangles([=](int i){ return t_prototypes(i)->pt(); }))),
         flexible_struct(dimension,[=](int i) {
             return triangle_batch_point<Store>(
-                deinterleave<Store>(dimension,[=](int j){ return t_prototypes(i)->items()[j].point; }),
+                deinterleave<Store>(dimension,[=](int j){ return t_prototypes(j)->items()[i].point; }),
                 i > 0 ? pt()->items()[i-1] : first_edge_normal);
         }),
         first_edge_normal(deinterleave<Store>(dimension,[=](int i){ return t_prototypes(i)->first_edge_normal; })) {
@@ -1417,14 +1427,16 @@ template<typename Store> bool aabb<Store>::intersects(const triangle_prototype<S
             
             po = skip_dot(origin,axis,j);
             
-            b_max = 0;
+            real b_radius = 0;
             for(int k=0; k<dimension(); ++k) {
-                if(k != j) b_max += std::abs((end[k] - start[k])/2 * axis[k]);
+                if(k != j) b_radius += std::abs((end[k] - start[k])/2 * axis[k]);
             }
-            b_min = po - b_max;
-            b_max += po;
+            b_min = po - b_radius;
+            b_max = po + b_radius;
             
-            if(b_max <= t_min || b_min >= t_max) return false;
+            /* if b_radius is 0 then the axis is parallel to the dimension we're
+               not considering and the test is invalid */
+            if(b_radius != 0 && (b_max <= t_min || b_min >= t_max)) return false;
         }
     }
     
@@ -1492,14 +1504,16 @@ template<typename Store> bool aabb<Store>::intersects(const triangle_batch_proto
             
             po = skip_dot(broadcast(origin),axis,j);
             
-            b_max = v_real::zeros();
+            v_real b_radius = v_real::zeros();
             for(int k=0; k<dimension(); ++k) {
-                if(k != j) b_max += (((end[k] - start[k])/2) * axis[k]).abs();
+                if(k != j) b_radius += (((end[k] - start[k])/2) * axis[k]).abs();
             }
-            b_min = po - b_max;
-            b_max += po;
+            b_min = po - b_radius;
+            b_max = po + b_radius;
             
-            miss = miss || b_max <= t_min || b_min >= t_max;
+            /* if b_radius is 0 then the axis is parallel to the dimension we're
+               not considering and the test is invalid */
+            miss = miss || (b_radius != v_real::zeros() && (b_max <= t_min || b_min >= t_max));
             
             if(miss.all()) return false;
         }
@@ -2137,6 +2151,8 @@ public:
 
 
 template<typename Store> kd_node_unique_ptr<Store> create_leaf(const proto_array<Store> &contain_p,const proto_array<Store> &overlap_p) {
+    py::acquire_gil gil;
+    
     return kd_node_unique_ptr<Store>(kd_leaf<Store>::create(
         contain_p.size() + overlap_p.size(),
         [&](int i){ return py::borrowed_ref((i < contain_p.size() ? contain_p[i] : overlap_p[i-contain_p.size()])->p.ref()); }));
@@ -2178,7 +2194,7 @@ template<typename Store> kd_node_unique_ptr<Store> create_node(kd_node_worker_po
            alternate algorithm is used when p is flat along an axis other than
            "axis", that disregards that axis. */
         int skip = -1;
-        if(Py_TYPE(p->p.ref()) == triangle_obj_common::pytype()) {
+        if(Py_TYPE(p->p.ref()) == triangle_obj_common::pytype() || Py_TYPE(p->p.ref()) == triangle_batch_obj_common::pytype()) {
             for(int i=0; i<boundary.dimension(); ++i) {
                 if(p->boundary.start[i] == p->boundary.end[i]) {
                     skip = i;
@@ -2277,11 +2293,16 @@ template<typename Store> std::tuple<aabb<Store>,kd_node<Store>*> build_kdtree(pr
     
     group_primitives<Store> tmp{primitives,best_axis(boundary)};
     
-    kd_node_worker_pool<Store> wpool(max_threads);
-    auto n = create_node(wpool,-1,boundary,primitives,{});
-    wpool.finish();
+    kd_node_unique_ptr<Store> node;
+    
+    {
+        py::allow_threads _;
+        kd_node_worker_pool<Store> wpool(max_threads);
+        node = create_node(wpool,-1,boundary,primitives,{});
+        wpool.finish();
+    }
 
-    return std::tuple<aabb<Store>,kd_node<Store>*>(boundary,n.release());
+    return std::tuple<aabb<Store>,kd_node<Store>*>(boundary,node.release());
 }
 
 #endif

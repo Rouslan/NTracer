@@ -1114,6 +1114,8 @@ PyObject *obj_Triangle_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
         
         sized_iter norm_itr(py::borrowed_ref(normals),p1.dimension()-1);
         
+        /* Triangle objects have special alignment requirements and don't use
+           Python's memory allocator */
         auto ptr = obj_Triangle::create(p1,face_normal,[&](int i) -> n_vector {
             auto en = from_pyobject<n_vector>(norm_itr.next());
             if(!compatible(p1,en)) THROW_PYERR_STRING(TypeError,dim_err);
@@ -1132,7 +1134,7 @@ PyObject *obj_Triangle_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
 
 PyObject *obj_Triangle_getedges(obj_Triangle *self,void *) {
     try {
-        return reinterpret_cast<PyObject*>(new obj_FrozenVectorView(
+        return py::ref(new obj_FrozenVectorView(
             py::ref(self),
             self->items().size(),
             self->items()));
@@ -1167,8 +1169,38 @@ PyTypeObject triangle_obj_common::_pytype = make_type_object(
     tp_free = &obj_Triangle::operator delete);
 
 
-PyObject *obj_TriangleBatch_from_triangles(obj_TriangleBatch *self,PyObject *arg) {
+PyObject *obj_TriangleBatch_sequence_getitem(obj_TriangleBatch *self,Py_ssize_t index) {
     try {
+        if(UNLIKELY(index < 0 || index >= static_cast<Py_ssize_t>(v_real::size))) {
+            PyErr_SetString(PyExc_IndexError,"index out of range");
+            return nullptr;
+        }
+        return py::ref(obj_Triangle::create(
+            interleave1(self->p1,index),
+            interleave1(self->face_normal,index),
+            [=](int i) { return interleave1(self->items()[i],index); },
+            self->m[index].get()));
+    } PY_EXCEPT_HANDLERS(nullptr)
+}
+
+PySequenceMethods obj_TriangleBatch_sequence_methods = {
+    [](PyObject*){ return static_cast<Py_ssize_t>(v_real::size); },
+    NULL,
+    NULL,
+    reinterpret_cast<ssizeargfunc>(&obj_TriangleBatch_sequence_getitem),
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL
+};
+
+PyObject *obj_TriangleBatch_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
+    try {
+        auto arg = std::get<0>(get_arg::get_args("TriangleBatch.__new__",args,kwds,
+            param("triangles")));
+        
         auto tris = sized_iter(py::borrowed_ref(arg),v_real::size);
         
         py::pyptr<obj_Triangle> tmp[v_real::size];
@@ -1178,12 +1210,13 @@ PyObject *obj_TriangleBatch_from_triangles(obj_TriangleBatch *self,PyObject *arg
         }
         tris.finished();
         
+        /* TriangleBatch objects have special alignment requirements and don't
+           use Python's memory allocator */
         return py::ref(obj_TriangleBatch::from_triangles([&](int i){ return tmp[i].get(); }));
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
 PyMethodDef obj_TriangleBatch_methods[] = {
-    {"from_triangles",reinterpret_cast<PyCFunction>(&obj_TriangleBatch_from_triangles),METH_O|METH_STATIC,NULL},
     //{"__reduce__",reinterpret_cast<PyCFunction>(&obj_TriangleBatch_reduce),METH_NOARGS,NULL},
     immutable_copy,
     immutable_deepcopy,
@@ -1195,12 +1228,11 @@ PyTypeObject triangle_batch_obj_common::_pytype = make_type_object(
     obj_TriangleBatch::base_size,
     tp_itemsize = obj_TriangleBatch::item_size,
     tp_dealloc = destructor_dealloc<obj_TriangleBatch>::value,
+    tp_as_sequence = &obj_TriangleBatch_sequence_methods,
     tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_CHECKTYPES,
     tp_methods = obj_TriangleBatch_methods,
-    //tp_members = obj_TriangleBatch_members,
-    //tp_getset = obj_TriangleBatch_getset,
     tp_base = obj_PrimitiveBatch::pytype(),
-    //tp_new = &obj_TriangleBatch_new,
+    tp_new = &obj_TriangleBatch_new,
     tp_free = &obj_TriangleBatch::operator delete);
 
 
@@ -1364,14 +1396,14 @@ inline int dim_at(const kd_leaf<module_store,true> *n,size_t i) {
 
 inline kd_leaf<module_store,false> *create_kd_leaf(Py_ssize_t size,py::tuple primitives,const kd_leaf<module_store,false>*) {
     return kd_leaf<module_store,false>::create(size,[=](size_t i) -> primitive<module_store>* {
-            auto p = primitives[i];
-            checked_py_cast<primitive<module_store> >(p.ref());
-            return reinterpret_cast<primitive<module_store>*>(p.new_ref());
+            checked_py_cast<primitive<module_store> >(primitives[i].ref());
+            return reinterpret_cast<primitive<module_store>*>(primitives[i].new_ref());
         });
 }
 inline kd_leaf<module_store,true> *create_kd_leaf(Py_ssize_t size,py::tuple primitives,const kd_leaf<module_store,true>*) {
     return kd_leaf<module_store,true>::create(size,[=](size_t i) -> py::object {
-            checked_py_cast<primitive<module_store> >(primitives[i].ref());
+            if(!PyObject_TypeCheck(primitives[i].ref(),obj_Primitive::pytype()) && !PyObject_TypeCheck(primitives[i].ref(),obj_PrimitiveBatch::pytype()))
+                THROW_PYERR_STRING(TypeError,"each item must be an instance of Primitive or PrimitiveBatch");
             return primitives[i];
         });
 }
@@ -1881,7 +1913,7 @@ PyTypeObject vector_obj_base::_pytype = make_type_object(
 
 PyGetSetDef obj_Camera_getset[] = {
     {const_cast<char*>("origin"),OBJ_GETTER(wrapped_type<n_camera>,self->get_base().origin),OBJ_SETTER(wrapped_type<n_camera>,self->get_base().origin),NULL,NULL},
-    {const_cast<char*>("axes"),OBJ_GETTER(wrapped_type<n_camera>,reinterpret_cast<PyObject*>(new obj_CameraAxes(self))),NULL,NULL,NULL},
+    {const_cast<char*>("axes"),OBJ_GETTER(wrapped_type<n_camera>,py::ref(new obj_CameraAxes(self))),NULL,NULL,NULL},
     {const_cast<char*>("dimension"),OBJ_GETTER(wrapped_type<n_camera>,self->get_base().dimension()),NULL,NULL,NULL},
     {NULL}
 };
@@ -1994,7 +2026,7 @@ PyObject *obj_Matrix___sequence_getitem__(wrapped_type<n_matrix> *self,Py_ssize_
             PyErr_SetString(PyExc_IndexError,"matrix row index out of range");
             return nullptr;
         }
-        return reinterpret_cast<PyObject*>(new obj_MatrixProxy(py::ref(self),base.dimension(),base[index]));
+        return py::ref(new obj_MatrixProxy(py::ref(self),base.dimension(),base[index]));
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
@@ -2153,7 +2185,7 @@ PyObject *obj_Matrix_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
 PyObject *obj_Matrix_values(wrapped_type<n_matrix> *self,void*) {
     try {
         auto &base = self->get_base();
-        return reinterpret_cast<PyObject*>(
+        return py::ref(
             new obj_MatrixProxy(py::ref(self),base.dimension() * base.dimension(),base.data()));
     } PY_EXCEPT_HANDLERS(nullptr)
 }
@@ -2406,7 +2438,7 @@ PyGetSetDef obj_TrianglePrototype_getset[] = {
     {const_cast<char*>("face_normal"),OBJ_GETTER(obj_TrianglePrototype,self->get_base().pt()->face_normal),NULL,NULL,NULL},
     {const_cast<char*>("point_data"),OBJ_GETTER(
         obj_TrianglePrototype,
-        reinterpret_cast<PyObject*>(new obj_TrianglePointData(obj_self,self->get_base().dimension(),self->get_base().items()))),NULL,NULL,NULL},
+        py::ref(new obj_TrianglePointData(obj_self,self->get_base().dimension(),self->get_base().items()))),NULL,NULL,NULL},
     {const_cast<char*>("boundary"),OBJ_GETTER(
         obj_TrianglePrototype,
         py::new_ref(new wrapped_type<n_aabb>(obj_self,self->get_base().boundary))),NULL,NULL,NULL},
@@ -2467,7 +2499,7 @@ PyGetSetDef obj_TriangleBatchPrototype_getset[] = {
     //{const_cast<char*>("face_normal"),OBJ_GETTER(obj_TriangleBatchPrototype,self->get_base().pt()->face_normal),NULL,NULL,NULL},
     /*{const_cast<char*>("point_data"),OBJ_GETTER(
         obj_TriangleBatchPrototype,
-        reinterpret_cast<PyObject*>(new obj_TriangleBatchPointData(obj_self,self->get_base().dimension(),self->get_base().items()))),NULL,NULL,NULL},*/
+        py::ref(new obj_TriangleBatchPointData(obj_self,self->get_base().dimension(),self->get_base().items()))),NULL,NULL,NULL},*/
     {const_cast<char*>("boundary"),OBJ_GETTER(
         obj_TriangleBatchPrototype,
         py::new_ref(new wrapped_type<n_aabb>(obj_self,self->get_base().boundary))),NULL,NULL,NULL},
@@ -2815,11 +2847,8 @@ std::tuple<n_aabb,kd_node<module_store>*> build_kdtree(const char *func,PyObject
         if(UNLIKELY(p->dimension() != dimension)) THROW_PYERR_STRING(TypeError,"the primitive prototypes must all have the same dimension");
         primitives.push_back(p);
     }
-    
-    {
-        py::allow_threads _;
-        return build_kdtree<module_store>(primitives,std::get<1>(vals));
-    }
+
+    return build_kdtree<module_store>(primitives,std::get<1>(vals));
 }
 
 PyObject *obj_build_kdtree(PyObject*,PyObject *args,PyObject *kwds) {
