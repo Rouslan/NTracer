@@ -502,7 +502,7 @@ namespace simd {
             
             This &mask_set(mask m,This b) {
                 if(m.data) data = b.data;
-                return *this;
+                return *static_cast<This*>(this);
             }
             
             T data;
@@ -548,9 +548,9 @@ namespace simd {
         
         explicit FORCE_INLINE mask64_v_512(__mmask8 data) : data(data) {}
         
-        static FORCE_INLINE mask64_v_512 zeros() { return mask64_v_512(0); }
+        // [[[mask-64-512]]]
     };
-    // [[[mask-64-512]]]
+    // [[[mask-64-512-outer]]]
     
     struct mask32_v_512 : impl::mask_common<mask32_v_512,16> {
         __mmask16 data;
@@ -558,9 +558,9 @@ namespace simd {
         
         explicit FORCE_INLINE mask32_v_512(__mmask16 data) : data(data) {}
         
-        static FORCE_INLINE mask32_v_512 zeros() { return mask32_v_512(0); }
+        // [[[mask-32-512]]]
     };
-    // [[[mask-32-512]]]
+    // [[[mask-32-512-outer]]]
     
     template<> struct _v_mask<8,8> { typedef mask64_v_512 type; };
     template<> struct _v_mask<4,16> { typedef mask32_v_512 type; };
@@ -639,26 +639,22 @@ namespace simd {
         FORCE_INLINE int to_bits() const { return _mm256_movemask_pd(data); }
         
         explicit FORCE_INLINE mask64_v_256(__m256d data) : data(data) {}
-    #ifdef SUPPORT_AVX2
         explicit FORCE_INLINE make64_v_256(__m256i data) : data(reinterpret_cast<__m256d>(data)) {}
-    #endif
         
-        static FORCE_INLINE mask64_v_256 zeros() { return mask64_v_256(_mm256_setzero_pd()); }
+        // [[[mask-64-256]]]
     };
-    // [[[mask-64-256]]]
+    // [[[mask-64-256-outer]]]
 
     struct mask32_v_256 : impl::mask_common<mask32_v_256,8> {
         __m256 data;
         FORCE_INLINE int to_bits() const { return _mm256_movemask_ps(data); }
         
         explicit FORCE_INLINE mask32_v_256(__m256 data) : data(data) {}
-    #ifdef SUPPORT_AVX2
         explicit FORCE_INLINE make32_v_256(__m256i data) : data(reinterpret_cast<__m256>(data)) {}
-    #endif
         
-        static FORCE_INLINE mask32_v_256 zeros() { return mask32_v_256(_mm256_setzero_ps()); }
+        // [[[mask-32-256]]]
     };
-    // [[[mask-32-256]]]
+    // [[[mask-32-256-outer]]]
     
     template<> struct _v_mask<8,4> { typedef mask64_v_256 type; };
     template<> struct _v_mask<4,8> { typedef mask32_v_256 type; };
@@ -668,13 +664,16 @@ namespace simd {
 #ifdef SUPPORT_AVX2
     struct mask16_v_256 : impl::mask_common<mask16_v_256,16,2> {
         __m256i data;
+        
+        /* there is no 16-bit version of movemask but using the 8-bit version
+           will give the same result */
         FORCE_INLINE int to_bits() const { return _mm256_movemask_epi8(data); }
         
         explicit FORCE_INLINE mask16_v_256(__m256i data) : data(data) {}
         
-        static FORCE_INLINE mask16_v_256 zeros() { return mask16_v_256(_mm256_setzero_si256()); }
+        // [[[mask-16-256]]]
     };
-    // [[[mask-16-256]]]
+    // [[[mask-16-256-outer]]]
 
     struct mask8_v_256 : impl::mask_common<mask8_v_256,32> {
         __m256i data;
@@ -682,9 +681,9 @@ namespace simd {
         
         explicit FORCE_INLINE mask8_v_256(__m256i data) : data(data) {}
         
-        static FORCE_INLINE mask8_v_256 zeros() { return mask8_v_256(_mm256_setzero_si256()); }
+        // [[[mask-8-256]]]
     };
-    // [[[mask-8-256]]]
+    // [[[mask-8-256-outer]]]
     
     template<> struct _v_mask<2,16> { typedef mask16_v_256 type; };
     template<> struct _v_mask<1,32> { typedef mask8_v_256 type; };
@@ -801,9 +800,9 @@ namespace simd {
         explicit FORCE_INLINE mask32_v_128(__m128i data) : data(reinterpret_cast<__m128>(data)) {}
     #endif
         
-        static FORCE_INLINE mask32_v_128 zeros() { return mask32_v_128(_mm_setzero_ps()); }
+        // [[[mask-32-128]]]
     };
-    // [[[mask-32-128]]]
+    // [[[mask-32-128-outer]]]
     
     template<> struct _v_mask<4,4> { typedef mask32_v_128 type; };
 #endif
@@ -816,19 +815,22 @@ namespace simd {
         explicit FORCE_INLINE mask64_v_128(__m128d data) : data(data) {}
         explicit FORCE_INLINE mask64_v_128(__m128i data) : data(reinterpret_cast<__m128d>(data)) {}
         
-        static FORCE_INLINE mask64_v_128 zeros() { return mask64_v_128(_mm_setzero_pd()); }
+        // [[[mask-64-128]]]
     };
-    // [[[mask-64-128]]]
+    // [[[mask-64-128-outer]]]
 
     struct mask16_v_128 : impl::mask_common<mask16_v_128,8,2> {
         __m128i data;
+        
+        /* there is no 16-bit version of movemask but using the 8-bit version
+           will give the same result */
         FORCE_INLINE int to_bits() const { return _mm_movemask_epi8(data); }
         
         explicit FORCE_INLINE mask16_v_128(__m128i data) : data(data) {}
         
-        static FORCE_INLINE mask16_v_128 zeros() { return mask16_v_128(_mm_setzero_si128()); }
+        // [[[mask-16-128]]]
     };
-    // [[[mask-16-128]]]
+    // [[[mask-16-128-outer]]]
 
     struct mask8_v_128 : impl::mask_common<mask8_v_128,16> {
         __m128i data;
@@ -836,9 +838,9 @@ namespace simd {
         
         explicit FORCE_INLINE mask8_v_128(__m128i data) : data(data) {}
         
-        static FORCE_INLINE mask8_v_128 zeros() { return mask8_v_128(_mm_setzero_si128()); }
+        // [[[mask-8-128]]]
     };
-    // [[[mask-8-128]]]
+    // [[[mask-8-128-outer]]]
     
     template<> struct _v_mask<8,2> { typedef mask64_v_128 type; };
     template<> struct _v_mask<2,8> { typedef mask16_v_128 type; };
@@ -1120,6 +1122,10 @@ namespace simd {
 
     template<typename T> int test_z(scalar<T> a) {
         return a.data ? 1 : 0;
+    }
+
+    template<typename T> scalar<T> mask_blend(mask_s m,scalar<T> a,scalar<T> b) {
+        return m.data ? a : b;
     }
 
     // fall-back implementations for missing SIMD functions

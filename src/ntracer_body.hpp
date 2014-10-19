@@ -1176,9 +1176,9 @@ PyObject *obj_TriangleBatch_sequence_getitem(obj_TriangleBatch *self,Py_ssize_t 
             return nullptr;
         }
         return py::ref(obj_Triangle::create(
-            interleave1(self->p1,index),
-            interleave1(self->face_normal,index),
-            [=](int i) { return interleave1(self->items()[i],index); },
+            interleave1<module_store,v_real::size>(self->p1,index),
+            interleave1<module_store,v_real::size>(self->face_normal,index),
+            [=](int i) { return interleave1<module_store,v_real::size>(self->items()[i],index); },
             self->m[index].get()));
     } PY_EXCEPT_HANDLERS(nullptr)
 }
@@ -2828,11 +2828,25 @@ PyObject *obj_cross(PyObject*,PyObject *arg) {
 }
 
 std::tuple<n_aabb,kd_node<module_store>*> build_kdtree(const char *func,PyObject *args,PyObject *kwds) {
-    auto vals = get_arg::get_args(func,args,kwds,
-        param("primitives"),
-        param<int>("extra_threads",-1));
+    const char *names[] = {"primitives","extra_threads","max_depth","split_threshold","traversal_cost","intersection_cost"};
     
-    auto p_objs = collect<py::object>(std::get<0>(vals));
+    get_arg ga{args,kwds,names,func};
+    
+    auto p_iterable = ga(true);
+    
+    auto tmp = ga(false);
+    int extra_threads = -1;
+    if(tmp) extra_threads = from_pyobject<int>(tmp);
+    
+    auto max_depth = ga(get_arg::KEYWORD_ONLY);
+    auto split_threshold = ga(get_arg::KEYWORD_ONLY);
+    auto traversal = ga(get_arg::KEYWORD_ONLY);
+    auto intersection = ga(get_arg::KEYWORD_ONLY);
+    
+    ga.finished();
+    
+    
+    auto p_objs = collect<py::object>(p_iterable);
     if(UNLIKELY(p_objs.empty())) THROW_PYERR_STRING(ValueError,"cannot build tree from empty sequence");
     
     proto_array<module_store> primitives;
@@ -2842,13 +2856,29 @@ std::tuple<n_aabb,kd_node<module_store>*> build_kdtree(const char *func,PyObject
     
     int dimension = primitives[0]->dimension();
     
+    kd_tree_params kd_params(dimension);
+    
+    if(max_depth) {
+        kd_params.max_depth = from_pyobject<int>(max_depth);
+        if(kd_params.max_depth < 0) THROW_PYERR_STRING(ValueError,"max_depth cannot be less than 0");
+    }
+
+    if(split_threshold) {
+        kd_params.split_threshold = from_pyobject<int>(split_threshold);
+        if(kd_params.split_threshold < 1) THROW_PYERR_STRING(ValueError,"split_threshold cannot be less than 1");
+    }
+
+    if(traversal) kd_params.traversal = from_pyobject<real>(traversal);
+
+    if(intersection) kd_params.intersection = from_pyobject<real>(intersection);
+    
     for(size_t i=1; i<p_objs.size(); ++i) {
         auto p = &checked_py_cast<obj_PrimitivePrototype>(p_objs[i].ref())->get_base();
         if(UNLIKELY(p->dimension() != dimension)) THROW_PYERR_STRING(TypeError,"the primitive prototypes must all have the same dimension");
         primitives.push_back(p);
     }
 
-    return build_kdtree<module_store>(primitives,std::get<1>(vals));
+    return build_kdtree<module_store>(primitives,extra_threads,kd_params);
 }
 
 PyObject *obj_build_kdtree(PyObject*,PyObject *args,PyObject *kwds) {

@@ -529,6 +529,10 @@ template<typename T> struct opt_parameter {
 };
 
 class get_arg {
+public:
+    enum arg_type {REQUIRED,OPTIONAL,KEYWORD_ONLY};
+
+private:
     struct get_arg_base {
         PyObject *args, *kwds;
         const char **names;
@@ -537,16 +541,16 @@ class get_arg {
         
         get_arg_base(PyObject *args,PyObject *kwds,Py_ssize_t arg_len,const char **names,const char *fname);
         
-        PyObject *operator()(size_t i,bool required);
+        PyObject *operator()(size_t i,arg_type type);
         void finished();
     } base;
     
     template<typename T> static inline T as_param(const parameter<T> &p,size_t index,get_arg_base &ga) {
-        return from_pyobject<T>(ga(index,true));
+        return from_pyobject<T>(ga(index,REQUIRED));
     }
     
     template<typename T> static inline T as_param(const opt_parameter<T> &p,size_t index,get_arg_base &ga) {
-        PyObject *tmp = ga(index,false);
+        PyObject *tmp = ga(index,OPTIONAL);
         return tmp ? from_pyobject<T>(tmp) : p.def_value;
     }
     
@@ -561,10 +565,11 @@ class get_arg {
 public:
     Py_ssize_t arg_index;
     
-    get_arg(PyObject *args,PyObject *kwds,Py_ssize_t arg_len,const char **names=NULL,const char *fname=NULL) : base(args,kwds,arg_len,names,fname), arg_index(0) {}
-    template<int N> get_arg(PyObject *args,PyObject *kwds,const char *(&names)[N],const char *fname=NULL) : get_arg(args,kwds,N,names,fname) {}
+    get_arg(PyObject *args,PyObject *kwds,Py_ssize_t arg_len,const char **names=NULL,const char *fname=nullptr) : base(args,kwds,arg_len,names,fname), arg_index(0) {}
+    template<int N> get_arg(PyObject *args,PyObject *kwds,const char *(&names)[N],const char *fname=nullptr) : get_arg(args,kwds,N,names,fname) {}
     
-    PyObject *operator()(bool required) { return base(arg_index++,required); }
+    PyObject *operator()(bool required) { return base(arg_index++,required ? REQUIRED : OPTIONAL); }
+    PyObject *operator()(arg_type type) { return base(arg_index++,type); }
     void finished() { base.finished(); }
     
     template<typename... P> static std::tuple<typename P::type...> get_args(const char *fname,PyObject *args,PyObject *kwds,const P&... params) {
