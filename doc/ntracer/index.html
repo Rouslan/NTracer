@@ -6,7 +6,7 @@
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     
-    <title>ntracer Package &mdash; NTracer 0.6 documentation</title>
+    <title>ntracer Package &mdash; NTracer 0.7 documentation</title>
     
     <link rel="stylesheet" href="../_static/nature.css" type="text/css" />
     <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
@@ -14,7 +14,7 @@
     <script type="text/javascript">
       var DOCUMENTATION_OPTIONS = {
         URL_ROOT:    '../',
-        VERSION:     '0.6',
+        VERSION:     '0.7',
         COLLAPSE_INDEX: false,
         FILE_SUFFIX: '',
         HAS_SOURCE:  true
@@ -23,7 +23,7 @@
     <script type="text/javascript" src="../_static/jquery.js"></script>
     <script type="text/javascript" src="../_static/underscore.js"></script>
     <script type="text/javascript" src="../_static/doctools.js"></script>
-    <link rel="top" title="NTracer 0.6 documentation" href="../" />
+    <link rel="top" title="NTracer 0.7 documentation" href="../" />
     <link rel="prev" title="Using without Pygame" href="../nonpygame_example/" /> 
   </head>
   <body>
@@ -39,7 +39,7 @@
         <li class="right" >
           <a href="../nonpygame_example/" title="Using without Pygame"
              accesskey="P">previous</a> |</li>
-        <li><a href="../">NTracer 0.6 documentation</a> &raquo;</li> 
+        <li><a href="../">NTracer 0.7 documentation</a> &raquo;</li> 
       </ul>
     </div>  
 
@@ -679,7 +679,7 @@ where every element is set to the highest finite value it can represent.</li>
 <tbody valign="top">
 <tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>primitive</strong> &#8211; The object to test intersection with. It must be an
 instance of <a class="reference internal" href="#ntracer.tracern.PrimitivePrototype" title="ntracer.tracern.PrimitivePrototype"><tt class="xref py py-class docutils literal"><span class="pre">PrimitivePrototype</span></tt></a>, not
-<a class="reference internal" href="#ntracer.tracern.Primitive" title="ntracer.tracern.Primitive"><tt class="xref py py-class docutils literal"><span class="pre">Primitive</span></tt></a>.</td>
+<a class="reference internal" href="#ntracer.tracern.Primitive" title="ntracer.tracern.Primitive"><tt class="xref py py-class docutils literal"><span class="pre">Primitive</span></tt></a>/<a class="reference internal" href="#ntracer.tracern.PrimitiveBatch" title="ntracer.tracern.PrimitiveBatch"><tt class="xref py py-class docutils literal"><span class="pre">PrimitiveBatch</span></tt></a>.</td>
 </tr>
 </tbody>
 </table>
@@ -690,10 +690,11 @@ instance of <a class="reference internal" href="#ntracer.tracern.PrimitiveProtot
 <tt class="descname">intersects_flat</tt><big>(</big><em>primitive</em>, <em>skip</em><big>)</big> &rarr; boolean<a class="headerlink" href="#ntracer.tracern.AABB.intersects_flat" title="Permalink to this definition">¶</a></dt>
 <dd><p>Returns True if the box intersects the given simplex, ignoring one axis.</p>
 <p>This method is identical to <a class="reference internal" href="#ntracer.tracern.AABB.intersects" title="ntracer.tracern.AABB.intersects"><tt class="xref py py-meth docutils literal"><span class="pre">intersects()</span></tt></a> except it only accepts
-instances of <a class="reference internal" href="#ntracer.tracern.TrianglePrototype" title="ntracer.tracern.TrianglePrototype"><tt class="xref py py-class docutils literal"><span class="pre">TrianglePrototype</span></tt></a> and it disregards the axis
-<tt class="docutils literal"><span class="pre">skip</span></tt>. This is equivalent to testing against a simplex that has been
-extruded infinitely far in the positive and negative directions along
-that axis. The simplex <strong>must</strong> be flat along that axis (i.e.
+instances of <a class="reference internal" href="#ntracer.tracern.TrianglePrototype" title="ntracer.tracern.TrianglePrototype"><tt class="xref py py-class docutils literal"><span class="pre">TrianglePrototype</span></tt></a> and
+<a class="reference internal" href="#ntracer.tracern.TriangleBatchPrototype" title="ntracer.tracern.TriangleBatchPrototype"><tt class="xref py py-class docutils literal"><span class="pre">TriangleBatchPrototype</span></tt></a> and it disregards the axis <tt class="docutils literal"><span class="pre">skip</span></tt>.
+This is equivalent to testing against a simplex that has been extruded
+infinitely far in the positive and negative directions along that axis.
+The simplex or batch of simplexes <strong>must</strong> be flat along that axis (i.e.
 <tt class="code docutils literal"><span class="pre">primitive.boundary.start[skip]</span> <span class="pre">==</span> <span class="pre">primitive.boundary.end[skip]</span></tt>
 must be true) for the return value to be correct.</p>
 <p>This method is needed when a simplex is completely embedded in a split
@@ -705,8 +706,9 @@ bounding box that the hyperplane divides.</p>
 <tbody valign="top">
 <tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
 <li><strong>primitive</strong> &#8211; A simplex to test intersection with. It must be an
-instance of <a class="reference internal" href="#ntracer.tracern.TrianglePrototype" title="ntracer.tracern.TrianglePrototype"><tt class="xref py py-class docutils literal"><span class="pre">TrianglePrototype</span></tt></a>, not
-<a class="reference internal" href="#ntracer.tracern.Triangle" title="ntracer.tracern.Triangle"><tt class="xref py py-class docutils literal"><span class="pre">Triangle</span></tt></a>.</li>
+instance of <a class="reference internal" href="#ntracer.tracern.TrianglePrototype" title="ntracer.tracern.TrianglePrototype"><tt class="xref py py-class docutils literal"><span class="pre">TrianglePrototype</span></tt></a> or
+<a class="reference internal" href="#ntracer.tracern.TriangleBatchPrototype" title="ntracer.tracern.TriangleBatchPrototype"><tt class="xref py py-class docutils literal"><span class="pre">TriangleBatchPrototype</span></tt></a>, not
+<a class="reference internal" href="#ntracer.tracern.Triangle" title="ntracer.tracern.Triangle"><tt class="xref py py-class docutils literal"><span class="pre">Triangle</span></tt></a>/<a class="reference internal" href="#ntracer.tracern.TriangleBatch" title="ntracer.tracern.TriangleBatch"><tt class="xref py py-class docutils literal"><span class="pre">TriangleBatch</span></tt></a>.</li>
 <li><strong>skip</strong> (<em>number</em>) &#8211; The axis to disregard when testing.</li>
 </ul>
 </td>
@@ -1343,6 +1345,17 @@ last element (unless the last element is the one being deleted).</p>
 <dd><p>Bases: <a class="reference internal" href="#ntracer.tracern.KDNode" title="ntracer.tracern.KDNode"><tt class="xref py py-class docutils literal"><span class="pre">KDNode</span></tt></a></p>
 <p>A k-d tree branch node.</p>
 <p>One of <tt class="docutils literal"><span class="pre">left</span></tt> and <tt class="docutils literal"><span class="pre">right</span></tt> may be <tt class="docutils literal"><span class="pre">None</span></tt>, but not both.</p>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">In order to minimize the amount of space that k-d tree nodes take
+up in memory (and therefore maximize the speed at which they can be
+traversed), the nodes are not stored internally as Python objects nor
+contain references to their Python representations. Accessing
+<a class="reference internal" href="#ntracer.tracern.KDBranch.left" title="ntracer.tracern.KDBranch.left"><tt class="xref py py-attr docutils literal"><span class="pre">left</span></tt></a> or <a class="reference internal" href="#ntracer.tracern.KDBranch.right" title="ntracer.tracern.KDBranch.right"><tt class="xref py py-attr docutils literal"><span class="pre">right</span></tt></a> will cause a new Python object to be
+created each time, to encapsulate the child node, therefore e.g. given
+node <tt class="docutils literal"><span class="pre">n</span></tt>: the satement &#8220;<tt class="code docutils literal"><span class="pre">n.left</span> <span class="pre">is</span> <span class="pre">n.left</span></tt>&#8221; will evaluate to
+<tt class="docutils literal"><span class="pre">False</span></tt>.</p>
+</div>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
@@ -1401,14 +1414,19 @@ to.</li>
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>primitives</strong> (<em>iterable</em>) &#8211; A sequence of <a class="reference internal" href="#ntracer.tracern.Primitive" title="ntracer.tracern.Primitive"><tt class="xref py py-class docutils literal"><span class="pre">Primitive</span></tt></a> objects.</td>
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>primitives</strong> (<em>iterable</em>) &#8211; An iterable of <a class="reference internal" href="#ntracer.tracern.Primitive" title="ntracer.tracern.Primitive"><tt class="xref py py-class docutils literal"><span class="pre">Primitive</span></tt></a> objects. If
+<a class="reference internal" href="#ntracer.tracern.BATCH_SIZE" title="ntracer.tracern.BATCH_SIZE"><tt class="xref py py-const docutils literal"><span class="pre">BATCH_SIZE</span></tt></a> is greater than <tt class="docutils literal"><span class="pre">1</span></tt>, the iterable can also
+yield instances of <a class="reference internal" href="#ntracer.tracern.PrimitiveBatch" title="ntracer.tracern.PrimitiveBatch"><tt class="xref py py-class docutils literal"><span class="pre">PrimitiveBatch</span></tt></a>.</td>
 </tr>
 </tbody>
 </table>
 <dl class="method">
 <dt id="ntracer.tracern.KDLeaf.__getitem__">
 <tt class="descname">__getitem__</tt><big>(</big><em>index</em><big>)</big><a class="headerlink" href="#ntracer.tracern.KDLeaf.__getitem__" title="Permalink to this definition">¶</a></dt>
-<dd><p><tt class="code docutils literal"><span class="pre">self.__getitem__(i)</span></tt> &lt;==&gt; <tt class="code docutils literal"><span class="pre">self[i]</span></tt></p>
+<dd><p>Return the <tt class="docutils literal"><span class="pre">index</span></tt>&#8216;th primitive or primitive batch.</p>
+<p>Note that the order the primitives/batches are stored in will not
+necessarily match the order given to the constructor.</p>
+<p><tt class="code docutils literal"><span class="pre">self.__getitem__(i)</span></tt> &lt;==&gt; <tt class="code docutils literal"><span class="pre">self[i]</span></tt></p>
 </dd></dl>
 
 <dl class="method">
@@ -1421,6 +1439,7 @@ to.</li>
 <dt id="ntracer.tracern.KDLeaf.dimension">
 <tt class="descname">dimension</tt><a class="headerlink" href="#ntracer.tracern.KDLeaf.dimension" title="Permalink to this definition">¶</a></dt>
 <dd><p>The dimension of the primitives.</p>
+<p>All the primitives are required to have the same dimension.</p>
 </dd></dl>
 
 </dd></dl>
@@ -1432,18 +1451,17 @@ to.</li>
 <p>This class cannot be instantiated directly in Python code.</p>
 <dl class="method">
 <dt id="ntracer.tracern.KDNode.intersects">
-<tt class="descname">intersects</tt><big>(</big><em>origin</em>, <em>direction</em><span class="optional">[</span>, <em>t_near</em>, <em>t_far</em>, <em>source</em><span class="optional">]</span><big>)</big> &rarr; list<a class="headerlink" href="#ntracer.tracern.KDNode.intersects" title="Permalink to this definition">¶</a></dt>
+<tt class="descname">intersects</tt><big>(</big><em>origin</em>, <em>direction</em><span class="optional">[</span>, <em>t_near</em>, <em>t_far</em>, <em>source</em>, <em>batch_index</em><span class="optional">]</span><big>)</big> &rarr; list<a class="headerlink" href="#ntracer.tracern.KDNode.intersects" title="Permalink to this definition">¶</a></dt>
 <dd><p>Tests whether a given ray intersects.</p>
-<p>The return value is a list containing one tuple for every intersection
-that occured. Multiple intersections can occur when the ray passes
-through primitives that have an opacity of less than one. Each tuple
-will contain the distance between <tt class="docutils literal"><span class="pre">origin</span></tt> and the intersection, the
-point of intersection, the normal of the surface intersected and the
-intersected primitive itself. If an opaque primitive is intersected, it
-will always be the last element and have the greatest distance, but
-every other element will be in an arbitrary order and may contain
-duplicates (this can happen when a primitive crosses a split pane). If
-no intersection occurs, the return value will be an empty list.</p>
+<p>The return value is a list containing an instance of
+<a class="reference internal" href="#ntracer.tracern.RayIntersection" title="ntracer.tracern.RayIntersection"><tt class="xref py py-class docutils literal"><span class="pre">RayIntersection</span></tt></a> for every intersection that occured.
+Multiple intersections can occur when the ray passes through primitives
+that have an opacity of less than one. If an opaque primitive is
+intersected, it will always be the last element and have the greatest
+distance, but every other element will be in an arbitrary order and may
+contain duplicates (this can happen when a primitive crosses a split
+pane). If no intersection occurs, the return value will be an empty
+list.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
@@ -1453,7 +1471,10 @@ no intersection occurs, the return value will be an empty list.</p>
 <li><strong>direction</strong> (<em>vector</em>) &#8211; The direction of the ray.</li>
 <li><strong>t_near</strong> (<em>number</em>) &#8211; </li>
 <li><strong>t_far</strong> (<em>number</em>) &#8211; </li>
-<li><strong>source</strong> (<a class="reference internal" href="#ntracer.tracern.KDNode" title="ntracer.tracern.KDNode"><tt class="xref py py-class docutils literal"><span class="pre">KDNode</span></tt></a>) &#8211; A node that will not be considered for intersection.</li>
+<li><strong>source</strong> (<a class="reference internal" href="#ntracer.tracern.Primitive" title="ntracer.tracern.Primitive"><tt class="xref py py-class docutils literal"><span class="pre">Primitive</span></tt></a> or <a class="reference internal" href="#ntracer.tracern.PrimitiveBatch" title="ntracer.tracern.PrimitiveBatch"><tt class="xref py py-class docutils literal"><span class="pre">PrimitiveBatch</span></tt></a>) &#8211; A primitive that will not be considered for intersection.</li>
+<li><strong>batch_index</strong> (<em>integer</em>) &#8211; The index of the primitive inside the
+primitive batch to ignore intersection with. If <tt class="docutils literal"><span class="pre">source</span></tt> is not an
+instance of <a class="reference internal" href="#ntracer.tracern.PrimitiveBatch" title="ntracer.tracern.PrimitiveBatch"><tt class="xref py py-class docutils literal"><span class="pre">PrimitiveBatch</span></tt></a>, this value is ignored.</li>
 </ul>
 </td>
 </tr>
@@ -1463,17 +1484,15 @@ no intersection occurs, the return value will be an empty list.</p>
 
 <dl class="method">
 <dt id="ntracer.tracern.KDNode.occludes">
-<tt class="descname">occludes</tt><big>(</big><em>origin</em>, <em>direction</em><span class="optional">[</span>, <em>distance</em>, <em>t_near</em>, <em>t_far</em>, <em>source</em><span class="optional">]</span><big>)</big> &rarr; tuple<a class="headerlink" href="#ntracer.tracern.KDNode.occludes" title="Permalink to this definition">¶</a></dt>
+<tt class="descname">occludes</tt><big>(</big><em>origin</em>, <em>direction</em><span class="optional">[</span>, <em>distance</em>, <em>t_near</em>, <em>t_far</em>, <em>source</em>, <em>batch_index</em><span class="optional">]</span><big>)</big> &rarr; tuple<a class="headerlink" href="#ntracer.tracern.KDNode.occludes" title="Permalink to this definition">¶</a></dt>
 <dd><p>Test if <tt class="code docutils literal"><span class="pre">origin</span> <span class="pre">+</span> <span class="pre">direction*distance</span></tt> is occluded by any
 primitives.</p>
 <p>If an opaque object exists at any point along <tt class="docutils literal"><span class="pre">distance</span></tt>, the return
 value is <tt class="code docutils literal"><span class="pre">(True,None)</span></tt>. Otherwise the return value is a tuple
-containing <tt class="docutils literal"><span class="pre">False</span></tt> and an array that for every non-opaque primitive
-found along <tt class="docutils literal"><span class="pre">distance</span></tt>, contains a tuple with the distance between
-<tt class="docutils literal"><span class="pre">origin</span></tt> and the intersection, the point of intersection, the normal
-of the surface intersected and the intersected primitive itself. The
-elements will be in an arbitrary order and may contain duplicates (this
-can happen when a primitive crosses a split pane).</p>
+containing <tt class="docutils literal"><span class="pre">False</span></tt> and a list containing an instance of
+<a class="reference internal" href="#ntracer.tracern.RayIntersection" title="ntracer.tracern.RayIntersection"><tt class="xref py py-class docutils literal"><span class="pre">RayIntersection</span></tt></a> for every non-opaque primitive found along
+<tt class="docutils literal"><span class="pre">distance</span></tt>. The elements will be in an arbitrary order and may contain
+duplicates (this can happen when a primitive crosses a split pane).</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
@@ -1484,7 +1503,10 @@ can happen when a primitive crosses a split pane).</p>
 <li><strong>distance</strong> (<em>number</em>) &#8211; How far out to check for intersections.</li>
 <li><strong>t_near</strong> (<em>number</em>) &#8211; </li>
 <li><strong>t_far</strong> (<em>number</em>) &#8211; </li>
-<li><strong>source</strong> (<a class="reference internal" href="#ntracer.tracern.KDNode" title="ntracer.tracern.KDNode"><tt class="xref py py-class docutils literal"><span class="pre">KDNode</span></tt></a>) &#8211; A node that will not be considered for intersection.</li>
+<li><strong>source</strong> (<a class="reference internal" href="#ntracer.tracern.Primitive" title="ntracer.tracern.Primitive"><tt class="xref py py-class docutils literal"><span class="pre">Primitive</span></tt></a> or <a class="reference internal" href="#ntracer.tracern.PrimitiveBatch" title="ntracer.tracern.PrimitiveBatch"><tt class="xref py py-class docutils literal"><span class="pre">PrimitiveBatch</span></tt></a>) &#8211; A primitive that will not be considered for intersection.</li>
+<li><strong>batch_index</strong> (<em>integer</em>) &#8211; The index of the primitive inside the
+primitive batch to ignore intersection with. If <tt class="docutils literal"><span class="pre">source</span></tt> is not an
+instance of <a class="reference internal" href="#ntracer.tracern.PrimitiveBatch" title="ntracer.tracern.PrimitiveBatch"><tt class="xref py py-class docutils literal"><span class="pre">PrimitiveBatch</span></tt></a>, this value is ignored.</li>
 </ul>
 </td>
 </tr>
@@ -1756,10 +1778,9 @@ even as a base class for another class.</p>
 <dt id="ntracer.tracern.Primitive.intersects">
 <tt class="descname">intersects</tt><big>(</big><em>origin</em>, <em>direction</em><big>)</big> &rarr; tuple or None<a class="headerlink" href="#ntracer.tracern.Primitive.intersects" title="Permalink to this definition">¶</a></dt>
 <dd><p>Tests whether a given ray intersects.</p>
-<p>If the ray intersects with the object, a tuple is returned with the
-distance between <tt class="docutils literal"><span class="pre">origin</span></tt> and the intersection, the point of
-intersection and the normal vector of the surface at the intersection.
-Otherwise, the return value is <tt class="docutils literal"><span class="pre">None</span></tt>.</p>
+<p>If the ray intersects with the object, an instance of
+<a class="reference internal" href="#ntracer.tracern.RayIntersection" title="ntracer.tracern.RayIntersection"><tt class="xref py py-class docutils literal"><span class="pre">RayIntersection</span></tt></a> is returned with the details of the
+intersection. Otherwise, the return value is <tt class="docutils literal"><span class="pre">None</span></tt>.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
@@ -1783,16 +1804,46 @@ Otherwise, the return value is <tt class="docutils literal"><span class="pre">No
 </dd></dl>
 
 <dl class="class">
+<dt id="ntracer.tracern.PrimitiveBatch">
+<em class="property">class </em><tt class="descname">PrimitiveBatch</tt><a class="headerlink" href="#ntracer.tracern.PrimitiveBatch" title="Permalink to this definition">¶</a></dt>
+<dd><p>A batch of primitives with data rearranged for faster computation.</p>
+<dl class="method">
+<dt id="ntracer.tracern.PrimitiveBatch.intersects">
+<tt class="descname">intersects</tt><big>(</big><em>origin</em>, <em>direction</em>, <em>index</em><big>)</big> &rarr; tuple or None<a class="headerlink" href="#ntracer.tracern.PrimitiveBatch.intersects" title="Permalink to this definition">¶</a></dt>
+<dd><p>Tests whether a given ray intersects.</p>
+<p>If the ray intersects with the object, an instance of
+<a class="reference internal" href="#ntracer.tracern.RayIntersection" title="ntracer.tracern.RayIntersection"><tt class="xref py py-class docutils literal"><span class="pre">RayIntersection</span></tt></a> is returned with the details of the
+intersection. Otherwise, the return value is <tt class="docutils literal"><span class="pre">None</span></tt>.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>origin</strong> &#8211; The origin of the ray.</li>
+<li><strong>direction</strong> &#8211; The direction of the ray.</li>
+<li><strong>index</strong> (<em>integer</em>) &#8211; The index specifying which primitive in the batch
+should not be considered for intersection, or <tt class="docutils literal"><span class="pre">-1</span></tt> if all
+primitives should be considered.</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="ntracer.tracern.PrimitiveBatch.material">
+<tt class="descname">material</tt><a class="headerlink" href="#ntracer.tracern.PrimitiveBatch.material" title="Permalink to this definition">¶</a></dt>
+<dd><p>A read-only sequence containing the materials of the primitives.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
 <dt id="ntracer.tracern.PrimitivePrototype">
 <em class="property">class </em><tt class="descname">PrimitivePrototype</tt><a class="headerlink" href="#ntracer.tracern.PrimitivePrototype" title="Permalink to this definition">¶</a></dt>
 <dd><p>A primitive with extra data needed for quick spacial partitioning.</p>
 <p>This class cannot be instantiated directly in Python code.</p>
-<dl class="method">
-<dt>
-<tt class="descname">primitive -&gt; Primitive</tt></dt>
-<dd><p>The corresponding <a class="reference internal" href="#ntracer.tracern.Primitive" title="ntracer.tracern.Primitive"><tt class="xref py py-class docutils literal"><span class="pre">Primitive</span></tt></a>.</p>
-</dd></dl>
-
 <dl class="attribute">
 <dt id="ntracer.tracern.PrimitivePrototype.boundary">
 <tt class="descname">boundary</tt><a class="headerlink" href="#ntracer.tracern.PrimitivePrototype.boundary" title="Permalink to this definition">¶</a></dt>
@@ -1800,9 +1851,70 @@ Otherwise, the return value is <tt class="docutils literal"><span class="pre">No
 </dd></dl>
 
 <dl class="attribute">
-<dt id="ntracer.tracern.PrimitivePrototype.material">
-<tt class="descname">material</tt><a class="headerlink" href="#ntracer.tracern.PrimitivePrototype.material" title="Permalink to this definition">¶</a></dt>
-<dd><p>The material of the primitive.</p>
+<dt id="ntracer.tracern.PrimitivePrototype.primitive">
+<tt class="descname">primitive</tt><a class="headerlink" href="#ntracer.tracern.PrimitivePrototype.primitive" title="Permalink to this definition">¶</a></dt>
+<dd><p>The corresponding <a class="reference internal" href="#ntracer.tracern.Primitive" title="ntracer.tracern.Primitive"><tt class="xref py py-class docutils literal"><span class="pre">Primitive</span></tt></a> or <a class="reference internal" href="#ntracer.tracern.PrimitiveBatch" title="ntracer.tracern.PrimitiveBatch"><tt class="xref py py-class docutils literal"><span class="pre">PrimitiveBatch</span></tt></a>.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="ntracer.tracern.RayIntersection">
+<em class="property">class </em><tt class="descname">RayIntersection</tt><big>(</big><em>dist</em>, <em>origin</em>, <em>normal</em>, <em>primitive</em><span class="optional">[</span>, <em>batch_index=-1</em><span class="optional">]</span><big>)</big><a class="headerlink" href="#ntracer.tracern.RayIntersection" title="Permalink to this definition">¶</a></dt>
+<dd><p>The details of an intersection between a ray and a primitive.</p>
+<p>Instances of this class are read-only.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>dist</strong> (<em>number</em>) &#8211; The distance between the origin of the ray and the point
+of intersection.</li>
+<li><strong>origin</strong> (<em>vector</em>) &#8211; The point where the ray intersected the primitive.</li>
+<li><strong>normal</strong> (<em>vector</em>) &#8211; The normal of the surface of the primitive at the
+point of intersection.</li>
+<li><strong>primitive</strong> &#8211; The <a class="reference internal" href="#ntracer.tracern.Primitive" title="ntracer.tracern.Primitive"><tt class="xref py py-class docutils literal"><span class="pre">Primitive</span></tt></a> or <a class="reference internal" href="#ntracer.tracern.PrimitiveBatch" title="ntracer.tracern.PrimitiveBatch"><tt class="xref py py-class docutils literal"><span class="pre">PrimitiveBatch</span></tt></a>
+that the ray intersected.</li>
+<li><strong>batch_index</strong> (<em>integer</em>) &#8211; The index indicating which primitive in the
+batch was intersected or <tt class="docutils literal"><span class="pre">-1</span></tt> if the primitive is not an instance of
+<a class="reference internal" href="#ntracer.tracern.PrimitiveBatch" title="ntracer.tracern.PrimitiveBatch"><tt class="xref py py-class docutils literal"><span class="pre">PrimitiveBatch</span></tt></a>.</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+<dl class="attribute">
+<dt id="ntracer.tracern.RayIntersection.dist">
+<tt class="descname">dist</tt><a class="headerlink" href="#ntracer.tracern.RayIntersection.dist" title="Permalink to this definition">¶</a></dt>
+<dd><p>The distance between the origin of the ray and the point of
+intersection.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="ntracer.tracern.RayIntersection.origin">
+<tt class="descname">origin</tt><a class="headerlink" href="#ntracer.tracern.RayIntersection.origin" title="Permalink to this definition">¶</a></dt>
+<dd><p>The point where the ray intersected the primitive.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="ntracer.tracern.RayIntersection.normal">
+<tt class="descname">normal</tt><a class="headerlink" href="#ntracer.tracern.RayIntersection.normal" title="Permalink to this definition">¶</a></dt>
+<dd><p>The normal of the surface of the primitive at the point of intersection.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="ntracer.tracern.RayIntersection.primitive">
+<tt class="descname">primitive</tt><a class="headerlink" href="#ntracer.tracern.RayIntersection.primitive" title="Permalink to this definition">¶</a></dt>
+<dd><p>The <a class="reference internal" href="#ntracer.tracern.Primitive" title="ntracer.tracern.Primitive"><tt class="xref py py-class docutils literal"><span class="pre">Primitive</span></tt></a> or <a class="reference internal" href="#ntracer.tracern.PrimitiveBatch" title="ntracer.tracern.PrimitiveBatch"><tt class="xref py py-class docutils literal"><span class="pre">PrimitiveBatch</span></tt></a> that the ray
+intersected.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="ntracer.tracern.RayIntersection.batch_index">
+<tt class="descname">batch_index</tt><a class="headerlink" href="#ntracer.tracern.RayIntersection.batch_index" title="Permalink to this definition">¶</a></dt>
+<dd><p>The index indicating which primitive in the batch was intersected.</p>
+<p>If <a class="reference internal" href="#ntracer.tracern.RayIntersection.primitive" title="ntracer.tracern.RayIntersection.primitive"><tt class="xref py py-attr docutils literal"><span class="pre">primitive</span></tt></a> is not an instance of <a class="reference internal" href="#ntracer.tracern.PrimitiveBatch" title="ntracer.tracern.PrimitiveBatch"><tt class="xref py py-class docutils literal"><span class="pre">PrimitiveBatch</span></tt></a>
+then this will have a value of <tt class="docutils literal"><span class="pre">-1</span></tt>.</p>
 </dd></dl>
 
 </dd></dl>
@@ -1893,6 +2005,12 @@ Otherwise, the return value is <tt class="docutils literal"><span class="pre">No
 <dt id="ntracer.tracern.SolidPrototype.inv_orientation">
 <tt class="descname">inv_orientation</tt><a class="headerlink" href="#ntracer.tracern.SolidPrototype.inv_orientation" title="Permalink to this definition">¶</a></dt>
 <dd><p>The inverse of <a class="reference internal" href="#ntracer.tracern.SolidPrototype.orientation" title="ntracer.tracern.SolidPrototype.orientation"><tt class="xref py py-attr docutils literal"><span class="pre">orientation</span></tt></a></p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="ntracer.tracern.SolidPrototype.material">
+<tt class="descname">material</tt><a class="headerlink" href="#ntracer.tracern.SolidPrototype.material" title="Permalink to this definition">¶</a></dt>
+<dd><p>The material of the primitive.</p>
 </dd></dl>
 
 <dl class="attribute">
@@ -1998,9 +2116,117 @@ point that&#8217;s kept.</p>
 </dd></dl>
 
 <dl class="class">
+<dt id="ntracer.tracern.TriangleBatch">
+<em class="property">class </em><tt class="descname">TriangleBatch</tt><big>(</big><em>triangles</em><big>)</big><a class="headerlink" href="#ntracer.tracern.TriangleBatch" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#ntracer.tracern.PrimitiveBatch" title="ntracer.tracern.PrimitiveBatch"><tt class="xref py py-class docutils literal"><span class="pre">PrimitiveBatch</span></tt></a></p>
+<p>A batch of simplexes with data rearranged for faster computation.</p>
+<p>Instances of this class are read-only.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>triangles</strong> &#8211; An iterable yielding exactly <a class="reference internal" href="#ntracer.tracern.BATCH_SIZE" title="ntracer.tracern.BATCH_SIZE"><tt class="xref py py-const docutils literal"><span class="pre">BATCH_SIZE</span></tt></a>
+instances of <a class="reference internal" href="#ntracer.tracern.Triangle" title="ntracer.tracern.Triangle"><tt class="xref py py-class docutils literal"><span class="pre">Triangle</span></tt></a></td>
+</tr>
+</tbody>
+</table>
+<dl class="method">
+<dt id="ntracer.tracern.TriangleBatch.__getitem__">
+<tt class="descname">__getitem__</tt><big>(</big><em>index</em><big>)</big><a class="headerlink" href="#ntracer.tracern.TriangleBatch.__getitem__" title="Permalink to this definition">¶</a></dt>
+<dd><p>Extract the <tt class="docutils literal"><span class="pre">index</span></tt>&#8216;th simplex.</p>
+<p><tt class="code docutils literal"><span class="pre">self.__getitem__(i)</span></tt> &lt;==&gt; <tt class="code docutils literal"><span class="pre">self[i]</span></tt></p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ntracer.tracern.TriangleBatch.__len__">
+<tt class="descname">__len__</tt><big>(</big><big>)</big><a class="headerlink" href="#ntracer.tracern.TriangleBatch.__len__" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return the number of simplexes in the batch.</p>
+<p>This is always equal <a class="reference internal" href="#ntracer.tracern.BATCH_SIZE" title="ntracer.tracern.BATCH_SIZE"><tt class="xref py py-const docutils literal"><span class="pre">BATCH_SIZE</span></tt></a>.</p>
+<p><tt class="code docutils literal"><span class="pre">self.__len__()</span></tt> &lt;==&gt; <tt class="code docutils literal"><span class="pre">len(self)</span></tt></p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="ntracer.tracern.TriangleBatchPointData">
+<em class="property">class </em><tt class="descname">TriangleBatchPointData</tt><a class="headerlink" href="#ntracer.tracern.TriangleBatchPointData" title="Permalink to this definition">¶</a></dt>
+<dd><p>A read-only sequence of <a class="reference internal" href="#ntracer.tracern.TriangleBatchPointDatum" title="ntracer.tracern.TriangleBatchPointDatum"><tt class="xref py py-class docutils literal"><span class="pre">TriangleBatchPointDatum</span></tt></a> instances.</p>
+<p>Instances of this class are read-only. This class cannot be instantiated
+directly in Python code.</p>
+<dl class="method">
+<dt id="ntracer.tracern.TriangleBatchPointData.__getitem__">
+<tt class="descname">__getitem__</tt><big>(</big><em>index</em><big>)</big><a class="headerlink" href="#ntracer.tracern.TriangleBatchPointData.__getitem__" title="Permalink to this definition">¶</a></dt>
+<dd><p><tt class="code docutils literal"><span class="pre">self.__getitem__(i)</span></tt> &lt;==&gt; <tt class="code docutils literal"><span class="pre">self[i]</span></tt></p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ntracer.tracern.TriangleBatchPointData.__len__">
+<tt class="descname">__len__</tt><big>(</big><big>)</big><a class="headerlink" href="#ntracer.tracern.TriangleBatchPointData.__len__" title="Permalink to this definition">¶</a></dt>
+<dd><p><tt class="code docutils literal"><span class="pre">self.__len__()</span></tt> &lt;==&gt; <tt class="code docutils literal"><span class="pre">len(self)</span></tt></p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="ntracer.tracern.TriangleBatchPointDatum">
+<em class="property">class </em><tt class="descname">TriangleBatchPointDatum</tt><a class="headerlink" href="#ntracer.tracern.TriangleBatchPointDatum" title="Permalink to this definition">¶</a></dt>
+<dd><p>Instances of this class are read-only. This class cannot be instantiated
+directly in Python code.</p>
+<dl class="attribute">
+<dt id="ntracer.tracern.TriangleBatchPointDatum.edge_normal">
+<tt class="descname">edge_normal</tt><a class="headerlink" href="#ntracer.tracern.TriangleBatchPointDatum.edge_normal" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="attribute">
+<dt id="ntracer.tracern.TriangleBatchPointDatum.point">
+<tt class="descname">point</tt><a class="headerlink" href="#ntracer.tracern.TriangleBatchPointDatum.point" title="Permalink to this definition">¶</a></dt>
+<dd><p>Vertices of a batch of simplexes.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="ntracer.tracern.TriangleBatchPrototype">
+<em class="property">class </em><tt class="descname">TriangleBatchPrototype</tt><big>(</big><em>t_prototypes</em><big>)</big><a class="headerlink" href="#ntracer.tracern.TriangleBatchPrototype" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#ntracer.tracern.PrimitivePrototype" title="ntracer.tracern.PrimitivePrototype"><tt class="xref py py-class docutils literal"><span class="pre">PrimitivePrototype</span></tt></a></p>
+<p>A batch of simplexes with extra data needed for quick spacial partitioning.</p>
+<p>This is the batch equivalent to <a class="reference internal" href="#ntracer.tracern.TrianglePrototype" title="ntracer.tracern.TrianglePrototype"><tt class="xref py py-class docutils literal"><span class="pre">TrianglePrototype</span></tt></a></p>
+<p>Instances of this class are read-only.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>t_prototypes</strong> &#8211; An iterable yielding exactly <a class="reference internal" href="#ntracer.tracern.BATCH_SIZE" title="ntracer.tracern.BATCH_SIZE"><tt class="xref py py-const docutils literal"><span class="pre">BATCH_SIZE</span></tt></a>
+instances of <a class="reference internal" href="#ntracer.tracern.TrianglePrototype" title="ntracer.tracern.TrianglePrototype"><tt class="xref py py-class docutils literal"><span class="pre">TrianglePrototype</span></tt></a>.</td>
+</tr>
+</tbody>
+</table>
+<dl class="attribute">
+<dt id="ntracer.tracern.TriangleBatchPrototype.dimension">
+<tt class="descname">dimension</tt><a class="headerlink" href="#ntracer.tracern.TriangleBatchPrototype.dimension" title="Permalink to this definition">¶</a></dt>
+<dd><p>The dimension of the simplexes.</p>
+<p>This is a single value since the simplexes must all have the same
+dimension.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="ntracer.tracern.TriangleBatchPrototype.face_normal">
+<tt class="descname">face_normal</tt><a class="headerlink" href="#ntracer.tracern.TriangleBatchPrototype.face_normal" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="attribute">
+<dt id="ntracer.tracern.TriangleBatchPrototype.point_data">
+<tt class="descname">point_data</tt><a class="headerlink" href="#ntracer.tracern.TriangleBatchPrototype.point_data" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="class">
 <dt id="ntracer.tracern.TrianglePointData">
 <em class="property">class </em><tt class="descname">TrianglePointData</tt><a class="headerlink" href="#ntracer.tracern.TrianglePointData" title="Permalink to this definition">¶</a></dt>
 <dd><p>A read-only sequence of <a class="reference internal" href="#ntracer.tracern.TrianglePointDatum" title="ntracer.tracern.TrianglePointDatum"><tt class="xref py py-class docutils literal"><span class="pre">TrianglePointDatum</span></tt></a> instances.</p>
+<p>Instances of this class are read-only. This class cannot be instantiated
+directly in Python code.</p>
 <dl class="method">
 <dt id="ntracer.tracern.TrianglePointData.__getitem__">
 <tt class="descname">__getitem__</tt><big>(</big><em>index</em><big>)</big><a class="headerlink" href="#ntracer.tracern.TrianglePointData.__getitem__" title="Permalink to this definition">¶</a></dt>
@@ -2018,7 +2244,9 @@ point that&#8217;s kept.</p>
 <dl class="class">
 <dt id="ntracer.tracern.TrianglePointDatum">
 <em class="property">class </em><tt class="descname">TrianglePointDatum</tt><a class="headerlink" href="#ntracer.tracern.TrianglePointDatum" title="Permalink to this definition">¶</a></dt>
-<dd><dl class="attribute">
+<dd><p>Instances of this class are read-only. This class cannot be instantiated
+directly in Python code.</p>
+<dl class="attribute">
 <dt id="ntracer.tracern.TrianglePointDatum.edge_normal">
 <tt class="descname">edge_normal</tt><a class="headerlink" href="#ntracer.tracern.TrianglePointDatum.edge_normal" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
@@ -2235,10 +2463,39 @@ returns a number.</td>
 
 </dd></dl>
 
+<dl class="class">
+<dt id="ntracer.tracern.VectorBatch">
+<em class="property">class </em><tt class="descname">VectorBatch</tt><a class="headerlink" href="#ntracer.tracern.VectorBatch" title="Permalink to this definition">¶</a></dt>
+<dd><p>A batch of vectors with data rearranged for faster computation.</p>
+<p>Instances of this class are read-only. This class cannot be instantiated
+directly in Python code.</p>
+<dl class="method">
+<dt id="ntracer.tracern.VectorBatch.__getitem__">
+<tt class="descname">__getitem__</tt><big>(</big><em>index</em><big>)</big><a class="headerlink" href="#ntracer.tracern.VectorBatch.__getitem__" title="Permalink to this definition">¶</a></dt>
+<dd><p>Extract the <tt class="docutils literal"><span class="pre">index</span></tt>&#8216;th vector from the batch.</p>
+<p><tt class="code docutils literal"><span class="pre">self.__getitem__(i)</span></tt> &lt;==&gt; <tt class="code docutils literal"><span class="pre">self[i]</span></tt></p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ntracer.tracern.VectorBatch.__len__">
+<tt class="descname">__len__</tt><big>(</big><big>)</big><a class="headerlink" href="#ntracer.tracern.VectorBatch.__len__" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return the number of vectors in the batch.</p>
+<p>This should not be confused with the length of the vectors themselves.</p>
+<p>This is always equal to <a class="reference internal" href="#ntracer.tracern.BATCH_SIZE" title="ntracer.tracern.BATCH_SIZE"><tt class="xref py py-const docutils literal"><span class="pre">BATCH_SIZE</span></tt></a>.</p>
+<p><tt class="code docutils literal"><span class="pre">self.__len__()</span></tt> &lt;==&gt; <tt class="code docutils literal"><span class="pre">len(self)</span></tt></p>
+</dd></dl>
+
+</dd></dl>
+
 <dl class="function">
 <dt id="ntracer.tracern.build_composite_scene">
 <tt class="descname">build_composite_scene</tt><big>(</big><em>primitives</em><span class="optional">[</span>, <em>extra_threads=-1</em><span class="optional">]</span><big>)</big> &rarr; CompositeScene<a class="headerlink" href="#ntracer.tracern.build_composite_scene" title="Permalink to this definition">¶</a></dt>
 <dd><p>Create a scene from a sequence of <a class="reference internal" href="#ntracer.tracern.PrimitivePrototype" title="ntracer.tracern.PrimitivePrototype"><tt class="xref py py-class docutils literal"><span class="pre">PrimitivePrototype</span></tt></a> instances.</p>
+<p>If <a class="reference internal" href="#ntracer.tracern.BATCH_SIZE" title="ntracer.tracern.BATCH_SIZE"><tt class="xref py py-const docutils literal"><span class="pre">BATCH_SIZE</span></tt></a> is greater than <tt class="docutils literal"><span class="pre">1</span></tt>, instances of
+<a class="reference internal" href="#ntracer.tracern.TrianglePrototype" title="ntracer.tracern.TrianglePrototype"><tt class="xref py py-class docutils literal"><span class="pre">TrianglePrototype</span></tt></a> will be automatically merged into instances
+of <a class="reference internal" href="#ntracer.tracern.TriangleBatchPrototype" title="ntracer.tracern.TriangleBatchPrototype"><tt class="xref py py-class docutils literal"><span class="pre">TriangleBatchPrototype</span></tt></a>. If <a class="reference internal" href="#ntracer.tracern.BATCH_SIZE" title="ntracer.tracern.BATCH_SIZE"><tt class="xref py py-const docutils literal"><span class="pre">BATCH_SIZE</span></tt></a> is equal to
+<tt class="docutils literal"><span class="pre">1</span></tt>, then <tt class="docutils literal"><span class="pre">primitives</span></tt> cannot contain any instances of
+<a class="reference internal" href="#ntracer.tracern.TriangleBatchPrototype" title="ntracer.tracern.TriangleBatchPrototype"><tt class="xref py py-class docutils literal"><span class="pre">TriangleBatchPrototype</span></tt></a>.</p>
 <p>By default, this will use all available processing cores to build the scene,
 but this can be controlled by passing a non-negative integer to
 <tt class="docutils literal"><span class="pre">extra_threads</span></tt> (a value of zero would make it run single-threaded). Note
@@ -2269,6 +2526,11 @@ followed by the root node of k-d tree (an instance of <a class="reference intern
 The <a class="reference internal" href="#ntracer.tracern.AABB" title="ntracer.tracern.AABB"><tt class="xref py py-class docutils literal"><span class="pre">AABB</span></tt></a> encloses all the primitives from <tt class="docutils literal"><span class="pre">primitives</span></tt>. The
 tuple&#8217;s values can be passed directly to <a class="reference internal" href="#ntracer.tracern.CompositeScene" title="ntracer.tracern.CompositeScene"><tt class="xref py py-class docutils literal"><span class="pre">CompositeScene</span></tt></a> (which
 is exactly what <a class="reference internal" href="#ntracer.tracern.build_composite_scene" title="ntracer.tracern.build_composite_scene"><tt class="xref py py-func docutils literal"><span class="pre">build_composite_scene()</span></tt></a> does).</p>
+<p>If <a class="reference internal" href="#ntracer.tracern.BATCH_SIZE" title="ntracer.tracern.BATCH_SIZE"><tt class="xref py py-const docutils literal"><span class="pre">BATCH_SIZE</span></tt></a> is greater than <tt class="docutils literal"><span class="pre">1</span></tt>, instances of
+<a class="reference internal" href="#ntracer.tracern.TrianglePrototype" title="ntracer.tracern.TrianglePrototype"><tt class="xref py py-class docutils literal"><span class="pre">TrianglePrototype</span></tt></a> will be automatically merged into instances
+of <a class="reference internal" href="#ntracer.tracern.TriangleBatchPrototype" title="ntracer.tracern.TriangleBatchPrototype"><tt class="xref py py-class docutils literal"><span class="pre">TriangleBatchPrototype</span></tt></a>. If <a class="reference internal" href="#ntracer.tracern.BATCH_SIZE" title="ntracer.tracern.BATCH_SIZE"><tt class="xref py py-const docutils literal"><span class="pre">BATCH_SIZE</span></tt></a> is equal to
+<tt class="docutils literal"><span class="pre">1</span></tt>, then <tt class="docutils literal"><span class="pre">primitives</span></tt> cannot contain any instances of
+<a class="reference internal" href="#ntracer.tracern.TriangleBatchPrototype" title="ntracer.tracern.TriangleBatchPrototype"><tt class="xref py py-class docutils literal"><span class="pre">TriangleBatchPrototype</span></tt></a>.</p>
 <p>By default, this will use all available processing cores to build the tree,
 but this can be controlled by passing a non-negative integer to
 <tt class="docutils literal"><span class="pre">extra_threads</span></tt> (a value of zero would make it run single-threaded). Note
@@ -2308,6 +2570,35 @@ vectors must be one less than their dimension.</td>
 <dt id="ntracer.tracern.dot">
 <tt class="descname">dot</tt><big>(</big><em>a</em>, <em>b</em><big>)</big> &rarr; float<a class="headerlink" href="#ntracer.tracern.dot" title="Permalink to this definition">¶</a></dt>
 <dd><p>Compute the dot product of two vectors.</p>
+</dd></dl>
+
+<dl class="data">
+<dt id="ntracer.tracern.BATCH_SIZE">
+<tt class="descname">BATCH_SIZE</tt><a class="headerlink" href="#ntracer.tracern.BATCH_SIZE" title="Permalink to this definition">¶</a></dt>
+<dd><p>The number of objects that batch objects group.</p>
+<p>On hardware that has SIMD registers, certain operations can be performed
+more efficiently if data from multiple objects is rearranged so that every
+numeric value is followed the equivalent value in the next object, up to the
+number of values that a SIMD register can hold, thus the existence of
+&#8220;batch&#8221; objects. This constant refers to the number of non-batch objects
+that a batch object is equivalent to, as well as the number of
+floating-point values that the largest SIMD register can hold. Note that
+even if run on a machine that has larger registers, the ray tracer will only
+be able to take advantage of the largest registers of the instruction set
+that this package was compiled for (when compiling from source, the latest
+instruction set that the current machine supports, is chosen by default).</p>
+<p>The source code of this package supports SSE and AVX (including AVX 512). If
+this package is compiled for an instruction set that supports neither of
+these technologies, <tt class="docutils literal"><span class="pre">BATCH_SIZE</span></tt> will be equal to <tt class="docutils literal"><span class="pre">1</span></tt>. In such a case,
+<a class="reference internal" href="#ntracer.tracern.KDLeaf" title="ntracer.tracern.KDLeaf"><tt class="xref py py-class docutils literal"><span class="pre">KDLeaf</span></tt></a> wont even support instances of <a class="reference internal" href="#ntracer.tracern.PrimitiveBatch" title="ntracer.tracern.PrimitiveBatch"><tt class="xref py py-class docutils literal"><span class="pre">PrimitiveBatch</span></tt></a>
+(passing instances of <a class="reference internal" href="#ntracer.tracern.PrimitiveBatch" title="ntracer.tracern.PrimitiveBatch"><tt class="xref py py-class docutils literal"><span class="pre">PrimitiveBatch</span></tt></a> to its constructor will
+cause and exception to be raised) so that the ray tracer can be streamlined.
+The batch classes will still exist, however, for the sake of testing
+compatibility.</p>
+<p>Most users will not have to worry about the value of <tt class="docutils literal"><span class="pre">BATCH_SIZE</span></tt> or batch
+objects since <a class="reference internal" href="#ntracer.tracern.build_composite_scene" title="ntracer.tracern.build_composite_scene"><tt class="xref py py-func docutils literal"><span class="pre">build_composite_scene()</span></tt></a> (and <a class="reference internal" href="#ntracer.tracern.build_kdtree" title="ntracer.tracern.build_kdtree"><tt class="xref py py-func docutils literal"><span class="pre">build_kdtree()</span></tt></a>)
+will automatically combine instances of <a class="reference internal" href="#ntracer.tracern.TrianglePrototype" title="ntracer.tracern.TrianglePrototype"><tt class="xref py py-class docutils literal"><span class="pre">TrianglePrototype</span></tt></a> into
+<a class="reference internal" href="#ntracer.tracern.TriangleBatchPrototype" title="ntracer.tracern.TriangleBatchPrototype"><tt class="xref py py-class docutils literal"><span class="pre">TriangleBatchPrototype</span></tt></a> when beneficial.</p>
 </dd></dl>
 
 </div>
@@ -2527,7 +2818,7 @@ to an instance of <tt class="docutils literal"><span class="pre">tracer3.Vector<
         <li class="right" >
           <a href="../nonpygame_example/" title="Using without Pygame"
              >previous</a> |</li>
-        <li><a href="../">NTracer 0.6 documentation</a> &raquo;</li> 
+        <li><a href="../">NTracer 0.7 documentation</a> &raquo;</li> 
       </ul>
     </div>
     <div class="footer">
