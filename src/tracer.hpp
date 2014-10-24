@@ -1306,14 +1306,15 @@ template<typename Store> struct solid_prototype : primitive_prototype<Store> {
     }
 };
 
-template<typename Store> struct triangle_point {
-    vector<Store> point;
-    const vector<Store> &edge_normal;
+template<typename Store,typename T> struct triangle_point {
+    vector<Store,T> point;
+    const vector<Store,T> &edge_normal;
     
-    triangle_point(const vector<Store> &point,const vector<Store> &edge_normal) : point(point), edge_normal(edge_normal) {}
+    triangle_point(const vector<Store,T> &point,const vector<Store,T> &edge_normal) : point(point), edge_normal(edge_normal) {}
+    triangle_point(vector<Store,T> &&point,const vector<Store,T> &edge_normal) : point(std::move(point)), edge_normal(edge_normal) {}
 };
 
-template<typename Store> struct triangle_prototype : primitive_prototype<Store>, flexible_struct<triangle_prototype<Store>,triangle_point<Store> > {
+template<typename Store> struct triangle_prototype : primitive_prototype<Store>, flexible_struct<triangle_prototype<Store>,triangle_point<Store,real> > {
     triangle<Store> *pt() {
         return reinterpret_cast<triangle<Store>*>(this->p.ref());
     }
@@ -1328,15 +1329,7 @@ template<typename Store> struct triangle_prototype : primitive_prototype<Store>,
     }
 };
 
-template<typename Store> struct triangle_batch_point {
-    vector<Store,v_real> point;
-    const vector<Store,v_real> &edge_normal;
-    
-    triangle_batch_point(const vector<Store,v_real> &point,const vector<Store,v_real> &edge_normal) : point(point), edge_normal(edge_normal) {}
-    triangle_batch_point(vector<Store,v_real> &&point,const vector<Store,v_real> &edge_normal) : point(std::move(point)), edge_normal(edge_normal) {}
-};
-
-template<typename Store> struct triangle_batch_prototype : primitive_prototype<Store>, flexible_struct<triangle_batch_prototype<Store>,triangle_batch_point<Store> > {
+template<typename Store> struct triangle_batch_prototype : primitive_prototype<Store>, flexible_struct<triangle_batch_prototype<Store>,triangle_point<Store,v_real> > {
     typedef typename triangle_batch_prototype::flexible_struct flexible_struct;
     
     triangle_batch<Store> *pt() {
@@ -1357,7 +1350,7 @@ template<typename Store> struct triangle_batch_prototype : primitive_prototype<S
     template<typename F> triangle_batch_prototype(int dimension,F t_prototypes) :
         primitive_prototype<Store>(t_prototypes(0)->boundary,py::new_ref(triangle_batch<Store>::from_triangles([=](int i){ return t_prototypes(i)->pt(); }))),
         flexible_struct(dimension,[=](int i) {
-            return triangle_batch_point<Store>(
+            return triangle_point<Store,v_real>(
                 deinterleave<Store,v_real::size>(dimension,[=](int j){ return t_prototypes(j)->items()[i].point; }),
                 i > 0 ? pt()->items()[i-1] : first_edge_normal);
         }),

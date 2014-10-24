@@ -147,7 +147,10 @@ namespace py {
         }
 
         ~_object_base() {
-            Py_DECREF(_ptr);
+            /* XDECREF is used instead of DECREF so that objects that were
+               allocated but not fully initialized can contain _object_base
+               instances and still be safely destroyed */
+            Py_XDECREF(_ptr);
         }
 
         void swap(_object_base &b) {
@@ -312,8 +315,21 @@ namespace py {
     inline void del(const object_item_proxy &item) {
         if(UNLIKELY(PyObject_DelItem(item._ptr,item.key) == -1)) throw py_error_set();
     }
+}
 
+inline PyObject *to_pyobject(py::new_ref r) {
+    return r._ptr;
+}
 
+inline PyObject *to_pyobject(py::borrowed_ref r) {
+    return py::incref(r._ptr);
+}
+
+inline PyObject *to_pyobject(const py::object &x) {
+    return x.new_ref();
+}
+
+namespace py {
     template<typename T> class nullable {
         PyObject *_ptr;
 
@@ -463,14 +479,12 @@ namespace py {
         explicit tuple(const _object_base &b) : _object_base(object(py::borrowed_ref(reinterpret_cast<PyObject*>(&PyTuple_Type)))(b)) {
             assert(PyTuple_Check(_ptr));
         }
-        tuple(std::initializer_list<object> ol) : tuple(ol.size()) {
-            auto li = std::begin(ol);
-            auto ti = &PyTuple_GET_ITEM(_ptr,0);
-            
-            for(; li != std::end(ol); ++li, ++ti) {
-                *ti = li->new_ref();
+        template<typename T> tuple(T start,T end) : tuple(std::distance(start,end)) {
+            for(auto ti = &PyTuple_GET_ITEM(_ptr,0); start != end; ++start, ++ti) {
+                *ti = to_pyobject(*start);
             }
         }
+        tuple(std::initializer_list<object> ol) : tuple(std::begin(ol),std::end(ol)) {}
 
         tuple &operator=(const tuple &b) {
             reset(b._ptr);
@@ -1153,18 +1167,6 @@ template<> inline py::bytes from_pyobject<py::bytes>(PyObject *o) {
             );
 
     return py::borrowed_ref(o);
-}
-
-inline PyObject *to_pyobject(py::new_ref r) {
-    return r._ptr;
-}
-
-inline PyObject *to_pyobject(py::borrowed_ref r) {
-    return py::incref(r._ptr);
-}
-
-inline PyObject *to_pyobject(py::object &x) {
-    return x.new_ref();
 }
 
 template<typename T> inline PyObject *to_pyobject(const py::pyptr<T> &x) {

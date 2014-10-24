@@ -31,11 +31,10 @@ typedef camera<module_store> n_camera;
 typedef solid_prototype<module_store> n_solid_prototype;
 typedef triangle_prototype<module_store> n_triangle_prototype;
 typedef triangle_batch_prototype<module_store> n_triangle_batch_prototype;
-typedef triangle_point<module_store> n_triangle_point;
-typedef triangle_batch_point<module_store> n_triangle_batch_point;
 typedef aabb<module_store> n_aabb;
 typedef point_light<module_store> n_point_light;
 typedef global_light<module_store> n_global_light;
+typedef vector<module_store,v_real> n_vector_batch;
 
 
 package_common package_common_data = {nullptr};
@@ -132,6 +131,7 @@ template<> struct _wrapped_type<n_ ## ROOT> { \
 
 
 SIMPLE_WRAPPER(vector);
+SIMPLE_WRAPPER(vector_batch);
 SIMPLE_WRAPPER(matrix);
 SIMPLE_WRAPPER(camera);
 
@@ -388,14 +388,14 @@ struct triangle_prototype_obj_base : py::pyobj_subclass {
     CONTAINED_PYTYPE_DEF
     PY_MEM_NEW_DELETE
     typedef n_triangle_prototype actual;
-    typedef n_triangle_point point_t;
+    typedef triangle_point<module_store,real> point_t;
 };
 
 struct triangle_batch_prototype_obj_base : py::pyobj_subclass {
     CONTAINED_PYTYPE_DEF
     PY_MEM_NEW_DELETE
     typedef n_triangle_batch_prototype actual;
-    typedef n_triangle_batch_point point_t;
+    typedef triangle_point<module_store,v_real> point_t;
 };
 
 /* Whether this object is variable-sized or not depends on whether T can vary in
@@ -484,21 +484,32 @@ template<> struct _wrapped_type<n_triangle_batch_prototype> {
 };
 
 
-struct n_detached_triangle_point {
-    n_vector point;
-    n_vector edge_normal;
+template<typename T> struct n_detatched_triangle_point {
+    vector<module_store,T> point;
+    vector<module_store,T> edge_normal;
     
-    n_detached_triangle_point(const n_triangle_point &tp) : point(tp.point), edge_normal(tp.edge_normal) {}
+    n_detatched_triangle_point(const triangle_point<module_store,T> &tp) : point(tp.point), edge_normal(tp.edge_normal) {}
 };
 
-SIMPLE_WRAPPER(detached_triangle_point);
+template<typename T> struct detatched_triangle_point_obj_base : py::pyobj_subclass {
+    CONTAINED_PYTYPE_DEF
+    PyObject_HEAD
 
-PyObject *to_pyobject(const n_triangle_point &tp) {
-    return py::ref(new wrapped_type<n_detached_triangle_point>(tp));
+    static PyGetSetDef getset[];
+};
+template<typename T> struct _wrapped_type<n_detatched_triangle_point<T> > {
+    typedef simple_py_wrapper<n_detatched_triangle_point<T>,detatched_triangle_point_obj_base<T> > type;
+};
+
+template<typename T> PyObject *to_pyobject(const triangle_point<module_store,T> &tp) {
+    return py::ref(new wrapped_type<n_detatched_triangle_point<T> >(tp));
 }
 
 constexpr char triangle_point_data_name[] = FULL_MODULE_STR ".TrianglePointData";
-typedef py::obj_array_adapter<n_triangle_point,triangle_point_data_name,false,true> obj_TrianglePointData;
+typedef py::obj_array_adapter<triangle_point<module_store,real>,triangle_point_data_name,false,true> obj_TrianglePointData;
+
+constexpr char triangle_batch_point_data_name[] = FULL_MODULE_STR ".TriangleBatchPointData";
+typedef py::obj_array_adapter<triangle_point<module_store,v_real>,triangle_batch_point_data_name,false,true> obj_TriangleBatchPointData;
 
 
 SIMPLE_WRAPPER(solid_prototype);
@@ -1911,6 +1922,41 @@ PyTypeObject vector_obj_base::_pytype = make_type_object(
     tp_new = &obj_Vector_new);
 
 
+PyObject *obj_VectorBatch_getitem(wrapped_type<n_vector_batch> *self,Py_ssize_t index) {
+    try {
+        if(index < 0 || index >= static_cast<Py_ssize_t>(v_real::size)) {
+            PyErr_SetString(PyExc_IndexError,"batch index out of range");
+            return nullptr;
+        }
+
+        return to_pyobject(interleave1<module_store,v_real::size>(self->get_base(),index));
+    } PY_EXCEPT_HANDLERS(nullptr)
+}
+
+PySequenceMethods obj_VectorBatch_sequence_methods = {
+    [](PyObject*){ return static_cast<Py_ssize_t>(v_real::size); },
+    NULL,
+    NULL,
+    reinterpret_cast<ssizeargfunc>(&obj_VectorBatch_getitem),
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL
+};
+
+PyTypeObject vector_batch_obj_base::_pytype = make_type_object(
+    FULL_MODULE_STR ".VectorBatch",
+    sizeof(wrapped_type<n_vector_batch>),
+    tp_dealloc = destructor_dealloc<wrapped_type<n_vector_batch> >::value,
+    tp_as_sequence = &obj_VectorBatch_sequence_methods,
+    tp_new = [](PyTypeObject*,PyObject*,PyObject*) -> PyObject* {
+        PyErr_SetString(PyExc_TypeError,"the VectorBatch type cannot be instantiated directly");
+        return nullptr;
+    });
+
+
 PyGetSetDef obj_Camera_getset[] = {
     {const_cast<char*>("origin"),OBJ_GETTER(wrapped_type<n_camera>,self->get_base().origin),OBJ_SETTER(wrapped_type<n_camera>,self->get_base().origin),NULL,NULL},
     {const_cast<char*>("axes"),OBJ_GETTER(wrapped_type<n_camera>,py::ref(new obj_CameraAxes(self))),NULL,NULL,NULL},
@@ -2263,6 +2309,11 @@ struct intersects_callback_t {
     }
 };
 
+void set_primitive_instead_of_proto_error() {
+    PyErr_SetString(PyExc_TypeError,
+        "Instances of Primitive cannot be used directly. Use PrimitivePrototype instead.");
+}
+
 PyObject *obj_AABB_intersects(wrapped_type<n_aabb> *self,PyObject *obj) {
     try {
         auto &base = self->get_base();
@@ -2275,13 +2326,12 @@ PyObject *obj_AABB_intersects(wrapped_type<n_aabb> *self,PyObject *obj) {
         r = try_intersects<n_solid_prototype>(base,obj,callback);
         if(r) return r;
 
-        if(PyObject_TypeCheck(obj,obj_Primitive::pytype())) {
-            PyErr_SetString(PyExc_TypeError,
-                "Instances of Primitive cannot be used directly. Use PrimitivePrototype instances instead.");
-        } else {
+        if(PyObject_TypeCheck(obj,obj_Primitive::pytype()))
+            set_primitive_instead_of_proto_error();
+        else
             PyErr_SetString(PyExc_TypeError,
                 "object must be an instance of " MODULE_STR ".PrimitivePrototype");
-        }
+
         return nullptr;
     } PY_EXCEPT_HANDLERS(nullptr)
 }
@@ -2308,13 +2358,12 @@ PyObject *obj_AABB_intersects_flat(wrapped_type<n_aabb> *self,PyObject *args,PyO
         r = try_intersects<n_triangle_batch_prototype>(base,std::get<0>(vals),callback);
         if(r) return r;
         
-        if(PyObject_TypeCheck(std::get<0>(vals),obj_Primitive::pytype())) {
-            PyErr_SetString(PyExc_TypeError,
-                "Instances of Primitive cannot be used directly. Use PrimitivePrototype instances instead.");
-        } else {
+        if(PyObject_TypeCheck(std::get<0>(vals),obj_Primitive::pytype()))
+            set_primitive_instead_of_proto_error();
+        else
             PyErr_SetString(PyExc_TypeError,
                 "object must be an instance of " MODULE_STR ".TrianglePrototype or " MODULE_STR ".TriangleBatchPrototype");
-        }
+
         return nullptr;
     } PY_EXCEPT_HANDLERS(nullptr)
 }
@@ -2418,10 +2467,10 @@ PyObject *obj_TrianglePrototype_new(PyTypeObject *type,PyObject *args,PyObject *
             
             new(&base.p) py::pyptr<obj_Primitive>(py::new_ref(obj_Triangle::from_points(points.data(),m)));
             new(&base.first_edge_normal) n_vector(dim,0);
-            new(&base.items()[0]) n_triangle_point(points[0],base.first_edge_normal);
+            new(&base.items()[0]) triangle_point<module_store,real>(points[0],base.first_edge_normal);
             
             for(int i=1; i<dim; ++i) {
-                new(&base.items()[i]) n_triangle_point(points[i],base.pt()->items()[i-1]);
+                new(&base.items()[i]) triangle_point<module_store,real>(points[i],base.pt()->items()[i-1]);
                 base.first_edge_normal -= base.pt()->items()[i-1];
             }
             
@@ -2496,14 +2545,16 @@ PyObject *obj_TriangleBatchPrototype_new(PyTypeObject *type,PyObject *args,PyObj
 
 PyGetSetDef obj_TriangleBatchPrototype_getset[] = {
     {const_cast<char*>("dimension"),OBJ_GETTER(obj_TriangleBatchPrototype,self->get_base().dimension()),NULL,NULL,NULL},
-    //{const_cast<char*>("face_normal"),OBJ_GETTER(obj_TriangleBatchPrototype,self->get_base().pt()->face_normal),NULL,NULL,NULL},
-    /*{const_cast<char*>("point_data"),OBJ_GETTER(
+    {const_cast<char*>("face_normal"),OBJ_GETTER(obj_TriangleBatchPrototype,self->get_base().pt()->face_normal),NULL,NULL,NULL},
+    {const_cast<char*>("point_data"),OBJ_GETTER(
         obj_TriangleBatchPrototype,
-        py::ref(new obj_TriangleBatchPointData(obj_self,self->get_base().dimension(),self->get_base().items()))),NULL,NULL,NULL},*/
+        py::ref(new obj_TriangleBatchPointData(obj_self,self->get_base().dimension(),self->get_base().items()))),NULL,NULL,NULL},
     {const_cast<char*>("boundary"),OBJ_GETTER(
         obj_TriangleBatchPrototype,
         py::new_ref(new wrapped_type<n_aabb>(obj_self,self->get_base().boundary))),NULL,NULL,NULL},
-    //{const_cast<char*>("material"),OBJ_GETTER(obj_TriangleBatchPrototype,self->get_base().pt()->m),NULL,NULL,NULL},
+    {const_cast<char*>("material"),OBJ_GETTER(
+        obj_TriangleBatchPrototype,
+        py::tuple(self->get_base().pt()->m,self->get_base().pt()->m+v_real::size).new_ref()),NULL,NULL,NULL},
     {const_cast<char*>("primitive"),OBJ_GETTER(obj_TriangleBatchPrototype,self->get_base().p),NULL,NULL,NULL},
     {NULL}
 };
@@ -2518,22 +2569,37 @@ PyTypeObject triangle_batch_prototype_obj_base::_pytype = make_type_object(
     tp_new = &obj_TriangleBatchPrototype_new);
 
 
-PyGetSetDef obj_TrianglePointDatum_getset[] = {
-    {const_cast<char*>("point"),OBJ_GETTER(wrapped_type<n_detached_triangle_point>,self->get_base().point),NULL,NULL,NULL},
-    {const_cast<char*>("edge_normal"),OBJ_GETTER(wrapped_type<n_detached_triangle_point>,self->get_base().edge_normal),NULL,NULL,NULL},
+template<typename T> struct obj_TrianglePointDatum_strings {};
+
+template<> struct obj_TrianglePointDatum_strings<real> {
+    static constexpr const char *mod_name = FULL_MODULE_STR ".TrianglePointDatum";
+    static PyObject *tp_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
+        PyErr_SetString(PyExc_TypeError,"The TrianglePointDatum type cannot be instantiated directly");
+        return nullptr;
+    }
+};
+
+template<> struct obj_TrianglePointDatum_strings<v_real> {
+    static constexpr const char *mod_name = FULL_MODULE_STR ".TriangleBatchPointDatum";
+    static PyObject *tp_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
+        PyErr_SetString(PyExc_TypeError,"The TriangleBatchPointDatum type cannot be instantiated directly");
+        return nullptr;
+    }
+};
+
+template<typename T> PyGetSetDef detatched_triangle_point_obj_base<T>::getset[] = {
+    {const_cast<char*>("point"),OBJ_GETTER(wrapped_type<n_detatched_triangle_point<T> >,self->get_base().point),NULL,NULL,NULL},
+    {const_cast<char*>("edge_normal"),OBJ_GETTER(wrapped_type<n_detatched_triangle_point<T> >,self->get_base().edge_normal),NULL,NULL,NULL},
     {NULL}
 };
 
-PyTypeObject detached_triangle_point_obj_base::_pytype = make_type_object(
-    FULL_MODULE_STR ".TrianglePointDatum",
-    sizeof(wrapped_type<n_detached_triangle_point>),
-    tp_dealloc = destructor_dealloc<wrapped_type<n_detached_triangle_point> >::value,
+template<typename T> PyTypeObject detatched_triangle_point_obj_base<T>::_pytype = make_type_object(
+    obj_TrianglePointDatum_strings<real>::mod_name,
+    sizeof(wrapped_type<n_detatched_triangle_point<T> >),
+    tp_dealloc = destructor_dealloc<wrapped_type<n_detatched_triangle_point<T> > >::value,
     tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_CHECKTYPES,
-    tp_getset = obj_TrianglePointDatum_getset,
-    tp_new = [](PyTypeObject *type,PyObject *args,PyObject *kwds) -> PyObject* {
-        PyErr_SetString(PyExc_TypeError,"The TrianglePointDatum type cannot be instantiated directly");
-        return nullptr;
-    });
+    tp_getset = detatched_triangle_point_obj_base<T>::getset,
+    tp_new = &obj_TrianglePointDatum_strings<real>::tp_new);
 
 
 PyObject *obj_SolidPrototype_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
@@ -2827,6 +2893,14 @@ PyObject *obj_cross(PyObject*,PyObject *arg) {
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
+obj_PrimitivePrototype *p_proto_cast(PyObject *obj) {
+    auto p = checked_py_cast<obj_PrimitivePrototype>(obj);
+
+    if(v_real::size == 1 && Py_TYPE(obj) == obj_TriangleBatchPrototype::pytype())
+        THROW_PYERR_STRING(TypeError,"instances of TriangleBatchPrototype cannot be used to construct a k-d tree when BATCH_SIZE is 1");
+    return p;
+}
+
 std::tuple<n_aabb,kd_node<module_store>*> build_kdtree(const char *func,PyObject *args,PyObject *kwds) {
     const char *names[] = {"primitives","extra_threads","max_depth","split_threshold","traversal_cost","intersection_cost"};
     
@@ -2852,7 +2926,7 @@ std::tuple<n_aabb,kd_node<module_store>*> build_kdtree(const char *func,PyObject
     proto_array<module_store> primitives;
     primitives.reserve(p_objs.size());
     
-    primitives.push_back(&checked_py_cast<obj_PrimitivePrototype>(p_objs[0].ref())->get_base());
+    primitives.push_back(&p_proto_cast(p_objs[0].ref())->get_base());
     
     int dimension = primitives[0]->dimension();
     
@@ -2873,7 +2947,7 @@ std::tuple<n_aabb,kd_node<module_store>*> build_kdtree(const char *func,PyObject
     if(intersection) kd_params.intersection = from_pyobject<real>(intersection);
     
     for(size_t i=1; i<p_objs.size(); ++i) {
-        auto p = &checked_py_cast<obj_PrimitivePrototype>(p_objs[i].ref())->get_base();
+        auto p = &p_proto_cast(p_objs[i].ref())->get_base();
         if(UNLIKELY(p->dimension() != dimension)) THROW_PYERR_STRING(TypeError,"the primitive prototypes must all have the same dimension");
         primitives.push_back(p);
     }
@@ -2960,6 +3034,7 @@ PyTypeObject *classes[] = {
     obj_KDBranch::pytype(),
     wrapped_type<py_ray_intersection>::pytype(),
     wrapped_type<n_vector>::pytype(),
+    wrapped_type<n_vector_batch>::pytype(),
     obj_MatrixProxy::pytype(),
     wrapped_type<n_camera>::pytype(),
     obj_CameraAxes::pytype(),
@@ -2967,9 +3042,11 @@ PyTypeObject *classes[] = {
     wrapped_type<n_aabb>::pytype(),
     obj_PrimitivePrototype::pytype(),
     obj_TrianglePrototype::pytype(),
-    wrapped_type<n_detached_triangle_point>::pytype(),
+    wrapped_type<n_detatched_triangle_point<real> >::pytype(),
     obj_TrianglePointData::pytype(),
     obj_TriangleBatchPrototype::pytype(),
+    wrapped_type<n_detatched_triangle_point<v_real> >::pytype(),
+    obj_TriangleBatchPointData::pytype(),
     wrapped_type<n_solid_prototype>::pytype(),
     wrapped_type<n_point_light>::pytype(),
     wrapped_type<n_global_light>::pytype(),
@@ -3049,6 +3126,8 @@ extern "C" SHARED(void) APPEND_MODULE_NAME(init)() {
     PyObject *c = PyCapsule_New(&module_constructors,"_CONSTRUCTORS",nullptr);
     if(UNLIKELY(!c)) return INIT_ERR_VAL;
     PyModule_AddObject(m,"_CONSTRUCTORS",c);
+
+    PyModule_AddIntConstant(m,"BATCH_SIZE",v_real::size);
 
 #if PY_MAJOR_VERSION >= 3
     return m;
