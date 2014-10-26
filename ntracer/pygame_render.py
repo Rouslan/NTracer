@@ -1,9 +1,12 @@
 
 import weakref
 import pygame
+import platform
 
 import ntracer.render
 
+
+IS_PYTHON3 = int(platform.python_version_tuple()[0]) >= 3
 
 def channels_from_surface(surface):
     """Create a list of :py:class:`.render.Channel` objects that match the
@@ -46,7 +49,7 @@ def channels_from_surface(surface):
     return channels
 
 
-# "Bases" is added manually instead of using :show-inheritance: because the it
+# "Bases" is added manually instead of using :show-inheritance: because it
 # doesn't link the base to its documentation for some reason
 class PygameRenderer(ntracer.render.CallbackRenderer):
     """Bases: :py:class:`.render.CallbackRenderer`
@@ -106,7 +109,9 @@ class PygameRenderer(ntracer.render.CallbackRenderer):
             self.last_channels = (py_format,channels_from_surface(surface))
 
         super(PygameRenderer,self).begin_render(
-            surface.get_view() if hasattr(surface,'get_view') else surface.get_buffer(),
+            # for some reason, get_view returns a read-only buffer under Python
+            # 2.7 on Windows with Pygame 1.9.2a0
+            surface.get_view() if IS_PYTHON3 and hasattr(surface,'get_view') else surface.get_buffer(),
             ntracer.render.ImageFormat(
                 surface.get_width(),
                 surface.get_height(),

@@ -1024,7 +1024,7 @@ namespace py {
         };
         
         template<typename Item,const char* FullName,bool GC,bool ReadOnly> struct array_adapter_set_item {
-            static int _value(PyObject *self,Py_ssize_t index,PyObject *value) {
+            FIX_STACK_ALIGN static int _value(PyObject *self,Py_ssize_t index,PyObject *value) {
                 try {
                     reinterpret_cast<obj_array_adapter<Item,FullName,GC,ReadOnly>*>(self)->data.sequence_setitem(index,from_pyobject<Item>(value));
                 } PY_EXCEPT_HANDLERS(-1)
@@ -1036,6 +1036,13 @@ namespace py {
         template<typename Item,const char* FullName,bool GC> struct array_adapter_set_item<Item,FullName,GC,true> {
             static constexpr ssizeobjargproc value = nullptr;
         };
+        
+        template<typename Item,const char* FullName,bool GC,bool ReadOnly>
+        FIX_STACK_ALIGN PyObject *array_adapter_get_item(PyObject *self,Py_ssize_t index) {
+            try {
+                return to_pyobject(reinterpret_cast<obj_array_adapter<Item,FullName,GC,ReadOnly>*>(self)->data.sequence_getitem(index));
+            } PY_EXCEPT_HANDLERS(nullptr)
+        }
     }
     
     template<typename Item,const char* FullName,bool GC,bool ReadOnly> struct obj_array_adapter : impl::array_adapter_alloc<Item,FullName,GC,ReadOnly>, pyobj_subclass {
@@ -1051,18 +1058,13 @@ namespace py {
     };
     
     template<typename Item,const char* FullName,bool GC,bool ReadOnly>
-        PySequenceMethods obj_array_adapter<Item,FullName,GC,ReadOnly>::seq_methods = {
-        
+    PySequenceMethods obj_array_adapter<Item,FullName,GC,ReadOnly>::seq_methods = {
         [](PyObject *self) {
             return reinterpret_cast<obj_array_adapter<Item,FullName,GC,ReadOnly>*>(self)->data.length();
         },
         NULL,
         NULL,
-        [](PyObject *self,Py_ssize_t index) -> PyObject* {
-            try {
-                return to_pyobject(reinterpret_cast<obj_array_adapter<Item,FullName,GC,ReadOnly>*>(self)->data.sequence_getitem(index));
-            } PY_EXCEPT_HANDLERS(nullptr)
-        },
+        &impl::array_adapter_get_item<Item,FullName,GC,ReadOnly>,
         NULL,
         impl::array_adapter_set_item<Item,FullName,GC,ReadOnly>::value,
         NULL,

@@ -580,7 +580,7 @@ template<> n_vector from_pyobject<n_vector>(PyObject *o) {
 
 
 
-PyObject *obj_BoxScene_set_camera(obj_BoxScene *self,PyObject *arg) {
+FIX_STACK_ALIGN PyObject *obj_BoxScene_set_camera(obj_BoxScene *self,PyObject *arg) {
     try {
         ensure_unlocked(self);
         
@@ -595,7 +595,7 @@ PyObject *obj_BoxScene_set_camera(obj_BoxScene *self,PyObject *arg) {
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
-PyObject *obj_BoxScene_get_camera(obj_BoxScene *self,PyObject *) {
+FIX_STACK_ALIGN PyObject *obj_BoxScene_get_camera(obj_BoxScene *self,PyObject *) {
     try {
         return to_pyobject(self->base.cam);
     } PY_EXCEPT_HANDLERS(nullptr)
@@ -616,7 +616,7 @@ PyMethodDef obj_BoxScene_methods[] = {
     {NULL}
 };
 
-PyObject *obj_BoxScene_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
+FIX_STACK_ALIGN PyObject *obj_BoxScene_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
     auto ptr = reinterpret_cast<obj_BoxScene*>(type->tp_alloc(type,0));
     if(ptr) {
         try {
@@ -663,7 +663,7 @@ PyTypeObject obj_BoxScene::_pytype = make_type_object(
     tp_new = &obj_BoxScene_new);
 
 
-PyObject *obj_CompositeScene_set_camera(obj_CompositeScene *self,PyObject *arg) {
+FIX_STACK_ALIGN PyObject *obj_CompositeScene_set_camera(obj_CompositeScene *self,PyObject *arg) {
     try {
         ensure_unlocked(self);
         
@@ -678,13 +678,13 @@ PyObject *obj_CompositeScene_set_camera(obj_CompositeScene *self,PyObject *arg) 
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
-PyObject *obj_CompositeScene_get_camera(obj_CompositeScene *self,PyObject *) {
+FIX_STACK_ALIGN PyObject *obj_CompositeScene_get_camera(obj_CompositeScene *self,PyObject *) {
     try {
         return to_pyobject(self->get_base().cam);
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
-PyObject *obj_CompositeScene_set_ambient(obj_CompositeScene *self,PyObject *arg) {
+FIX_STACK_ALIGN PyObject *obj_CompositeScene_set_ambient(obj_CompositeScene *self,PyObject *arg) {
     try {
         ensure_unlocked(self);
         read_color(self->get_base().ambient,arg);
@@ -697,7 +697,7 @@ template<typename T> T &light_compat_check(const composite_scene<module_store> &
     return light;
 }
 
-PyObject *obj_CompositeScene_add_light(obj_CompositeScene *self,PyObject *arg) {
+FIX_STACK_ALIGN PyObject *obj_CompositeScene_add_light(obj_CompositeScene *self,PyObject *arg) {
     try {
         ensure_unlocked(self);
         auto &base = self->get_base();
@@ -712,7 +712,7 @@ PyObject *obj_CompositeScene_add_light(obj_CompositeScene *self,PyObject *arg) {
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
-PyObject *obj_CompositeScene_set_background(obj_CompositeScene *self,PyObject *args,PyObject *kwds) {
+FIX_STACK_ALIGN PyObject *obj_CompositeScene_set_background(obj_CompositeScene *self,PyObject *args,PyObject *kwds) {
     try {
         ensure_unlocked(self);
         auto &base = self->get_base();
@@ -775,7 +775,7 @@ PyMethodDef obj_CompositeScene_methods[] = {
     {NULL}
 };
 
-PyObject *obj_CompositeScene_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
+FIX_STACK_ALIGN PyObject *obj_CompositeScene_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
     auto ptr = type->tp_alloc(type,0);
     if(ptr) {
         try {
@@ -816,16 +816,40 @@ PyObject *new_obj_node(PyObject *parent,kd_node<module_store> *node,int dimensio
     return py::ref(new obj_KDBranch(py::borrowed_ref(parent),static_cast<kd_branch<module_store>*>(node),dimension));
 }
 
+FIX_STACK_ALIGN PyObject *obj_CompositeScene_get_ambient_color(obj_CompositeScene *self,void*) {
+    try {
+        return to_pyobject(self->get_base().ambient);
+    } PY_EXCEPT_HANDLERS(nullptr)
+}
+
+FIX_STACK_ALIGN PyObject *obj_CompositeScene_get_bg1(obj_CompositeScene *self,void*) {
+    try {
+        return to_pyobject(self->get_base().bg1);
+    } PY_EXCEPT_HANDLERS(nullptr)
+}
+
+FIX_STACK_ALIGN PyObject *obj_CompositeScene_get_bg2(obj_CompositeScene *self,void*) {
+    try {
+        return to_pyobject(self->get_base().bg2);
+    } PY_EXCEPT_HANDLERS(nullptr)
+}
+
+FIX_STACK_ALIGN PyObject *obj_CompositeScene_get_bg3(obj_CompositeScene *self,void*) {
+    try {
+        return to_pyobject(self->get_base().bg3);
+    } PY_EXCEPT_HANDLERS(nullptr)
+}
+
 PyGetSetDef obj_CompositeScene_getset[] = {
     {const_cast<char*>("locked"),OBJ_GETTER(obj_CompositeScene,self->get_base().locked),NULL,NULL,NULL},
     {const_cast<char*>("fov"),OBJ_GETTER(obj_CompositeScene,self->get_base().fov),NULL,NULL,NULL},
     {const_cast<char*>("max_reflect_depth"),OBJ_GETTER(obj_CompositeScene,self->get_base().max_reflect_depth),NULL,NULL,NULL},
     {const_cast<char*>("shadows"),OBJ_GETTER(obj_CompositeScene,self->get_base().shadows),NULL,NULL,NULL},
     {const_cast<char*>("camera_light"),OBJ_GETTER(obj_CompositeScene,self->get_base().camera_light),NULL,NULL,NULL},
-    {const_cast<char*>("ambient_color"),OBJ_GETTER(obj_CompositeScene,self->get_base().ambient),NULL,NULL,NULL},
-    {const_cast<char*>("bg1"),OBJ_GETTER(obj_CompositeScene,self->get_base().bg1),NULL,NULL,NULL},
-    {const_cast<char*>("bg2"),OBJ_GETTER(obj_CompositeScene,self->get_base().bg2),NULL,NULL,NULL},
-    {const_cast<char*>("bg3"),OBJ_GETTER(obj_CompositeScene,self->get_base().bg3),NULL,NULL,NULL},
+    {const_cast<char*>("ambient_color"),reinterpret_cast<getter>(&obj_CompositeScene_get_ambient_color),NULL,NULL,NULL},
+    {const_cast<char*>("bg1"),reinterpret_cast<getter>(&obj_CompositeScene_get_bg1),NULL,NULL,NULL},
+    {const_cast<char*>("bg2"),reinterpret_cast<getter>(&obj_CompositeScene_get_bg2),NULL,NULL,NULL},
+    {const_cast<char*>("bg3"),reinterpret_cast<getter>(&obj_CompositeScene_get_bg3),NULL,NULL,NULL},
     {const_cast<char*>("bg_gradient_axis"),OBJ_GETTER(obj_CompositeScene,self->get_base().bg_gradient_axis),NULL,NULL,NULL},
     {const_cast<char*>("boundary"),OBJ_GETTER(
         obj_CompositeScene,
@@ -860,32 +884,36 @@ void check_index(const n_camera &c,Py_ssize_t index) {
     if(index < 0 || index >= c.dimension()) THROW_PYERR_STRING(IndexError,"index out of range");
 }
 
+FIX_STACK_ALIGN PyObject *obj_CameraAxes_getitem(PyObject *self,Py_ssize_t index) {
+    try {
+        auto &base = reinterpret_cast<obj_CameraAxes*>(self)->base->get_base();
+        check_index(base,index);
+        return to_pyobject(n_vector(base.t_orientation[index]));
+    } PY_EXCEPT_HANDLERS(nullptr)
+}
+
+FIX_STACK_ALIGN int obj_CameraAxes_setitem(PyObject *self,Py_ssize_t index,PyObject *value) {
+    if(UNLIKELY(!value)) {
+        PyErr_SetString(PyExc_TypeError,"items of CameraAxes cannot be deleted");
+        return -1;
+    }
+    try {
+        auto &base = reinterpret_cast<obj_CameraAxes*>(self)->base->get_base();
+        check_index(base,index);
+        base.t_orientation[index] = from_pyobject<n_vector>(value);
+        return 0;
+    } PY_EXCEPT_HANDLERS(-1)
+}
+
 PySequenceMethods obj_CameraAxes_sequence_methods = {
     [](PyObject *self) -> Py_ssize_t {
         return reinterpret_cast<obj_CameraAxes*>(self)->base->get_base().dimension();
     },
     NULL,
     NULL,
-    [](PyObject *self,Py_ssize_t index) -> PyObject* {
-        try {
-            auto &base = reinterpret_cast<obj_CameraAxes*>(self)->base->get_base();
-            check_index(base,index);
-            return to_pyobject(n_vector(base.t_orientation[index]));
-        } PY_EXCEPT_HANDLERS(nullptr)
-    },
+    &obj_CameraAxes_getitem,
     NULL,
-    [](PyObject *self,Py_ssize_t index,PyObject *value) -> int {
-        if(UNLIKELY(!value)) {
-            PyErr_SetString(PyExc_TypeError,"items of CameraAxes cannot be deleted");
-            return -1;
-        }
-        try {
-            auto &base = reinterpret_cast<obj_CameraAxes*>(self)->base->get_base();
-            check_index(base,index);
-            base.t_orientation[index] = from_pyobject<n_vector>(value);
-            return 0;
-        } PY_EXCEPT_HANDLERS(-1)
-    },
+    &obj_CameraAxes_setitem,
     NULL,
     NULL,
     NULL,
@@ -909,7 +937,7 @@ void check_origin_dir_compat(const n_vector &o,const n_vector &d) {
         THROW_PYERR_STRING(TypeError,"\"origin\" and \"direction\" must have the same dimension");
 }
 
-PyObject *obj_Primitive_intersects(primitive<module_store> *self,PyObject *args,PyObject *kwds) {
+FIX_STACK_ALIGN PyObject *obj_Primitive_intersects(primitive<module_store> *self,PyObject *args,PyObject *kwds) {
     try {
         auto vals = get_arg::get_args("Primitive.intersects",args,kwds,
             param<n_vector>("origin"),
@@ -942,7 +970,7 @@ PyTypeObject obj_Primitive::_pytype = make_type_object(
     });
 
 
-PyObject *obj_PrimitiveBatch_intersects(primitive_batch<module_store> *self,PyObject *args,PyObject *kwds) {
+FIX_STACK_ALIGN PyObject *obj_PrimitiveBatch_intersects(primitive_batch<module_store> *self,PyObject *args,PyObject *kwds) {
     try {
         auto vals = get_arg::get_args("PrimitiveBatch.intersects",args,kwds,
             param<n_vector>("origin"),
@@ -996,7 +1024,7 @@ template<> solid_type from_pyobject<solid_type>(PyObject *o) {
     return static_cast<solid_type>(t);
 }
 
-PyObject *obj_Solid_reduce(obj_Solid *self,PyObject*) {
+FIX_STACK_ALIGN PyObject *obj_Solid_reduce(obj_Solid *self,PyObject*) {
     try {
         return (*package_common_data.solid_reduce)(
             self->dimension(),
@@ -1013,7 +1041,7 @@ PyMethodDef obj_Solid_methods[] = {
     {NULL}
 };
 
-PyObject *obj_Solid_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
+FIX_STACK_ALIGN PyObject *obj_Solid_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
     try {
         const char *names[] = {"type","position","orientation","material"};
         get_arg ga(args,kwds,names,"Solid.__new__");
@@ -1030,11 +1058,29 @@ PyObject *obj_Solid_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
+FIX_STACK_ALIGN PyObject *obj_Solid_get_orientation(obj_Solid *self,void*) {
+    try {
+        return to_pyobject(self->orientation);
+    } PY_EXCEPT_HANDLERS(nullptr)
+}
+
+FIX_STACK_ALIGN PyObject *obj_Solid_get_inv_orientation(obj_Solid *self,void*) {
+    try {
+        return to_pyobject(self->inv_orientation);
+    } PY_EXCEPT_HANDLERS(nullptr)
+}
+
+FIX_STACK_ALIGN PyObject *obj_Solid_get_position(obj_Solid *self,void*) {
+    try {
+        return to_pyobject(self->position);
+    } PY_EXCEPT_HANDLERS(nullptr)
+}
+
 PyGetSetDef obj_Solid_getset[] = {
     {const_cast<char*>("type"),OBJ_GETTER(obj_Solid,int(self->type)),NULL,NULL,NULL},
-    {const_cast<char*>("orientation"),OBJ_GETTER(obj_Solid,self->orientation),NULL,NULL,NULL},
-    {const_cast<char*>("inv_orientation"),OBJ_GETTER(obj_Solid,self->inv_orientation),NULL,NULL,NULL},
-    {const_cast<char*>("position"),OBJ_GETTER(obj_Solid,self->position),NULL,NULL,NULL},
+    {const_cast<char*>("orientation"),reinterpret_cast<getter>(&obj_Solid_get_orientation),NULL,NULL,NULL},
+    {const_cast<char*>("inv_orientation"),reinterpret_cast<getter>(&obj_Solid_get_inv_orientation),NULL,NULL,NULL},
+    {const_cast<char*>("position"),reinterpret_cast<getter>(&obj_Solid_get_position),NULL,NULL,NULL},
     {const_cast<char*>("dimension"),OBJ_GETTER(obj_Solid,self->dimension()),NULL,NULL,NULL},
     {NULL}
 };
@@ -1071,7 +1117,7 @@ std::vector<n_vector,simd::allocator<n_vector> > points_for_triangle(PyObject *o
     return points;
 }
 
-PyObject *obj_Triangle_from_points(PyObject*,PyObject *args,PyObject *kwds) {
+FIX_STACK_ALIGN PyObject *obj_Triangle_from_points(PyObject*,PyObject *args,PyObject *kwds) {
     try {
         const char *names[] = {"points","material"};
         get_arg ga(args,kwds,names,"Triangle.from_points");
@@ -1083,7 +1129,7 @@ PyObject *obj_Triangle_from_points(PyObject*,PyObject *args,PyObject *kwds) {
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
-PyObject *obj_Triangle_reduce(obj_Triangle *self,PyObject*) {
+FIX_STACK_ALIGN PyObject *obj_Triangle_reduce(obj_Triangle *self,PyObject*) {
     try {
         struct item_size {
             static constexpr int get(int d) { return d+1; }
@@ -1106,7 +1152,7 @@ PyMethodDef obj_Triangle_methods[] = {
     {NULL}
 };
 
-PyObject *obj_Triangle_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
+FIX_STACK_ALIGN PyObject *obj_Triangle_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
     const char dim_err[] = "all supplied vectors must have the same dimension";
 
     try {
@@ -1143,7 +1189,7 @@ PyObject *obj_Triangle_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
-PyObject *obj_Triangle_getedges(obj_Triangle *self,void *) {
+FIX_STACK_ALIGN PyObject *obj_Triangle_get_edges(obj_Triangle *self,void*) {
     try {
         return py::ref(new obj_FrozenVectorView(
             py::ref(self),
@@ -1152,11 +1198,17 @@ PyObject *obj_Triangle_getedges(obj_Triangle *self,void *) {
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
+FIX_STACK_ALIGN PyObject *obj_Triangle_get_face_normal(obj_Triangle *self,void*) {
+    try {
+        return to_pyobject(self->face_normal);
+    } PY_EXCEPT_HANDLERS(nullptr)
+}
+
 PyGetSetDef obj_Triangle_getset[] = {
     {const_cast<char*>("dimension"),OBJ_GETTER(obj_Triangle,self->dimension()),NULL,NULL,NULL},
     {const_cast<char*>("p1"),OBJ_GETTER(obj_Triangle,self->p1),NULL,NULL,NULL},
-    {const_cast<char*>("face_normal"),OBJ_GETTER(obj_Triangle,self->face_normal),NULL,NULL,NULL},
-    {const_cast<char*>("edge_normals"),reinterpret_cast<getter>(&obj_Triangle_getedges),NULL,NULL,NULL},
+    {const_cast<char*>("face_normal"),reinterpret_cast<getter>(&obj_Triangle_get_face_normal),NULL,NULL,NULL},
+    {const_cast<char*>("edge_normals"),reinterpret_cast<getter>(&obj_Triangle_get_edges),NULL,NULL,NULL},
     {NULL}
 };
 
@@ -1180,7 +1232,7 @@ PyTypeObject triangle_obj_common::_pytype = make_type_object(
     tp_free = &obj_Triangle::operator delete);
 
 
-PyObject *obj_TriangleBatch_sequence_getitem(obj_TriangleBatch *self,Py_ssize_t index) {
+FIX_STACK_ALIGN PyObject *obj_TriangleBatch_sequence_getitem(obj_TriangleBatch *self,Py_ssize_t index) {
     try {
         if(UNLIKELY(index < 0 || index >= static_cast<Py_ssize_t>(v_real::size))) {
             PyErr_SetString(PyExc_IndexError,"index out of range");
@@ -1207,7 +1259,7 @@ PySequenceMethods obj_TriangleBatch_sequence_methods = {
     NULL
 };
 
-PyObject *obj_TriangleBatch_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
+FIX_STACK_ALIGN PyObject *obj_TriangleBatch_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
     try {
         auto arg = std::get<0>(get_arg::get_args("TriangleBatch.__new__",args,kwds,
             param("triangles")));
@@ -1274,7 +1326,7 @@ void set_target(intersection_target<module_store,true> &t,PyObject *p,int index)
     else bad_target();
 }
 
-PyObject *kdnode_intersects(obj_KDNode *self,PyObject *args,PyObject *kwds) {
+FIX_STACK_ALIGN PyObject *kdnode_intersects(obj_KDNode *self,PyObject *args,PyObject *kwds) {
     try {
         assert(self->_data->type == LEAF || self->_data->type == BRANCH);
         
@@ -1319,7 +1371,7 @@ PyObject *kdnode_intersects(obj_KDNode *self,PyObject *args,PyObject *kwds) {
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
-PyObject *kdnode_occludes(obj_KDNode *self,PyObject *args,PyObject *kwds) {
+FIX_STACK_ALIGN PyObject *kdnode_occludes(obj_KDNode *self,PyObject *args,PyObject *kwds) {
     try {
         assert(self->_data->type == LEAF || self->_data->type == BRANCH);
         
@@ -1419,7 +1471,7 @@ inline kd_leaf<module_store,true> *create_kd_leaf(Py_ssize_t size,py::tuple prim
         });
 }
 
-PyObject *obj_KDLeaf_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
+FIX_STACK_ALIGN PyObject *obj_KDLeaf_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
     auto ptr = reinterpret_cast<obj_KDLeaf*>(type->tp_alloc(type,0));
     if(!ptr) return nullptr;
     
@@ -1484,7 +1536,7 @@ obj_KDNode* acceptable_node(PyObject *obj) {
     return node;
 }
 
-PyObject *obj_KDBranch_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
+FIX_STACK_ALIGN PyObject *obj_KDBranch_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
     auto ptr = reinterpret_cast<obj_KDBranch*>(type->tp_alloc(type,0));
     if(ptr) {
         try {
@@ -1548,10 +1600,22 @@ PyTypeObject obj_KDBranch::_pytype = make_type_object(
     tp_new = &obj_KDBranch_new);
 
 
+FIX_STACK_ALIGN PyObject *obj_RayIntersection_get_origin(wrapped_type<py_ray_intersection> *self,void*) {
+    try {
+        return to_pyobject(self->get_base().origin);
+    } PY_EXCEPT_HANDLERS(nullptr)
+}
+
+FIX_STACK_ALIGN PyObject *obj_RayIntersection_get_normal(wrapped_type<py_ray_intersection> *self,void*) {
+    try {
+        return to_pyobject(self->get_base().normal);
+    } PY_EXCEPT_HANDLERS(nullptr)
+}
+
 PyGetSetDef obj_RayIntersection_getset[] = {
     {const_cast<char*>("dist"),OBJ_GETTER(wrapped_type<py_ray_intersection>,self->get_base().dist),NULL,NULL,NULL},
-    {const_cast<char*>("origin"),OBJ_GETTER(wrapped_type<py_ray_intersection>,self->get_base().origin),NULL,NULL,NULL},
-    {const_cast<char*>("normal"),OBJ_GETTER(wrapped_type<py_ray_intersection>,self->get_base().normal),NULL,NULL,NULL},
+    {const_cast<char*>("origin"),reinterpret_cast<getter>(&obj_RayIntersection_get_origin),NULL,NULL,NULL},
+    {const_cast<char*>("normal"),reinterpret_cast<getter>(&obj_RayIntersection_get_normal),NULL,NULL,NULL},
     {const_cast<char*>("primitive"),OBJ_GETTER(wrapped_type<py_ray_intersection>,self->get_base().p),NULL,NULL,NULL},
     {const_cast<char*>("batch_index"),OBJ_GETTER(wrapped_type<py_ray_intersection>,self->get_base().index),NULL,NULL,NULL},
     {NULL}
@@ -1634,7 +1698,7 @@ PyObject *obj_Vector_repr(wrapped_type<n_vector> *self) {
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
-PyObject *obj_Vector_richcompare(wrapped_type<n_vector> *self,PyObject *arg,int op) {
+FIX_STACK_ALIGN PyObject *obj_Vector_richcompare(wrapped_type<n_vector> *self,PyObject *arg,int op) {
     if(op == Py_EQ || op == Py_NE) {
         auto &base = self->get_base();
         auto b = get_base_if_is_type<n_vector>(arg);
@@ -1646,19 +1710,19 @@ PyObject *obj_Vector_richcompare(wrapped_type<n_vector> *self,PyObject *arg,int 
     return Py_NotImplemented;
 }
 
-PyObject *obj_Vector___neg__(wrapped_type<n_vector> *self) {
+FIX_STACK_ALIGN PyObject *obj_Vector___neg__(wrapped_type<n_vector> *self) {
     try {
         return to_pyobject(-self->get_base());
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
-PyObject *obj_Vector___abs__(wrapped_type<n_vector> *self) {
+FIX_STACK_ALIGN PyObject *obj_Vector___abs__(wrapped_type<n_vector> *self) {
     try {
         return to_pyobject(self->get_base().absolute());
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
-PyObject *obj_Vector___add__(PyObject *a,PyObject *b) {
+FIX_STACK_ALIGN PyObject *obj_Vector___add__(PyObject *a,PyObject *b) {
     n_vector *va, *vb;
     
     try {
@@ -1674,7 +1738,7 @@ PyObject *obj_Vector___add__(PyObject *a,PyObject *b) {
     return Py_NotImplemented;
 }
 
-PyObject *obj_Vector___sub__(PyObject *a,PyObject *b) {
+FIX_STACK_ALIGN PyObject *obj_Vector___sub__(PyObject *a,PyObject *b) {
     n_vector *va, *vb;
     
     try {
@@ -1690,7 +1754,7 @@ PyObject *obj_Vector___sub__(PyObject *a,PyObject *b) {
     return Py_NotImplemented;
 }
 
-PyObject *obj_Vector___mul__(PyObject *a,PyObject *b) {
+FIX_STACK_ALIGN PyObject *obj_Vector___mul__(PyObject *a,PyObject *b) {
     try {
         auto va = get_base_if_is_type<n_vector>(a);
         
@@ -1705,7 +1769,7 @@ PyObject *obj_Vector___mul__(PyObject *a,PyObject *b) {
     return Py_NotImplemented;
 }
 
-PyObject *obj_Vector___div__(PyObject *a,PyObject *b) {
+FIX_STACK_ALIGN PyObject *obj_Vector___div__(PyObject *a,PyObject *b) {
     try {
         auto va = get_base_if_is_type<n_vector>(a);
         
@@ -1773,7 +1837,7 @@ void v_index_check(const n_vector &v,Py_ssize_t index) {
     if(index < 0 || index >= v.dimension()) THROW_PYERR_STRING(IndexError,"vector index out of range");
 }
 
-PyObject *obj_Vector___sequence_getitem__(wrapped_type<n_vector> *self,Py_ssize_t index) {
+FIX_STACK_ALIGN PyObject *obj_Vector___sequence_getitem__(wrapped_type<n_vector> *self,Py_ssize_t index) {
     try {
         auto &v = self->get_base();
         v_index_check(v,index);
@@ -1794,11 +1858,11 @@ PySequenceMethods obj_Vector_sequence_methods = {
     NULL
 };
 
-PyObject *obj_Vector_square(wrapped_type<n_vector> *self,PyObject *) {
+FIX_STACK_ALIGN PyObject *obj_Vector_square(wrapped_type<n_vector> *self,PyObject *) {
     return to_pyobject(self->get_base().square());
 }
 
-PyObject *obj_Vector_axis(PyObject*,PyObject *args,PyObject *kwds) {
+FIX_STACK_ALIGN PyObject *obj_Vector_axis(PyObject*,PyObject *args,PyObject *kwds) {
     try {
         auto vals = get_arg::get_args("Vector.axis",args,kwds,
             param<int>("dimension"),
@@ -1814,17 +1878,17 @@ PyObject *obj_Vector_axis(PyObject*,PyObject *args,PyObject *kwds) {
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
-PyObject *obj_Vector_absolute(wrapped_type<n_vector> *self,PyObject *) {
+FIX_STACK_ALIGN PyObject *obj_Vector_absolute(wrapped_type<n_vector> *self,PyObject *) {
     return to_pyobject(self->get_base().absolute());
 }
 
-PyObject *obj_Vector_unit(wrapped_type<n_vector> *self,PyObject *) {
+FIX_STACK_ALIGN PyObject *obj_Vector_unit(wrapped_type<n_vector> *self,PyObject *) {
     try {
         return to_pyobject(self->get_base().unit());
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
-PyObject *obj_Vector_apply(wrapped_type<n_vector> *_self,PyObject *_func) {
+FIX_STACK_ALIGN PyObject *obj_Vector_apply(wrapped_type<n_vector> *_self,PyObject *_func) {
     try {
         auto &self = _self->get_base();
         
@@ -1838,7 +1902,7 @@ PyObject *obj_Vector_apply(wrapped_type<n_vector> *_self,PyObject *_func) {
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
-PyObject *obj_Vector_set_c(wrapped_type<n_vector> *self,PyObject *args,PyObject *kwds) {
+FIX_STACK_ALIGN PyObject *obj_Vector_set_c(wrapped_type<n_vector> *self,PyObject *args,PyObject *kwds) {
     try {
         auto &v = self->get_base();
 
@@ -1855,7 +1919,7 @@ PyObject *obj_Vector_set_c(wrapped_type<n_vector> *self,PyObject *args,PyObject 
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
-PyObject *obj_Vector_reduce(wrapped_type<n_vector> *self,PyObject*) {
+FIX_STACK_ALIGN PyObject *obj_Vector_reduce(wrapped_type<n_vector> *self,PyObject*) {
     try {
         auto &v = self->get_base();
         return (*package_common_data.vector_reduce)(v.dimension(),v.data());
@@ -1875,7 +1939,7 @@ PyMethodDef obj_Vector_methods[] = {
     {NULL}
 };
 
-PyObject *obj_Vector_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
+FIX_STACK_ALIGN PyObject *obj_Vector_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
     try {
         const char *names[] = {"dimension","values"};
         get_arg ga(args,kwds,names,"Vector.__new__");
@@ -1922,7 +1986,7 @@ PyTypeObject vector_obj_base::_pytype = make_type_object(
     tp_new = &obj_Vector_new);
 
 
-PyObject *obj_VectorBatch_getitem(wrapped_type<n_vector_batch> *self,Py_ssize_t index) {
+FIX_STACK_ALIGN PyObject *obj_VectorBatch_getitem(wrapped_type<n_vector_batch> *self,Py_ssize_t index) {
     try {
         if(index < 0 || index >= static_cast<Py_ssize_t>(v_real::size)) {
             PyErr_SetString(PyExc_IndexError,"batch index out of range");
@@ -1957,28 +2021,41 @@ PyTypeObject vector_batch_obj_base::_pytype = make_type_object(
     });
 
 
+FIX_STACK_ALIGN PyObject *obj_Camera_get_origin(wrapped_type<n_camera> *self,void*) {
+    try {
+        return to_pyobject(self->get_base().origin);
+    } PY_EXCEPT_HANDLERS(nullptr)
+}
+FIX_STACK_ALIGN int obj_Camera_set_origin(wrapped_type<n_camera> *self,PyObject *arg,void*) {
+    try {
+        setter_no_delete(arg);
+        self->get_base().origin = from_pyobject<n_vector>(arg);
+        return 0;
+    } PY_EXCEPT_HANDLERS(-1)
+}
+
 PyGetSetDef obj_Camera_getset[] = {
-    {const_cast<char*>("origin"),OBJ_GETTER(wrapped_type<n_camera>,self->get_base().origin),OBJ_SETTER(wrapped_type<n_camera>,self->get_base().origin),NULL,NULL},
+    {const_cast<char*>("origin"),reinterpret_cast<getter>(&obj_Camera_get_origin),reinterpret_cast<setter>(obj_Camera_set_origin),NULL,NULL},
     {const_cast<char*>("axes"),OBJ_GETTER(wrapped_type<n_camera>,py::ref(new obj_CameraAxes(self))),NULL,NULL,NULL},
     {const_cast<char*>("dimension"),OBJ_GETTER(wrapped_type<n_camera>,self->get_base().dimension()),NULL,NULL,NULL},
     {NULL}
 };
 
-PyObject *obj_Camera_normalize(wrapped_type<n_camera> *self,PyObject *) {
+FIX_STACK_ALIGN PyObject *obj_Camera_normalize(wrapped_type<n_camera> *self,PyObject *) {
     try {
         self->get_base().normalize();
         Py_RETURN_NONE;
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
-PyObject *obj_Camera_translate(wrapped_type<n_camera> *self,PyObject *arg) {
+FIX_STACK_ALIGN PyObject *obj_Camera_translate(wrapped_type<n_camera> *self,PyObject *arg) {
     try {
         self->get_base().translate(from_pyobject<n_vector>(arg));
         Py_RETURN_NONE;
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
-PyObject *obj_Camera_transform(wrapped_type<n_camera> *self,PyObject *arg) {
+FIX_STACK_ALIGN PyObject *obj_Camera_transform(wrapped_type<n_camera> *self,PyObject *arg) {
     try {
         self->get_base().transform(get_base<n_matrix>(arg));
         Py_RETURN_NONE;
@@ -1992,7 +2069,7 @@ PyMethodDef obj_Camera_methods[] = {
     {NULL}
 };
 
-PyObject *obj_Camera_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
+FIX_STACK_ALIGN PyObject *obj_Camera_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
     try {
         int dimension = std::get<0>(get_arg::get_args("Camera.__new__",args,kwds,param<int>("dimension")));
         
@@ -2005,7 +2082,7 @@ PyObject *obj_Camera_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
-int obj_Camera_init(wrapped_type<n_camera> *self,PyObject *args,PyObject *kwds) {
+FIX_STACK_ALIGN int obj_Camera_init(wrapped_type<n_camera> *self,PyObject *args,PyObject *kwds) {
     auto &base = self->get_base();
 
     for(int i=0; i<base.dimension()*base.dimension(); ++i) base.t_orientation.data()[i] = 0;
@@ -2024,7 +2101,7 @@ PyTypeObject camera_obj_base::_pytype = make_type_object(
     tp_new = &obj_Camera_new);
 
 
-PyObject *obj_Matrix___mul__(PyObject *a,PyObject *b) {
+FIX_STACK_ALIGN PyObject *obj_Matrix___mul__(PyObject *a,PyObject *b) {
     try {
         if(PyObject_TypeCheck(a,wrapped_type<n_matrix>::pytype())) {
             auto &base = reinterpret_cast<wrapped_type<n_matrix>*>(a)->get_base();
@@ -2064,7 +2141,7 @@ Py_ssize_t obj_Matrix___sequence_len__(wrapped_type<n_matrix> *self) {
     return self->get_base().dimension();
 }
 
-PyObject *obj_Matrix___sequence_getitem__(wrapped_type<n_matrix> *self,Py_ssize_t index) {
+FIX_STACK_ALIGN PyObject *obj_Matrix___sequence_getitem__(wrapped_type<n_matrix> *self,Py_ssize_t index) {
     try {
         auto &base = self->get_base();
 
@@ -2089,13 +2166,13 @@ PySequenceMethods obj_Matrix_sequence_methods = {
     NULL
 };
 
-PyObject *obj_Matrix_reflection(PyObject*,PyObject *arg) {
+FIX_STACK_ALIGN PyObject *obj_Matrix_reflection(PyObject*,PyObject *arg) {
     try {
         return to_pyobject(n_matrix::reflection(from_pyobject<n_vector>(arg)));
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
-PyObject *obj_Matrix_scale(PyObject*,PyObject *args) {
+FIX_STACK_ALIGN PyObject *obj_Matrix_scale(PyObject*,PyObject *args) {
     try {
         if(PyTuple_GET_SIZE(args) == 1) {
             if(PyObject_TypeCheck(PyTuple_GET_ITEM(args,0),wrapped_type<n_vector>::pytype())) {
@@ -2117,7 +2194,7 @@ PyObject *obj_Matrix_scale(PyObject*,PyObject *args) {
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
-PyObject *obj_Matrix_rotation(PyObject*,PyObject *args,PyObject *kwds) {
+FIX_STACK_ALIGN PyObject *obj_Matrix_rotation(PyObject*,PyObject *args,PyObject *kwds) {
     try {
         auto vals = get_arg::get_args("Matrix.rotation",args,kwds,
             param<n_vector>("a"),
@@ -2133,7 +2210,7 @@ PyObject *obj_Matrix_rotation(PyObject*,PyObject *args,PyObject *kwds) {
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
-PyObject *obj_Matrix_identity(PyObject*,PyObject *arg) {
+FIX_STACK_ALIGN PyObject *obj_Matrix_identity(PyObject*,PyObject *arg) {
     try {
         int dimension = from_pyobject<int>(arg);
         check_dimension(dimension);
@@ -2141,13 +2218,13 @@ PyObject *obj_Matrix_identity(PyObject*,PyObject *arg) {
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
-PyObject *obj_Matrix_determinant(wrapped_type<n_matrix> *self,PyObject*) {
+FIX_STACK_ALIGN PyObject *obj_Matrix_determinant(wrapped_type<n_matrix> *self,PyObject*) {
     try {
         return to_pyobject(self->get_base().determinant());
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
-PyObject *obj_Matrix_inverse(wrapped_type<n_matrix> *self,PyObject*) {
+FIX_STACK_ALIGN PyObject *obj_Matrix_inverse(wrapped_type<n_matrix> *self,PyObject*) {
     try {
         return to_pyobject(self->get_base().inverse());
     } catch(std::domain_error &e) {
@@ -2156,13 +2233,13 @@ PyObject *obj_Matrix_inverse(wrapped_type<n_matrix> *self,PyObject*) {
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
-PyObject *obj_Matrix_transpose(wrapped_type<n_matrix> *self,PyObject*) {
+FIX_STACK_ALIGN PyObject *obj_Matrix_transpose(wrapped_type<n_matrix> *self,PyObject*) {
     try {
         return to_pyobject(self->get_base().transpose());
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
-PyObject *obj_Matrix_reduce(wrapped_type<n_matrix> *self,PyObject*) {
+FIX_STACK_ALIGN PyObject *obj_Matrix_reduce(wrapped_type<n_matrix> *self,PyObject*) {
     try {
         auto &m = self->get_base();
         return (*package_common_data.matrix_reduce)(m.dimension(),m.data());
@@ -2191,7 +2268,7 @@ void copy_row(n_matrix &m,py::object values,int row,int len) {
     itr.finished();
 }
 
-PyObject *obj_Matrix_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
+FIX_STACK_ALIGN PyObject *obj_Matrix_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
     try {
         const char *names[] = {"dimension","values"};
         get_arg ga(args,kwds,names,"Matrix.__new__");
@@ -2253,7 +2330,7 @@ PyTypeObject matrix_obj_base::_pytype = make_type_object(
     tp_new = &obj_Matrix_new);
 
 
-PyObject *aabb_split(wrapped_type<n_aabb> *self,PyObject *args,PyObject *kwds,bool right) {
+FIX_STACK_ALIGN PyObject *aabb_split(wrapped_type<n_aabb> *self,PyObject *args,PyObject *kwds,bool right) {
     wrapped_type<n_aabb> *r;
     int axis;
     real split;
@@ -2314,7 +2391,7 @@ void set_primitive_instead_of_proto_error() {
         "Instances of Primitive cannot be used directly. Use PrimitivePrototype instead.");
 }
 
-PyObject *obj_AABB_intersects(wrapped_type<n_aabb> *self,PyObject *obj) {
+FIX_STACK_ALIGN PyObject *obj_AABB_intersects(wrapped_type<n_aabb> *self,PyObject *obj) {
     try {
         auto &base = self->get_base();
         intersects_callback_t callback;
@@ -2344,7 +2421,7 @@ struct intersects_flat_callback_t {
     }
 };
 
-PyObject *obj_AABB_intersects_flat(wrapped_type<n_aabb> *self,PyObject *args,PyObject *kwds) {
+FIX_STACK_ALIGN PyObject *obj_AABB_intersects_flat(wrapped_type<n_aabb> *self,PyObject *args,PyObject *kwds) {
     try {
         auto vals = get_arg::get_args("AABB.intersects_flat",args,kwds,
             param("primitive"),
@@ -2376,7 +2453,7 @@ PyMethodDef obj_AABB_methods[] = {
     {NULL}
 };
 
-PyObject *obj_AABB_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
+FIX_STACK_ALIGN PyObject *obj_AABB_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
     auto ptr = type->tp_alloc(type,0);
     if(!ptr) return nullptr;
     
@@ -2415,10 +2492,22 @@ PyObject *obj_AABB_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
     return ptr;
 }
 
+FIX_STACK_ALIGN PyObject *obj_AABB_get_start(wrapped_type<n_aabb> *self,void*) {
+    try {
+        return to_pyobject(self->get_base().start);
+    } PY_EXCEPT_HANDLERS(nullptr)
+}
+
+FIX_STACK_ALIGN PyObject *obj_AABB_get_end(wrapped_type<n_aabb> *self,void*) {
+    try {
+        return to_pyobject(self->get_base().end);
+    } PY_EXCEPT_HANDLERS(nullptr)
+}
+
 PyGetSetDef obj_AABB_getset[] = {
     {const_cast<char*>("dimension"),OBJ_GETTER(wrapped_type<n_aabb>,self->get_base().dimension()),NULL,NULL,NULL},
-    {const_cast<char*>("start"),OBJ_GETTER(wrapped_type<n_aabb>,self->get_base().start),NULL,NULL,NULL},
-    {const_cast<char*>("end"),OBJ_GETTER(wrapped_type<n_aabb>,self->get_base().end),NULL,NULL,NULL},
+    {const_cast<char*>("start"),reinterpret_cast<getter>(&obj_AABB_get_start),NULL,NULL,NULL},
+    {const_cast<char*>("end"),reinterpret_cast<getter>(&obj_AABB_get_end),NULL,NULL,NULL},
     {NULL}
 };
 
@@ -2440,7 +2529,7 @@ PyTypeObject obj_PrimitivePrototype::_pytype = make_type_object(
     });
 
 
-PyObject *obj_TrianglePrototype_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
+FIX_STACK_ALIGN PyObject *obj_TrianglePrototype_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
     try {
         const char *names[] = {"points","material"};
         get_arg ga(args,kwds,names,"TrianglePrototype.__new__");
@@ -2482,9 +2571,15 @@ PyObject *obj_TrianglePrototype_new(PyTypeObject *type,PyObject *args,PyObject *
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
+FIX_STACK_ALIGN PyObject *obj_TrianglePrototype_get_face_normal(obj_TrianglePrototype *self,void*) {
+    try {
+        return to_pyobject(self->get_base().pt()->face_normal);
+    } PY_EXCEPT_HANDLERS(nullptr)
+}
+
 PyGetSetDef obj_TrianglePrototype_getset[] = {
     {const_cast<char*>("dimension"),OBJ_GETTER(obj_TrianglePrototype,self->get_base().dimension()),NULL,NULL,NULL},
-    {const_cast<char*>("face_normal"),OBJ_GETTER(obj_TrianglePrototype,self->get_base().pt()->face_normal),NULL,NULL,NULL},
+    {const_cast<char*>("face_normal"),reinterpret_cast<getter>(&obj_TrianglePrototype_get_face_normal),NULL,NULL,NULL},
     {const_cast<char*>("point_data"),OBJ_GETTER(
         obj_TrianglePrototype,
         py::ref(new obj_TrianglePointData(obj_self,self->get_base().dimension(),self->get_base().items()))),NULL,NULL,NULL},
@@ -2506,7 +2601,7 @@ PyTypeObject triangle_prototype_obj_base::_pytype = make_type_object(
     tp_new = &obj_TrianglePrototype_new);
 
 
-PyObject *obj_TriangleBatchPrototype_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
+FIX_STACK_ALIGN PyObject *obj_TriangleBatchPrototype_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
     try {
         auto arg = std::get<0>(get_arg::get_args("TriangleBatchPrototype.__new__",args,kwds,
             param("t_prototypes")));
@@ -2543,9 +2638,15 @@ PyObject *obj_TriangleBatchPrototype_new(PyTypeObject *type,PyObject *args,PyObj
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
+FIX_STACK_ALIGN PyObject *obj_TriangleBatchPrototype_get_face_normal(obj_TriangleBatchPrototype *self,void*) {
+    try {
+        return to_pyobject(self->get_base().pt()->face_normal);
+    } PY_EXCEPT_HANDLERS(nullptr)
+}
+
 PyGetSetDef obj_TriangleBatchPrototype_getset[] = {
     {const_cast<char*>("dimension"),OBJ_GETTER(obj_TriangleBatchPrototype,self->get_base().dimension()),NULL,NULL,NULL},
-    {const_cast<char*>("face_normal"),OBJ_GETTER(obj_TriangleBatchPrototype,self->get_base().pt()->face_normal),NULL,NULL,NULL},
+    {const_cast<char*>("face_normal"),reinterpret_cast<getter>(&obj_TriangleBatchPrototype_get_face_normal),NULL,NULL,NULL},
     {const_cast<char*>("point_data"),OBJ_GETTER(
         obj_TriangleBatchPrototype,
         py::ref(new obj_TriangleBatchPointData(obj_self,self->get_base().dimension(),self->get_base().items()))),NULL,NULL,NULL},
@@ -2587,12 +2688,25 @@ template<> struct obj_TrianglePointDatum_strings<v_real> {
     }
 };
 
+template<typename T> FIX_STACK_ALIGN PyObject *obj_TrianglePointDatum_get_point(wrapped_type<n_detatched_triangle_point<T> > *self,void*) {
+    try {
+        return to_pyobject(self->get_base().point);
+    } PY_EXCEPT_HANDLERS(nullptr)
+}
+
+template<typename T> FIX_STACK_ALIGN PyObject *obj_TrianglePointDatum_get_edge_normal(wrapped_type<n_detatched_triangle_point<T> > *self,void*) {
+    try {
+        return to_pyobject(self->get_base().edge_normal);
+    } PY_EXCEPT_HANDLERS(nullptr)
+}
+
 template<typename T> PyGetSetDef detatched_triangle_point_obj_base<T>::getset[] = {
-    {const_cast<char*>("point"),OBJ_GETTER(wrapped_type<n_detatched_triangle_point<T> >,self->get_base().point),NULL,NULL,NULL},
-    {const_cast<char*>("edge_normal"),OBJ_GETTER(wrapped_type<n_detatched_triangle_point<T> >,self->get_base().edge_normal),NULL,NULL,NULL},
+    {const_cast<char*>("point"),reinterpret_cast<getter>(&obj_TrianglePointDatum_get_point<T>),NULL,NULL,NULL},
+    {const_cast<char*>("edge_normal"),reinterpret_cast<getter>(&obj_TrianglePointDatum_get_edge_normal<T>),NULL,NULL,NULL},
     {NULL}
 };
 
+// Note: due to a bug in GCC 4.7, lambda functions cannot be used here
 template<typename T> PyTypeObject detatched_triangle_point_obj_base<T>::_pytype = make_type_object(
     obj_TrianglePointDatum_strings<real>::mod_name,
     sizeof(wrapped_type<n_detatched_triangle_point<T> >),
@@ -2602,7 +2716,7 @@ template<typename T> PyTypeObject detatched_triangle_point_obj_base<T>::_pytype 
     tp_new = &obj_TrianglePointDatum_strings<real>::tp_new);
 
 
-PyObject *obj_SolidPrototype_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
+FIX_STACK_ALIGN PyObject *obj_SolidPrototype_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
     auto ptr = type->tp_alloc(type,0);
     if(!ptr) return nullptr;
     
@@ -2654,12 +2768,30 @@ PyObject *obj_SolidPrototype_new(PyTypeObject *type,PyObject *args,PyObject *kwd
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
+FIX_STACK_ALIGN PyObject *obj_SolidPrototype_get_orientation(wrapped_type<n_solid_prototype> *self,void*) {
+    try {
+        return to_pyobject(self->get_base().ps()->orientation);
+    } PY_EXCEPT_HANDLERS(nullptr)
+}
+
+FIX_STACK_ALIGN PyObject *obj_SolidPrototype_get_inv_orientation(wrapped_type<n_solid_prototype> *self,void*) {
+    try {
+        return to_pyobject(self->get_base().ps()->inv_orientation);
+    } PY_EXCEPT_HANDLERS(nullptr)
+}
+
+FIX_STACK_ALIGN PyObject *obj_SolidPrototype_get_position(wrapped_type<n_solid_prototype> *self,void*) {
+    try {
+        return to_pyobject(self->get_base().ps()->position);
+    } PY_EXCEPT_HANDLERS(nullptr)
+}
+
 PyGetSetDef obj_SolidPrototype_getset[] = {
     {const_cast<char*>("dimension"),OBJ_GETTER(wrapped_type<n_solid_prototype>,self->get_base().dimension()),NULL,NULL,NULL},
     {const_cast<char*>("type"),OBJ_GETTER(wrapped_type<n_solid_prototype>,self->get_base().ps()->type),NULL,NULL,NULL},
-    {const_cast<char*>("orientation"),OBJ_GETTER(wrapped_type<n_solid_prototype>,self->get_base().ps()->orientation),NULL,NULL,NULL},
-    {const_cast<char*>("inv_orientation"),OBJ_GETTER(wrapped_type<n_solid_prototype>,self->get_base().ps()->inv_orientation),NULL,NULL,NULL},
-    {const_cast<char*>("position"),OBJ_GETTER(wrapped_type<n_solid_prototype>,self->get_base().ps()->position),NULL,NULL,NULL},
+    {const_cast<char*>("orientation"),reinterpret_cast<getter>(&obj_SolidPrototype_get_orientation),NULL,NULL,NULL},
+    {const_cast<char*>("inv_orientation"),reinterpret_cast<getter>(&obj_SolidPrototype_get_inv_orientation),NULL,NULL,NULL},
+    {const_cast<char*>("position"),reinterpret_cast<getter>(&obj_SolidPrototype_get_position),NULL,NULL,NULL},
     {const_cast<char*>("material"),OBJ_GETTER(wrapped_type<n_solid_prototype>,self->get_base().ps()->m),NULL,NULL,NULL},
     {const_cast<char*>("boundary"),OBJ_GETTER(
         wrapped_type<n_solid_prototype>,
@@ -2677,7 +2809,7 @@ PyTypeObject solid_prototype_obj_base::_pytype = make_type_object(
     tp_new = &obj_SolidPrototype_new);
 
 
-PyObject *obj_PointLight_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
+FIX_STACK_ALIGN PyObject *obj_PointLight_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
     auto ptr = type->tp_alloc(type,0);
     if(!ptr) return nullptr;
     
@@ -2702,9 +2834,21 @@ PyObject *obj_PointLight_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
+FIX_STACK_ALIGN PyObject *obj_PointLight_get_position(wrapped_type<n_point_light> *self,void*) {
+    try {
+        return to_pyobject(self->get_base().position);
+    } PY_EXCEPT_HANDLERS(nullptr)
+}
+
+FIX_STACK_ALIGN PyObject *obj_PointLight_get_color(wrapped_type<n_point_light> *self,void*) {
+    try {
+        return to_pyobject(self->get_base().c);
+    } PY_EXCEPT_HANDLERS(nullptr)
+}
+
 PyGetSetDef obj_PointLight_getset[] = {
-    {const_cast<char*>("position"),OBJ_GETTER(wrapped_type<n_point_light>,self->get_base().position),NULL,NULL,NULL},
-    {const_cast<char*>("color"),OBJ_GETTER(wrapped_type<n_point_light>,self->get_base().c),NULL,NULL,NULL},
+    {const_cast<char*>("position"),reinterpret_cast<getter>(&obj_PointLight_get_position),NULL,NULL,NULL},
+    {const_cast<char*>("color"),reinterpret_cast<getter>(&obj_PointLight_get_color),NULL,NULL,NULL},
     {const_cast<char*>("dimension"),OBJ_GETTER(wrapped_type<n_point_light>,self->get_base().dimension()),NULL,NULL,NULL},
     {NULL}
 };
@@ -2718,7 +2862,7 @@ PyTypeObject point_light_obj_base::_pytype = make_type_object(
     tp_new = &obj_PointLight_new);
 
 
-PyObject *obj_GlobalLight_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
+FIX_STACK_ALIGN PyObject *obj_GlobalLight_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
     auto ptr = type->tp_alloc(type,0);
     if(!ptr) return nullptr;
     
@@ -2741,9 +2885,21 @@ PyObject *obj_GlobalLight_new(PyTypeObject *type,PyObject *args,PyObject *kwds) 
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
+FIX_STACK_ALIGN PyObject *obj_GlobalLight_get_direction(wrapped_type<n_global_light> *self,void*) {
+    try {
+        return to_pyobject(self->get_base().direction);
+    } PY_EXCEPT_HANDLERS(nullptr)
+}
+
+FIX_STACK_ALIGN PyObject *obj_GlobalLight_get_color(wrapped_type<n_global_light> *self,void*) {
+    try {
+        return to_pyobject(self->get_base().c);
+    } PY_EXCEPT_HANDLERS(nullptr)
+}
+
 PyGetSetDef obj_GlobalLight_getset[] = {
-    {const_cast<char*>("direction"),OBJ_GETTER(wrapped_type<n_global_light>,self->get_base().direction),NULL,NULL,NULL},
-    {const_cast<char*>("color"),OBJ_GETTER(wrapped_type<n_global_light>,self->get_base().c),NULL,NULL,NULL},
+    {const_cast<char*>("direction"),reinterpret_cast<getter>(&obj_GlobalLight_get_direction),NULL,NULL,NULL},
+    {const_cast<char*>("color"),reinterpret_cast<getter>(&obj_GlobalLight_get_color),NULL,NULL,NULL},
     {const_cast<char*>("dimension"),OBJ_GETTER(wrapped_type<n_global_light>,self->get_base().dimension()),NULL,NULL,NULL},
     {NULL}
 };
@@ -2765,14 +2921,14 @@ template<typename T> Py_ssize_t cs_light_list_len(cs_light_list<T> *self) {
     return static_cast<Py_ssize_t>(T::value(self->parent.get()).size());
 }
 
-template<typename T> PyObject *cs_light_list_getitem(cs_light_list<T> *self,Py_ssize_t index) {
+template<typename T> FIX_STACK_ALIGN PyObject *cs_light_list_getitem(cs_light_list<T> *self,Py_ssize_t index) {
     try {
         check_index(self,index);
         return to_pyobject(T::value(self->parent.get())[index]);
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
-template<typename T> int cs_light_list_setitem(cs_light_list<T> *self,Py_ssize_t index,PyObject *value) {
+template<typename T> FIX_STACK_ALIGN int cs_light_list_setitem(cs_light_list<T> *self,Py_ssize_t index,PyObject *value) {
     try {
         ensure_unlocked(self->parent);
         check_index(self,index);
@@ -2803,7 +2959,7 @@ template<typename T> PySequenceMethods cs_light_list<T>::sequence_methods = {
     NULL
 };
 
-template<typename T> PyObject *cs_light_list_append(cs_light_list<T> *self,PyObject *arg) {
+template<typename T> FIX_STACK_ALIGN PyObject *cs_light_list_append(cs_light_list<T> *self,PyObject *arg) {
     try {
         ensure_unlocked(self->parent);
         T::value(self->parent.get()).push_back(light_compat_check(self->parent->cast_base(),get_base<typename T::item_t>(arg)));
@@ -2811,7 +2967,7 @@ template<typename T> PyObject *cs_light_list_append(cs_light_list<T> *self,PyObj
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
-template<typename T> PyObject *cs_light_list_extend(cs_light_list<T> *self,PyObject *arg) {
+template<typename T> FIX_STACK_ALIGN PyObject *cs_light_list_extend(cs_light_list<T> *self,PyObject *arg) {
     try {
         ensure_unlocked(self->parent);
         
@@ -2853,7 +3009,7 @@ template<typename T> PyTypeObject cs_light_list<T>::_pytype = make_type_object(
     tp_new = &cs_light_list_new<T>);
 
 
-PyObject *obj_dot(PyObject*,PyObject *args,PyObject *kwds) {
+FIX_STACK_ALIGN PyObject *obj_dot(PyObject*,PyObject *args,PyObject *kwds) {
     try {
         auto vals = get_arg::get_args("dot",args,kwds,
             param<n_vector>("a"),
@@ -2868,7 +3024,7 @@ PyObject *obj_dot(PyObject*,PyObject *args,PyObject *kwds) {
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
-PyObject *obj_cross(PyObject*,PyObject *arg) {
+FIX_STACK_ALIGN PyObject *obj_cross(PyObject*,PyObject *arg) {
     try {
         auto vs = collect<n_vector>(arg);
         
@@ -2955,7 +3111,7 @@ std::tuple<n_aabb,kd_node<module_store>*> build_kdtree(const char *func,PyObject
     return build_kdtree<module_store>(primitives,extra_threads,kd_params);
 }
 
-PyObject *obj_build_kdtree(PyObject*,PyObject *args,PyObject *kwds) {
+FIX_STACK_ALIGN PyObject *obj_build_kdtree(PyObject*,PyObject *args,PyObject *kwds) {
     try {
         auto vals = build_kdtree("build_kdtree",args,kwds);
         py::object root{py::new_ref(new_obj_node(nullptr,std::get<1>(vals),std::get<0>(vals).dimension()))};
@@ -2963,7 +3119,7 @@ PyObject *obj_build_kdtree(PyObject*,PyObject *args,PyObject *kwds) {
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
-PyObject *obj_build_composite_scene(PyObject*,PyObject *args,PyObject *kwds) {
+FIX_STACK_ALIGN PyObject *obj_build_composite_scene(PyObject*,PyObject *args,PyObject *kwds) {
     try {
         auto vals = build_kdtree("build_composite_scene",args,kwds);
         return py::ref(new obj_CompositeScene(std::get<0>(vals),std::get<1>(vals)));
@@ -3082,11 +3238,11 @@ PyModuleDef module_def = {
     NULL
 };
 
-extern "C" SHARED(PyObject) * APPEND_MODULE_NAME(PyInit_)() {
+extern "C" FIX_STACK_ALIGN SHARED(PyObject) * APPEND_MODULE_NAME(PyInit_)() {
 #else
 #define INIT_ERR_VAL
 
-extern "C" SHARED(void) APPEND_MODULE_NAME(init)() {
+extern "C" FIX_STACK_ALIGN SHARED(void) APPEND_MODULE_NAME(init)() {
 #endif
     using namespace py;
 

@@ -40,6 +40,12 @@ namespace std {
 
   #define RESTRICT __restrict__
 
+  #if (defined(__SSE__) || defined(__AVX__)) && !defined(__x86_64__)
+    #define FIX_STACK_ALIGN __attribute__((force_align_arg_pointer))
+  #else
+    #define FIX_STACK_ALIGN
+  #endif
+
   #if defined(__GNUC_GNU_INLINE__) && !defined(__clang__)
     #define FORCE_INLINE inline __attribute__((gnu_inline,always_inline))
   #else
@@ -52,6 +58,8 @@ namespace std {
   #define ASSUME(X) (void)0
 
   #define RESTRICT
+
+  #define FIX_STACK_ALIGN
 
   #if defined(_MSC_VER)
     #define FORCE_INLINE __forceinline

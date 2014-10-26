@@ -10,7 +10,7 @@ const char *init_on_derived_msg = "__init__ cannot be used directly on a derived
 const char *not_implemented_msg = "This method is not implemented";
 
 
-#if PY_MAJOR_VERSION < 3 || (PY_MARJOR_VERSION == 3 && PY_MINOR_VERSION < 3)
+#if PY_MAJOR_VERSION < 3 || (PY_MAJOR_VERSION == 3 && PY_MINOR_VERSION < 3)
 Py_ssize_t PyObject_LengthHint(PyObject *o,Py_ssize_t defaultlen) {
     Py_ssize_t r = PyObject_Size(o);
     if(r >= 0) return r;

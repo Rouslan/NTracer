@@ -1880,14 +1880,13 @@ can't add a tuple and a :py:class:`Vector` together).
     that this package was compiled for (when compiling from source, the latest
     instruction set that the current machine supports, is chosen by default).
     
-    The source code of this package supports SSE and AVX (including AVX 512). If
-    this package is compiled for an instruction set that supports neither of
-    these technologies, ``BATCH_SIZE`` will be equal to ``1``. In such a case,
-    :py:class:`KDLeaf` wont even support instances of :py:class:`PrimitiveBatch`
-    (passing instances of :py:class:`PrimitiveBatch` to its constructor will
-    cause and exception to be raised) so that the ray tracer can be streamlined.
-    The batch classes will still exist, however, for the sake of testing
-    compatibility.
+    The source code of this package supports SSE and AVX. If this package is
+    compiled for an instruction set that supports neither of these technologies,
+    ``BATCH_SIZE`` will be equal to ``1``. In such a case, :py:class:`KDLeaf`
+    wont even support instances of :py:class:`PrimitiveBatch` (passing instances
+    of :py:class:`PrimitiveBatch` to its constructor will cause and exception to
+    be raised) so that the ray tracer can be streamlined. The batch classes will
+    still exist, however, for the sake of testing compatibility.
     
     Most users will not have to worry about the value of ``BATCH_SIZE`` or batch
     objects since :py:func:`build_composite_scene` (and :py:func:`build_kdtree`)

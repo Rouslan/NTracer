@@ -20,7 +20,7 @@
 #define FULL_MODULE_STR "ntracer.render"
 
 #define SIMPLE_WRAPPER(ROOT) \
-struct ROOT ## _obj_base { \
+struct ROOT ## _obj_base : py::pyobj_subclass { \
     CONTAINED_PYTYPE_DEF \
     PyObject_HEAD \
 }; \
@@ -72,18 +72,18 @@ struct instance_data_t {
 };
 
 #if PY_MAJOR_VERSION >= 3
-inline instance_data_t &get_instance_data(PyObject *mod) {
-    return *reinterpret_cast<instance_data_t*>(PyModule_GetState(mod));
+inline instance_data_t *get_instance_data(PyObject *mod) {
+    return reinterpret_cast<instance_data_t*>(PyModule_GetState(mod));
 }
 #else
 instance_data_t instance_data;
 
-inline instance_data_t &get_instance_data(PyObject*) {
-    return instance_data;
+inline instance_data_t *get_instance_data(PyObject*) {
+    return &instance_data;
 }
 #endif
 
-instance_data_t &get_instance_data();
+instance_data_t *get_instance_data();
 
 
 class already_running_error : public std::exception {
@@ -172,14 +172,14 @@ struct image_format {
 
 SIMPLE_WRAPPER(image_format);
 
-struct obj_ChannelList {
+struct obj_ChannelList : py::pyobj_subclass {
     CONTAINED_PYTYPE_DEF
     PY_MEM_NEW_DELETE
     PyObject_HEAD
     py::pyptr<wrapped_type<image_format> > parent;
     
-    obj_ChannelList(wrapped_type<image_format> *parent) : parent(py::borrowed_ref(reinterpret_cast<PyObject*>(parent))) {
-        PyObject_Init(reinterpret_cast<PyObject*>(this),pytype());
+    obj_ChannelList(wrapped_type<image_format> *parent) : parent(py::borrowed_ref(parent)) {
+        PyObject_Init(py::ref(this),pytype());
     }
 };
 
@@ -207,7 +207,7 @@ void im_set_channels(image_format &im,PyObject *arg) {
     im.bytes_per_pixel = (bits + 7) / 8;
 }
 
-PyObject *obj_ImageFormat_set_channels(wrapped_type<image_format> *self,PyObject *arg) {
+FIX_STACK_ALIGN PyObject *obj_ImageFormat_set_channels(wrapped_type<image_format> *self,PyObject *arg) {
     try{
         im_set_channels(self->get_base(),arg);
         
@@ -223,7 +223,7 @@ PyMethodDef obj_ImageFormat_methods[] = {
 PyGetSetDef obj_ImageFormat_getset[] = {
     {const_cast<char*>("channels"),OBJ_GETTER(
         wrapped_type<image_format>,
-        reinterpret_cast<PyObject*>(new obj_ChannelList(self))),NULL,NULL,NULL},
+        py::ref(new obj_ChannelList(self))),NULL,NULL,NULL},
     {NULL}
 };
 
@@ -289,7 +289,7 @@ Py_ssize_t obj_ChannelList_len(obj_ChannelList *self) {
     return static_cast<Py_ssize_t>(self->parent->get_base().channels.size());
 }
 
-PyObject *obj_ChannelList_getitem(obj_ChannelList *self,Py_ssize_t index) {
+FIX_STACK_ALIGN PyObject *obj_ChannelList_getitem(obj_ChannelList *self,Py_ssize_t index) {
     try {
         check_index(self,index);
         return to_pyobject(self->parent->get_base().channels[index]);
@@ -370,7 +370,7 @@ struct callback_renderer_obj_base {
     CONTAINED_PYTYPE_DEF
 };
 
-template<typename Base> struct obj_Renderer : Base {
+template<typename Base> struct obj_Renderer : Base, py::pyobj_subclass {
     PyObject_HEAD
     storage_mode mode;
     
@@ -381,7 +381,7 @@ template<typename Base> struct obj_Renderer : Base {
     
     ~obj_Renderer() {
         Py_XDECREF(idict);
-        if(weaklist) PyObject_ClearWeakRefs(reinterpret_cast<PyObject*>(this));
+        if(weaklist) PyObject_ClearWeakRefs(py::ref(this));
     }
     
     typename Base::type &cast_base() {
@@ -471,7 +471,7 @@ void worker_draw(renderer &r) {
     }
 }
 
-void callback_worker(obj_CallbackRenderer *self) {
+FIX_STACK_ALIGN void callback_worker(obj_CallbackRenderer *self) {
     callback_renderer &r = self->base;
     
     if(!r.busy_threads) {
@@ -559,7 +559,7 @@ callback_renderer::~callback_renderer() {
 }
 
 
-PyObject *obj_Scene_calculate_color(obj_Scene *self,PyObject *args,PyObject *kwds) {
+FIX_STACK_ALIGN PyObject *obj_Scene_calculate_color(obj_Scene *self,PyObject *args,PyObject *kwds) {
     try {
         auto &sc = self->get_base();
         
@@ -601,7 +601,7 @@ PyTypeObject obj_Scene::_pytype = make_type_object(
     });
 
 
-template<typename T> void obj_Renderer_dealloc(wrapped_type<T> *self) {
+template<typename T> FIX_STACK_ALIGN void obj_Renderer_dealloc(wrapped_type<T> *self) {
     switch(self->mode) {
     case CONTAINS:
         self->~wrapped_type<T>();
@@ -609,10 +609,10 @@ template<typename T> void obj_Renderer_dealloc(wrapped_type<T> *self) {
 
     default:
         Py_XDECREF(self->idict);
-        if(self->weaklist) PyObject_ClearWeakRefs(reinterpret_cast<PyObject*>(self));
+        if(self->weaklist) PyObject_ClearWeakRefs(py::ref(self));
         break;
     }
-    Py_TYPE(self)->tp_free(reinterpret_cast<PyObject*>(self));
+    Py_TYPE(self)->tp_free(py::ref(self));
 }
 
 void get_writable_buffer(PyObject *obj,Py_buffer &buff) {
@@ -636,7 +636,7 @@ void get_writable_buffer(PyObject *obj,Py_buffer &buff) {
 #endif
 }
 
-PyObject *obj_CallbackRenderer_begin_render(obj_CallbackRenderer *self,PyObject *args,PyObject *kwds) {
+FIX_STACK_ALIGN PyObject *obj_CallbackRenderer_begin_render(obj_CallbackRenderer *self,PyObject *args,PyObject *kwds) {
     try {
         callback_renderer &r = self->get_base();
         
@@ -684,7 +684,7 @@ PyObject *obj_CallbackRenderer_begin_render(obj_CallbackRenderer *self,PyObject 
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
-PyObject *obj_CallbackRenderer_abort_render(obj_CallbackRenderer *self,PyObject*) {
+FIX_STACK_ALIGN PyObject *obj_CallbackRenderer_abort_render(obj_CallbackRenderer *self,PyObject*) {
     try {
         callback_renderer &r = self->get_base();
         
@@ -712,7 +712,7 @@ PyMethodDef obj_CallbackRenderer_methods[] = {
     {NULL}
 };
 
-int obj_CallbackRenderer_init(obj_CallbackRenderer *self,PyObject *args,PyObject *kwds) {
+FIX_STACK_ALIGN int obj_CallbackRenderer_init(obj_CallbackRenderer *self,PyObject *args,PyObject *kwds) {
     switch(self->mode) {
     case CONTAINS:
         self->base.~callback_renderer();
@@ -831,7 +831,7 @@ blocking_renderer::~blocking_renderer() {
     }
 }
 
-PyObject *obj_BlockingRenderer_render(obj_BlockingRenderer *self,PyObject *args,PyObject *kwds) {
+FIX_STACK_ALIGN PyObject *obj_BlockingRenderer_render(obj_BlockingRenderer *self,PyObject *args,PyObject *kwds) {
     try {
         auto &r = self->get_base();
         
@@ -886,7 +886,7 @@ PyObject *obj_BlockingRenderer_render(obj_BlockingRenderer *self,PyObject *args,
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
-PyObject *obj_BlockingRenderer_signal_abort(obj_BlockingRenderer *self,PyObject*) {
+FIX_STACK_ALIGN PyObject *obj_BlockingRenderer_signal_abort(obj_BlockingRenderer *self,PyObject*) {
     try {
         auto &r = self->get_base();
         
@@ -906,7 +906,7 @@ PyMethodDef obj_BlockingRenderer_methods[] = {
     {NULL}
 };
 
-int obj_BlockingRenderer_init(obj_BlockingRenderer *self,PyObject *args,PyObject *kwds) {
+FIX_STACK_ALIGN int obj_BlockingRenderer_init(obj_BlockingRenderer *self,PyObject *args,PyObject *kwds) {
     switch(self->mode) {
     case CONTAINS:
         self->base.~blocking_renderer();
@@ -964,7 +964,7 @@ PyObject *obj_Color_repr(wrapped_type<color> *self) {
     return r;
 }
 
-PyObject *obj_Color_richcompare(wrapped_type<color> *self,PyObject *arg,int op) {
+FIX_STACK_ALIGN PyObject *obj_Color_richcompare(wrapped_type<color> *self,PyObject *arg,int op) {
     color *cb = get_base_if_is_type<color>(arg);
     
     if((op == Py_EQ || op == Py_NE) && cb) {
@@ -975,13 +975,13 @@ PyObject *obj_Color_richcompare(wrapped_type<color> *self,PyObject *arg,int op) 
     return Py_NotImplemented;
 }
 
-PyObject *obj_Color___neg__(wrapped_type<color> *self) {
+FIX_STACK_ALIGN PyObject *obj_Color___neg__(wrapped_type<color> *self) {
     try {
         return to_pyobject(-self->get_base());
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
-PyObject *obj_Color___add__(PyObject *a,PyObject *b) {
+FIX_STACK_ALIGN PyObject *obj_Color___add__(PyObject *a,PyObject *b) {
     color *ca, *cb;
     
     if((ca = get_base_if_is_type<color>(a)) && (cb = get_base_if_is_type<color>(b))) {
@@ -992,7 +992,7 @@ PyObject *obj_Color___add__(PyObject *a,PyObject *b) {
     return Py_NotImplemented;
 }
 
-PyObject *obj_Color___sub__(PyObject *a,PyObject *b) {
+FIX_STACK_ALIGN PyObject *obj_Color___sub__(PyObject *a,PyObject *b) {
     color *ca, *cb;
     
     if((ca = get_base_if_is_type<color>(a)) && (cb = get_base_if_is_type<color>(b))) {
@@ -1003,7 +1003,7 @@ PyObject *obj_Color___sub__(PyObject *a,PyObject *b) {
     return Py_NotImplemented;
 }
 
-PyObject *obj_Color___mul__(PyObject *a,PyObject *b) {
+FIX_STACK_ALIGN PyObject *obj_Color___mul__(PyObject *a,PyObject *b) {
     color *ca, *cb;
  
     if((ca = get_base_if_is_type<color>(a))) {
@@ -1018,7 +1018,7 @@ PyObject *obj_Color___mul__(PyObject *a,PyObject *b) {
     return Py_NotImplemented;
 }
 
-PyObject *obj_Color___div__(PyObject *a,PyObject *b) {
+FIX_STACK_ALIGN PyObject *obj_Color___div__(PyObject *a,PyObject *b) {
     color *ca, *cb;
  
     if((ca = get_base_if_is_type<color>(a))) {
@@ -1080,15 +1080,11 @@ PyNumberMethods obj_Color_number_methods = {
     NULL
 };
 
-Py_ssize_t obj_Color___sequence_len__(PyObject *self) {
-    return 3;
-}
-
 void c_index_check(Py_ssize_t index) {
     if(index < 0 || index >= 3) THROW_PYERR_STRING(IndexError,"color index out of range");
 }
 
-PyObject *obj_Color___sequence_getitem__(wrapped_type<color> *self,Py_ssize_t index) {
+FIX_STACK_ALIGN PyObject *obj_Color___sequence_getitem__(wrapped_type<color> *self,Py_ssize_t index) {
     try {
         auto &c = self->get_base();
         c_index_check(index);
@@ -1109,7 +1105,7 @@ PySequenceMethods obj_Color_sequence_methods = {
     NULL
 };
 
-PyObject *obj_Color_apply(wrapped_type<color> *self,PyObject *_func) {
+FIX_STACK_ALIGN PyObject *obj_Color_apply(wrapped_type<color> *self,PyObject *_func) {
     try {
         auto &base = self->get_base();
         py::object func = py::borrowed_ref(_func);
@@ -1121,10 +1117,10 @@ PyObject *obj_Color_apply(wrapped_type<color> *self,PyObject *_func) {
     } PY_EXCEPT_HANDLERS(NULL)
 }
 
-PyObject *obj_Color_reduce(wrapped_type<color> *self,PyObject*) {
+FIX_STACK_ALIGN PyObject *obj_Color_reduce(wrapped_type<color> *self,PyObject*) {
     try {
         return py::make_tuple(
-            get_instance_data().color_unpickle,
+            get_instance_data()->color_unpickle,
             py::make_tuple(encode_float_ieee754(3,self->get_base().vals))).new_ref();
     } PY_EXCEPT_HANDLERS(nullptr)
 }
@@ -1137,7 +1133,7 @@ PyMethodDef obj_Color_methods[] = {
     {NULL}
 };
 
-PyObject *obj_Color_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
+FIX_STACK_ALIGN PyObject *obj_Color_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
     try {
         auto vals = get_arg::get_args("Color.__new__",args,kwds,
             param<float>("r"),
@@ -1226,11 +1222,11 @@ PyObject *obj_Material_reduce(material *self,PyObject*) {
         encode_float_ieee754(data.data()+8*sizeof(float),1,&self->specular_intensity);
         encode_float_ieee754(data.data()+9*sizeof(float),1,&self->specular_exp);
         
-        return py::make_tuple(get_instance_data().material_unpickle,py::make_tuple(data)).new_ref();
+        return py::make_tuple(get_instance_data()->material_unpickle,py::make_tuple(data)).new_ref();
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
-PyObject *obj_Material_copy(material *self,PyObject*) {
+FIX_STACK_ALIGN PyObject *obj_Material_copy(material *self,PyObject*) {
     material *r;
     try {
         r = new material();
@@ -1246,7 +1242,7 @@ PyObject *obj_Material_copy(material *self,PyObject*) {
     r->specular_intensity = self->specular_intensity;
     r->specular_exp = self->specular_exp;
     
-    return reinterpret_cast<PyObject*>(r);
+    return py::ref(r);
 }
 
 PyMethodDef obj_Material_methods[] = {
@@ -1256,7 +1252,7 @@ PyMethodDef obj_Material_methods[] = {
     {NULL}
 };
 
-PyObject *obj_Material_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
+FIX_STACK_ALIGN PyObject *obj_Material_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
     try {
         const char *names[] = {"color","opacity","reflectivity","specular_intensity","specular_exp","specular_color"};
         get_arg ga(args,kwds,names,"Material.__new__");
@@ -1292,9 +1288,28 @@ PyObject *obj_Material_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
+FIX_STACK_ALIGN PyObject *obj_Material_get_color(material *self,void*) {
+    try {
+        return to_pyobject(self->c);
+    } PY_EXCEPT_HANDLERS(nullptr)
+}
+
+FIX_STACK_ALIGN PyObject *obj_Material_get_specular(material *self,void*) {
+    try {
+        return to_pyobject(self->specular);
+    } PY_EXCEPT_HANDLERS(nullptr)
+}
+FIX_STACK_ALIGN int obj_Material_set_specular(material *self,PyObject *arg,void*) {
+    try {
+        setter_no_delete(arg);
+        read_color(self->specular,arg,nullptr);
+        return 0;
+    } PY_EXCEPT_HANDLERS(-1)
+}
+
 PyGetSetDef obj_Material_getset[] = {
-    {const_cast<char*>("color"),OBJ_GETTER(material,self->c),OBJ_BASE_SETTER(material,self->c),NULL,NULL},
-    {const_cast<char*>("specular"),OBJ_GETTER(material,self->specular),OBJ_BASE_SETTER(material,self->specular),NULL,NULL},
+    {const_cast<char*>("color"),reinterpret_cast<getter>(&obj_Material_get_color),NULL,NULL},
+    {const_cast<char*>("specular"),reinterpret_cast<getter>(&obj_Material_get_specular),reinterpret_cast<setter>(&obj_Material_set_specular),NULL,NULL},
     {NULL}
 };
 
@@ -1324,7 +1339,7 @@ struct held_cache_item {
 };
 
 held_cache_item get_tracerx_cache_item(PyObject *mod,int dim) {
-    auto &cache = get_instance_data(mod).tracerx_cache;
+    auto &cache = get_instance_data(mod)->tracerx_cache;
     
     held_cache_item item;
     
@@ -1464,7 +1479,7 @@ PyMethodDef func_table[] = {
                 return get_tracerx_cache_item(mod,get_dimension(arg)).mod.new_ref();
             } PY_EXCEPT_HANDLERS(nullptr)
         },METH_O,NULL},
-    {"_color_unpickle",[](PyObject *mod,PyObject *arg) -> PyObject* {
+    {"_color_unpickle",[](PyObject *mod,PyObject *arg) FIX_STACK_ALIGN -> PyObject* {
             try {
                 auto str = from_pyobject<py::bytes>(arg);
                 if(str.size() != 3 * sizeof(float)) {
@@ -1477,7 +1492,7 @@ PyMethodDef func_table[] = {
                 return to_pyobject(c);
             } PY_EXCEPT_HANDLERS(nullptr)
         },METH_O,NULL},
-    {"_material_unpickle",[](PyObject *mod,PyObject *arg) -> PyObject* {
+    {"_material_unpickle",[](PyObject *mod,PyObject *arg) FIX_STACK_ALIGN -> PyObject* {
             try {
                 auto str = from_pyobject<py::bytes>(arg);
                 if(str.size() != 10 * sizeof(float)) {
@@ -1501,7 +1516,7 @@ PyMethodDef func_table[] = {
                 return reinterpret_cast<PyObject*>(m);
             } PY_EXCEPT_HANDLERS(nullptr)
         },METH_O,NULL},
-    {"_vector_unpickle",[](PyObject *mod,PyObject *arg) -> PyObject* {
+    {"_vector_unpickle",[](PyObject *mod,PyObject *arg) FIX_STACK_ALIGN -> PyObject* {
             try {
                 auto args = from_pyobject<py::tuple>(arg);
                 if(args.size() != 2) THROW_PYERR_STRING(TypeError,"_vector_unpickle takes exactly 2 arguments");
@@ -1519,7 +1534,7 @@ PyMethodDef func_table[] = {
                 return objdata.obj.new_ref();
             } PY_EXCEPT_HANDLERS(nullptr)
         },METH_VARARGS,NULL},
-    {"_matrix_unpickle",[](PyObject *mod,PyObject *arg) -> PyObject* {
+    {"_matrix_unpickle",[](PyObject *mod,PyObject *arg) FIX_STACK_ALIGN -> PyObject* {
             try {
                 auto args = from_pyobject<py::tuple>(arg);
                 if(args.size() != 2) THROW_PYERR_STRING(TypeError,"_matrix_unpickle takes exactly 2 arguments");
@@ -1537,7 +1552,7 @@ PyMethodDef func_table[] = {
                 return objdata.obj.new_ref();
             } PY_EXCEPT_HANDLERS(nullptr)
         },METH_VARARGS,NULL},
-    {"_triangle_unpickle",[](PyObject *mod,PyObject *arg) -> PyObject* {
+    {"_triangle_unpickle",[](PyObject *mod,PyObject *arg) FIX_STACK_ALIGN -> PyObject* {
             try {
                 auto args = from_pyobject<py::tuple>(arg);
                 if(args.size() != 3) THROW_PYERR_STRING(TypeError,"_triangle_unpickle takes exactly 3 arguments");
@@ -1558,7 +1573,7 @@ PyMethodDef func_table[] = {
                 return objdata.obj.new_ref();
             } PY_EXCEPT_HANDLERS(nullptr)
         },METH_VARARGS,NULL},
-    {"_solid_unpickle",[](PyObject *mod,PyObject *arg) -> PyObject* {
+    {"_solid_unpickle",[](PyObject *mod,PyObject *arg) FIX_STACK_ALIGN -> PyObject* {
             try {
                 auto args = from_pyobject<py::tuple>(arg);
                 if(args.size() != 3) THROW_PYERR_STRING(TypeError,"_solid_unpickle takes exactly 3 arguments");
@@ -1599,16 +1614,19 @@ PyModuleDef module_def = {
     NULL,
     NULL,
     [](void *ptr) {
-        get_instance_data(reinterpret_cast<PyObject*>(ptr)).~instance_data_t();
+        get_instance_data(reinterpret_cast<PyObject*>(ptr))->~instance_data_t();
     }
 };
 
-inline instance_data_t &get_instance_data() {
-    return get_instance_data(PyState_FindModule(&module_def));
+inline instance_data_t *get_instance_data() {
+    auto m = PyState_FindModule(&module_def);
+    if(!m) return nullptr;
+    
+    return get_instance_data(m);
 }
 #else
-inline instance_data_t &get_instance_data() {
-    return instance_data;
+inline instance_data_t *get_instance_data() {
+    return &instance_data;
 }
 #endif
 
@@ -1617,12 +1635,12 @@ const package_common package_common_data = {
     &read_color,
     [](int dim,const float *data) {
         return py::make_tuple(
-            get_instance_data().vector_unpickle,
+            get_instance_data()->vector_unpickle,
             py::make_tuple(dim,encode_float_ieee754(dim,data))).new_ref();
     },
     [](int dim,const float *data) {
         return py::make_tuple(
-            get_instance_data().matrix_unpickle,
+            get_instance_data()->matrix_unpickle,
             py::make_tuple(dim,encode_float_ieee754(dim*dim,data))).new_ref();
     },
     [](int dim,const float *const *data,material *m) -> PyObject* {
@@ -1631,8 +1649,8 @@ const package_common package_common_data = {
         for(int i=0; i<dim+1; ++i) encode_float_ieee754(values.data() + sizeof(float)*dim*i,dim,data[i]);
         
         return py::make_tuple(
-            get_instance_data().triangle_unpickle,
-            py::make_tuple(dim,values,reinterpret_cast<PyObject*>(m))).new_ref();
+            get_instance_data()->triangle_unpickle,
+            py::make_tuple(dim,values,py::ref(m))).new_ref();
     },
     [](int dim,char type,const float *orientation,const float *position,material *m) -> PyObject* {
         py::bytes values{Py_ssize_t(sizeof(float))*dim*(dim+1)+1};
@@ -1642,18 +1660,19 @@ const package_common package_common_data = {
         encode_float_ieee754(values.data() + sizeof(float)*dim*dim + 1,dim,position);
         
         return py::make_tuple(
-            get_instance_data().solid_unpickle,
-            py::make_tuple(dim,values,reinterpret_cast<PyObject*>(m))).new_ref();
+            get_instance_data()->solid_unpickle,
+            py::make_tuple(dim,values,py::ref(m))).new_ref();
     },
     [](PyObject *mod) -> void {
         assert(mod);
         
-        auto &idata = get_instance_data();
-        
-        auto itr = idata.tracerx_cache.begin();
-        while(itr != idata.tracerx_cache.end()) {
-            if(std::get<1>(*itr).mod == mod) itr = idata.tracerx_cache.erase(itr);
-            else ++itr;
+        auto idata = get_instance_data();
+        if(idata) {
+            auto itr = idata->tracerx_cache.begin();
+            while(itr != idata->tracerx_cache.end()) {
+                if(std::get<1>(*itr).mod == mod) itr = idata->tracerx_cache.erase(itr);
+                else ++itr;
+            }
         }
     }
 };
@@ -1671,11 +1690,11 @@ PyTypeObject *classes[] = {
 #if PY_MAJOR_VERSION >= 3
 #define INIT_ERR_VAL nullptr
 
-extern "C" SHARED(PyObject) * PyInit_render(void) {
+extern "C" FIX_STACK_ALIGN SHARED(PyObject) * PyInit_render(void) {
 #else
 #define INIT_ERR_VAL
 
-extern "C" SHARED(void) initrender(void) {
+extern "C" FIX_STACK_ALIGN SHARED(void) initrender(void) {
 #endif
     if(!PyEval_ThreadsInitialized()) PyEval_InitThreads();
 
