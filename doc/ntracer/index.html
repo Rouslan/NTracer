@@ -2587,14 +2587,13 @@ even if run on a machine that has larger registers, the ray tracer will only
 be able to take advantage of the largest registers of the instruction set
 that this package was compiled for (when compiling from source, the latest
 instruction set that the current machine supports, is chosen by default).</p>
-<p>The source code of this package supports SSE and AVX (including AVX 512). If
-this package is compiled for an instruction set that supports neither of
-these technologies, <tt class="docutils literal"><span class="pre">BATCH_SIZE</span></tt> will be equal to <tt class="docutils literal"><span class="pre">1</span></tt>. In such a case,
-<a class="reference internal" href="#ntracer.tracern.KDLeaf" title="ntracer.tracern.KDLeaf"><tt class="xref py py-class docutils literal"><span class="pre">KDLeaf</span></tt></a> wont even support instances of <a class="reference internal" href="#ntracer.tracern.PrimitiveBatch" title="ntracer.tracern.PrimitiveBatch"><tt class="xref py py-class docutils literal"><span class="pre">PrimitiveBatch</span></tt></a>
-(passing instances of <a class="reference internal" href="#ntracer.tracern.PrimitiveBatch" title="ntracer.tracern.PrimitiveBatch"><tt class="xref py py-class docutils literal"><span class="pre">PrimitiveBatch</span></tt></a> to its constructor will
-cause and exception to be raised) so that the ray tracer can be streamlined.
-The batch classes will still exist, however, for the sake of testing
-compatibility.</p>
+<p>The source code of this package supports SSE and AVX. If this package is
+compiled for an instruction set that supports neither of these technologies,
+<tt class="docutils literal"><span class="pre">BATCH_SIZE</span></tt> will be equal to <tt class="docutils literal"><span class="pre">1</span></tt>. In such a case, <a class="reference internal" href="#ntracer.tracern.KDLeaf" title="ntracer.tracern.KDLeaf"><tt class="xref py py-class docutils literal"><span class="pre">KDLeaf</span></tt></a>
+wont even support instances of <a class="reference internal" href="#ntracer.tracern.PrimitiveBatch" title="ntracer.tracern.PrimitiveBatch"><tt class="xref py py-class docutils literal"><span class="pre">PrimitiveBatch</span></tt></a> (passing instances
+of <a class="reference internal" href="#ntracer.tracern.PrimitiveBatch" title="ntracer.tracern.PrimitiveBatch"><tt class="xref py py-class docutils literal"><span class="pre">PrimitiveBatch</span></tt></a> to its constructor will cause and exception to
+be raised) so that the ray tracer can be streamlined. The batch classes will
+still exist, however, for the sake of testing compatibility.</p>
 <p>Most users will not have to worry about the value of <tt class="docutils literal"><span class="pre">BATCH_SIZE</span></tt> or batch
 objects since <a class="reference internal" href="#ntracer.tracern.build_composite_scene" title="ntracer.tracern.build_composite_scene"><tt class="xref py py-func docutils literal"><span class="pre">build_composite_scene()</span></tt></a> (and <a class="reference internal" href="#ntracer.tracern.build_kdtree" title="ntracer.tracern.build_kdtree"><tt class="xref py py-func docutils literal"><span class="pre">build_kdtree()</span></tt></a>)
 will automatically combine instances of <a class="reference internal" href="#ntracer.tracern.TrianglePrototype" title="ntracer.tracern.TrianglePrototype"><tt class="xref py py-class docutils literal"><span class="pre">TrianglePrototype</span></tt></a> into
