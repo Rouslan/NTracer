@@ -3099,7 +3099,6 @@ std::tuple<n_aabb,kd_node<module_store>*> build_kdtree(const char *func,PyObject
     }
 
     if(traversal) kd_params.traversal = from_pyobject<real>(traversal);
-
     if(intersection) kd_params.intersection = from_pyobject<real>(intersection);
     
     for(size_t i=1; i<p_objs.size(); ++i) {

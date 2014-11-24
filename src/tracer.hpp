@@ -1374,7 +1374,7 @@ template<typename A,typename B> typename A::item_t skip_dot(const A &a,const B &
     assert(a.size() == b.size());
     
     typename A::item_t tot = simd::support<typename A::item_t>::zeros();
-    for(int i=0; i<a.size(); ++i) {
+    for(int i=0; size_t(i)<a.size(); ++i) {
         if(i != skip) tot += a.template vec<1>(i).data * b.template vec<1>(i).data;
     }
     return tot;
@@ -2161,7 +2161,7 @@ template<typename Store> kd_node_unique_ptr<Store> create_leaf(const proto_array
     
     return kd_node_unique_ptr<Store>(kd_leaf<Store>::create(
         contain_p.size() + overlap_p.size(),
-        [&](int i){ return py::borrowed_ref((i < contain_p.size() ? contain_p[i] : overlap_p[i-contain_p.size()])->p.ref()); }));
+        [&](int i){ return py::borrowed_ref((size_t(i) < contain_p.size() ? contain_p[i] : overlap_p[size_t(i)-contain_p.size()])->p.ref()); }));
 }
 
 template<typename Store> kd_node_unique_ptr<Store> create_node(kd_node_worker_pool<Store> &wpool,int depth,aabb<Store> &boundary,const proto_array<Store> &contain_p,const proto_array<Store> &overlap_p,const kd_tree_params &params) {
@@ -2172,7 +2172,7 @@ template<typename Store> kd_node_unique_ptr<Store> create_node(kd_node_worker_po
     
     real split;
     if(depth >= params.max_depth
-        || contain_p.size() + overlap_p.size() <= params.split_threshold
+        || contain_p.size() + overlap_p.size() <= size_t(params.split_threshold)
         || !find_split(boundary,axis,contain_p,overlap_p,split,params))
         return create_leaf(contain_p,overlap_p);
     
@@ -2296,7 +2296,7 @@ template<typename Store> struct group_primitives<Store,false> {
             auto tb = new wrapped_type<triangle_batch_prototype<Store> >(dimension,[&](int i){ return static_cast<triangle_prototype<Store>*>(*(batch[i].itr)); });
             private_allocs.emplace_back(py::new_ref(tb));
             *(batch[0].itr) = &tb->get_base();
-            for(int i=1; i<v_real::size; ++i) {
+            for(size_t i=1; i<v_real::size; ++i) {
                 *(batch[i].itr) = nullptr;
             }
             batch.clear();
@@ -2313,7 +2313,7 @@ template<typename Store> std::tuple<aabb<Store>,kd_node<Store>*> build_kdtree(pr
     assert(primitives.size());
     
     aabb<Store> boundary = primitives[0]->boundary;
-    for(int i=1; i<primitives.size(); ++i) {
+    for(size_t i=1; i<primitives.size(); ++i) {
         v_expr(boundary.start) = min(v_expr(boundary.start),v_expr(primitives[i]->boundary.start));
         v_expr(boundary.end) = max(v_expr(boundary.end),v_expr(primitives[i]->boundary.end));
     }

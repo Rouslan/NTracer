@@ -27,6 +27,23 @@ try:
 except ImportError:
     bdist_wininst = None
 
+try:
+    from distutils.cygwinccompiler import Mingw32CCompiler
+except ImportError:
+    pass
+else:
+    # Mingw32CCompiler will link with the MSVC runtime library, which is not
+    # just unnecessary, but will cause the libraries to fail to run
+    
+    Mingw32CCompiler_init_old = Mingw32CCompiler.__init__
+    
+    def __init__(self,*args,**kwds):
+        Mingw32CCompiler_init_old(self,*args,**kwds)
+        self.dll_libraries = []
+    
+    Mingw32CCompiler.__init__ = __init__
+
+
 
 base_dir = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0,os.path.join(base_dir,'support'))
@@ -50,14 +67,16 @@ GCC_OPTIMIZE_COMPILE_ARGS = [
     '--param','inline-unit-growth=1000']
 GCC_EXTRA_COMPILE_ARGS = [
     '-std=c++11',
+    '-fabi-version=0',
     '-fvisibility=hidden',
+    '-fvisibility-inlines-hidden',
     '-Wno-format',
     '-Wno-invalid-offsetof',
     '-Werror=return-type']
 
 # At the time of this writing, no version of MSVC has enough C++11 support to
 # compile this package
-MSVC_OPTIMIZE_COMPILE_ARGS = ['/Ox','/fp:fast','/volatile:iso','/Za']
+MSVC_OPTIMIZE_COMPILE_ARGS = ['/Ox','/fp:fast','/volatile:iso']
 
 DEFAULT_OPTIMIZED_DIMENSIONS = frozenset(range(3,9))
 

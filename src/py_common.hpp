@@ -270,7 +270,7 @@ template<> inline unsigned int from_pyobject<unsigned int>(PyObject *o) {
 }
 
 template<> inline bool from_pyobject<bool>(PyObject *o) {
-    return static_cast<bool>(PyObject_IsTrue(o));
+    return PyObject_IsTrue(o) != 0;
 }
 
 template<> inline double from_pyobject<double>(PyObject *o) {

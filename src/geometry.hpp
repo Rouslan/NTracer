@@ -285,7 +285,7 @@ vector_batch<Store,Size> deinterleave(int dimension,F f) {
     
     for(size_t i=0; i<Size; ++i) {
         auto b = f(i);
-        assert(dimension == v_expr(b).size());
+        assert(size_t(dimension) == v_expr(b).size());
         impl::v_rep(v_expr(b).v_size(),impl::v_deinterleave1<Store,typename vector_batch<Store,Size>::item_t,decltype(b)>{r,b,i});
     }
     
@@ -349,7 +349,7 @@ namespace impl {
         size_t _v_size() const { return Store::v_dimension(a.dimension()); }
         
         typename Store::item_t &operator[](size_t n) const {
-            assert(n >= 0 && n < a.dimension());
+            assert(n < size_t(a.dimension()));
             return a.get(row,n);
         }
         
@@ -357,8 +357,6 @@ namespace impl {
         template<typename T> typename Store::item_t &operator[](T n) const { return operator[](size_t(n)); }
         
         template<size_t Size> simd::v_type<typename Store::item_t,Size> vec(size_t n) const {
-            ASSUME((row*a.dimension() + n) < std::numeric_limits<ptrdiff_t>::max());
-            
             /* the Size > 1 check is not necessary, but it should subject the
                first branch to dead-code elimination when Size is 1 */
             if(Size > 1 && a.dimension() % Size == 0) {
@@ -390,7 +388,7 @@ namespace impl {
         size_t _v_size() const { return Store::v_dimension(a.dimension()); }
         
         typename Store::item_t operator[](size_t n) const {
-            assert(n >= 0 && n < a.dimension());
+            assert(n < size_t(a.dimension()));
             return a.get(row,n);
         }
         
@@ -398,8 +396,6 @@ namespace impl {
         template<typename T> typename Store::item_t operator[](T n) const { return operator[](size_t(n)); }
         
         template<size_t Size> simd::v_type<typename Store::item_t,Size> vec(size_t n) const {
-            ASSUME((row*a.dimension() + n) < std::numeric_limits<ptrdiff_t>::max());
-            
             /* the Size > 1 check is not necessary, but it should subject the
                first branch to dead-code elimination when Size is 1 */
             if(Size > 1 && a.dimension() % Size == 0) {

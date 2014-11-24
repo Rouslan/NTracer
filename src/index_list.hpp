@@ -22,7 +22,7 @@ namespace impl {
         return f(std::get<Indexes>(vals)...);
     }
     
-    template<typename O,typename M,typename... T,size_t... Indexes> inline typename std::result_of<typename std::add_pointer<M>::type(T...)>::type _apply(index_list<Indexes...>,O &o,M O::*m,const std::tuple<T...> &vals) {
+    template<typename O,typename M,typename... T,size_t... Indexes> inline auto _apply(index_list<Indexes...>,O &o,M m,const std::tuple<T...> &vals) -> decltype((o.*m)(std::declval<T>()...)) {
         return (o.*m)(std::get<Indexes>(vals)...);
     }
 }
@@ -33,7 +33,7 @@ template<typename F,typename... T> inline typename std::result_of<F(T...)>::type
     return impl::_apply<F,T...>(make_index_list<sizeof...(T)>(),f,vals);
 }
 
-template<typename O,typename M,typename... T> inline typename std::result_of<typename std::add_pointer<M>::type(T...)>::type apply(O &o,M O::*m,const std::tuple<T...> &vals) {
+template<typename O,typename M,typename... T> inline auto apply(O &o,M m,const std::tuple<T...> &vals) -> decltype((o.*m)(std::declval<T>()...)){
     return impl::_apply<O,M,T...>(make_index_list<sizeof...(T)>(),o,m,vals);
 }
 

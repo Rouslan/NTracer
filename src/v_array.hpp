@@ -34,7 +34,7 @@ namespace impl {
     template<typename F,size_t SI,bool more=(F::v_score >= V_SCORE_THRESHHOLD) && (simd::v_sizes<typename F::item_t>::value[SI] > 1)> struct _v_rep {
         static FORCE_INLINE void go(size_t n,size_t i,F f) {
             static const size_t size = simd::v_sizes<typename F::item_t>::value[SI];
-            for(; i<(n - (size - 1)); i+= size) f.template operator()<size>(i);
+            for(; long(i)<(long(n) - (long(size) - 1)); i+= size) f.template operator()<size>(i);
             
             _v_rep<F,SI+1>::go(n,i,f);
         }
@@ -55,7 +55,7 @@ namespace impl {
     template<typename F,size_t SI,bool more=(F::v_score >= V_SCORE_THRESHHOLD) && (simd::v_sizes<typename F::item_t>::value[SI] > 1)> struct _v_rep_until {
         static FORCE_INLINE bool go(size_t n,size_t i,F f) {
             static const size_t size = simd::v_sizes<typename F::item_t>::value[SI];
-            for(; i<(n - (size - 1)); i+= size) {
+            for(; long(i)<(long(n) - (long(size) - 1)); i+= size) {
                 if(f.template operator()<size>(i)) return true;
             }
             
@@ -404,10 +404,12 @@ namespace impl {
         const T *data() const { return store.items; }
         
         template<size_t Size> FORCE_INLINE simd::v_type<T,Size> &vec(size_t n) {
+            assert(n+Size <= _v_size());
             return *reinterpret_cast<simd::v_type<T,Size>*>(store.items + n);
         }
         
         template<size_t Size> FORCE_INLINE simd::v_type<T,Size> vec(size_t n) const {
+            assert(n+Size <= _v_size());
             return *reinterpret_cast<const simd::v_type<T,Size>*>(store.items + n);
         }
         
@@ -423,7 +425,7 @@ namespace impl {
         typedef s_item_t<T> item_t;
         typedef v_item_t<T,simd::v_sizes<item_t>::value[0]> v_t;
         
-        static const int v_score = T::v_score - (std::is_same<Op,op_add>::value && v_t::has_vec_reduce_add ? 1 : 5);
+        static const int v_score = T::v_score - 2;
         
         v_t &r;
         item_t &r_small;
@@ -453,7 +455,7 @@ namespace impl {
         }
 
         auto r = Op::template first<v_item_t<T,v_sizes<T>::value[0]> >();
-        // v_size is not used because we don't want to include the pad value
+        // v_size is not used because we don't want to include the pad values
         v_rep(a.size(),v_reduce<Op,T>{r,r_small,a});
         return Op::op(Op::reduce(r),r_small);
     }

@@ -122,10 +122,10 @@ different number of threads in its constructor.
             render.abort_render()
             break
 
-Finally, we have a basic event loop with two additions. When the renderer is
-finished, it sends an event of type :py:attr:`PygameRenderer.ON_COMPLETE` (which
-is equal to pygame.USEREVENT by default). The event will have a ``source``
-attribute containing the associated renderer. Having only one renderer, we don't
-use it here. We flip the display buffer to make our image appear.
+Finally, we have a basic event loop.  When the renderer is finished, it sends an
+event of type :py:attr:`PygameRenderer.ON_COMPLETE` (which is equal to
+pygame.USEREVENT by default).  The event will have a ``source`` attribute
+containing the associated renderer.  Having only one renderer, we don't use it
+here.  We flip the display buffer to make our image appear.
 :py:meth:`.abort_render` is called to stop drawing early.
 

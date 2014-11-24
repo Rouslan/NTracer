@@ -4,7 +4,20 @@ import random
 from ..wrapper import NTracer,CUBE,SPHERE
 from ..render import Material
 
+def pydot(a,b):
+    return sum(ia*ib for ia,ib in zip(a,b))
+
 class Tests(unittest.TestCase):
+    def test_simd(self):
+        d = 64
+        while d > 4:
+            nt = NTracer(d)
+            a = nt.Vector(range(d))
+            b = nt.Vector(x+12 for x in range(d-1,-1,-1))
+            self.assertAlmostEqual(nt.dot(a,b),pydot(a,b))
+            
+            d = d >> 1
+
     def test_triangle(self):
         nt = NTracer(3)
         mat = Material((1,1,1))
