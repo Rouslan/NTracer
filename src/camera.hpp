@@ -23,11 +23,11 @@ template<class Store> struct camera {
     }
     
     void normalize() {
-        typename Store::template smaller_init_array<vector<Store> > new_axes(dimension()-1,[this](int i) -> vector<Store> {
-            vector<Store> x(this->dimension(),0);
+        typename Store::template smaller_init_array<vector<Store> > new_axes{size_t(dimension())-1,[this](int i) -> vector<Store> {
+            vector<Store> x{this->dimension(),0};
             for(int j=0; j<i; ++j) x += dot(this->t_orientation[i+1],this->t_orientation[j]) * this->t_orientation[j];
             return this->t_orientation[i+1] - x;
-        });
+        }};
 
         t_orientation[0] = t_orientation[0] / t_orientation[0].absolute();
         for(int i=1; i<dimension(); ++i) {

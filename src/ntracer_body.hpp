@@ -408,6 +408,12 @@ template<typename T,bool Var,bool InPlace=(alignof(typename T::actual) <= PYOBJE
     PyObject_HEAD
     actual base;
     
+    static void *operator new(size_t,int dimension) {
+        void *ptr = PyObject_Malloc(base_size);
+        if(!ptr) throw std::bad_alloc();
+        return ptr;
+    }
+    
     template<typename... Args> tproto_base(Args&&... args) : base(std::forward<Args>(args)...) {
         PyObject_Init(py::ref(this),T::pytype());
     }
@@ -430,6 +436,12 @@ template<typename T,bool Var> struct tproto_base<T,Var,false> : T {
     
     PyObject_HEAD
     std::unique_ptr<actual> base;
+    
+    static void *operator new(size_t,int) {
+        void *ptr = PyObject_Malloc(base_size);
+        if(!ptr) throw std::bad_alloc();
+        return ptr;
+    }
     
     template<typename... Args> tproto_base(int dimension,Args&&... args) : base(new(dimension) actual(dimension,std::forward<Args>(args)...)) {
         PyObject_Init(py::ref(this),T::pytype());
@@ -454,6 +466,12 @@ template<typename T> struct tproto_base<T,true,true> : T {
     
     PyObject_VAR_HEAD
     actual base;
+
+    static void *operator new(size_t,int dimension) {
+        void *ptr = PyObject_Malloc(base_size + item_size * dimension);
+        if(!ptr) throw std::bad_alloc();
+        return ptr;
+    }
     
     template<typename... Args> tproto_base(Args&&... args) : base(std::forward<Args>(args)...) {
         PyObject_Init(py::ref(this),T::pytype());
@@ -2101,6 +2119,18 @@ PyTypeObject camera_obj_base::_pytype = make_type_object(
     tp_new = &obj_Camera_new);
 
 
+FIX_STACK_ALIGN PyObject *obj_Matrix_richcompare(wrapped_type<n_matrix> *self,PyObject *arg,int op) {
+    if(op == Py_EQ || op == Py_NE) {
+        auto &base = self->get_base();
+        auto b = get_base_if_is_type<n_matrix>(arg);
+        
+        if(b) return to_pyobject((compatible(base,*b) && base == *b) == (op == Py_EQ));
+    }
+
+    Py_INCREF(Py_NotImplemented);
+    return Py_NotImplemented;
+}
+
 FIX_STACK_ALIGN PyObject *obj_Matrix___mul__(PyObject *a,PyObject *b) {
     try {
         if(PyObject_TypeCheck(a,wrapped_type<n_matrix>::pytype())) {
@@ -2325,6 +2355,7 @@ PyTypeObject matrix_obj_base::_pytype = make_type_object(
     tp_dealloc = destructor_dealloc<wrapped_type<n_matrix> >::value,
     tp_as_number = &obj_Matrix_number_methods,
     tp_as_sequence = &obj_Matrix_sequence_methods,
+    tp_richcompare = &obj_Matrix_richcompare,
     tp_methods = obj_Matrix_methods,
     tp_getset = obj_Matrix_getset,
     tp_new = &obj_Matrix_new);

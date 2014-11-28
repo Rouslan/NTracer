@@ -1,5 +1,14 @@
 import gdb.printing
 
+def pprinter(f):
+    class Printer:
+        def __init__(self,val):
+            self.val = val
+        
+        def to_string(self):
+            return f(self.val)
+    return Printer
+
 def v_array_str(val):
     store = val.type.template_argument(0)
     store_v = val['store']
@@ -13,26 +22,24 @@ def v_array_str(val):
 
     return ','.join(str((items + i).dereference()) for i in range(size))
 
-class vectorPrinter:
-    def __init__(self,val):
-        self.val = val
 
-    def to_string(self):
-        return '<{0}>'.format(v_array_str(self.val))
+@pprinter
+def vectorPrinter(val):
+    return '<{0}>'.format(v_array_str(val))
 
-class varrayPrinter:
-    def __init__(self,val):
-        self.val = val
+@pprinter
+def varrayPrinter(val):
+    return '{{{0}}}'.format(v_array_str(val))
 
-    def to_string(self):
-        return '{{{0}}}'.format(v_array_str(self.val))
+@pprinter
+def vtypePrinter(val):
+    return str(val['data']['p'])
 
-class vtypePrinter:
-    def __init__(self,val):
-        self.val = val
-    
-    def to_string(self):
-        return str(self.val['data']['p'])
+@pprinter
+def fixedinitarrayPrinter(val):
+    type = val.type.template_argument(0)
+    items = val['data']['__data'].cast(val.type.template_argument(0).pointer())
+    return '{{{0}}}'.format(','.join(str((items + i).dereference()) for i in range(val.type.template_argument(1))))
 
 
 def build_pretty_printer():
@@ -40,6 +47,7 @@ def build_pretty_printer():
     pp.add_printer('vector','^impl::vector<.+>$',vectorPrinter)
     pp.add_printer('v_array','^impl::v_array<.+>$',varrayPrinter)
     pp.add_printer('v_type','^simd::(?:float|double|int(?:8|16|32|64))_v_(?:128|256|512)$',vtypePrinter)
+    pp.add_printer('fixed_init_array','^fixed::init_array<.+>$',fixedinitarrayPrinter)
     return pp
 
 

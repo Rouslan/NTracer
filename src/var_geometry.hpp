@@ -95,6 +95,9 @@ namespace var {
         int dimension() const {
             return size;
         }
+        int real_size() const {
+            return RealItems::get(size);
+        }
         
         void swap(item_array &b) {
             std::swap(size,b.size);
@@ -105,12 +108,12 @@ namespace var {
         void allocate() {
             assert(size > 0);
 
-            if(simd::v_sizes<T>::value[0] == 1) {
-                if(!(items = reinterpret_cast<T*>(malloc(RealItems::get(size) * sizeof(T))))) throw std::bad_alloc();
+            if(simd::v_sizes<T>::value[0] == 1 && alignof(T) <= alignof(std::max_align_t)) {
+                if(!(items = reinterpret_cast<T*>(malloc(real_size() * sizeof(T))))) throw std::bad_alloc();
             } else {
                 items = reinterpret_cast<T*>(simd::aligned_alloc(
-                    simd::largest_fit<T>(size) * sizeof(T),
-                    RealItems::get(size) * sizeof(T)));
+                    std::max(simd::largest_fit<T>(size) * sizeof(T),alignof(T)),
+                    real_size() * sizeof(T)));
             }
         }
         
@@ -125,7 +128,7 @@ namespace var {
     template<typename T> struct item_store {
         typedef T item_t;
         
-        static int v_dimension(int d) {
+        template<typename U=T> static int v_dimension(int d) {
             return d;
         }
         

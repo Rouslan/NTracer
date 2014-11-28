@@ -1225,7 +1225,7 @@ namespace simd {
     inline void *aligned_alloc(size_t align,size_t size) {
         void *dest;
 #if defined(USE_POSIX)
-        if(posix_memalign(&dest,align,size)) throw std::bad_alloc();
+        if(posix_memalign(&dest,std::max(align,sizeof(void*)),size)) throw std::bad_alloc();
 #elif defined(USE_WIN)
         if(!(dest = _aligned_malloc(size,align))) throw std::bad_alloc();
 #else

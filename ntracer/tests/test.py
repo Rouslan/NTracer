@@ -7,6 +7,12 @@ from ..render import Material
 def pydot(a,b):
     return sum(ia*ib for ia,ib in zip(a,b))
 
+def and_generic(f):
+    def inner(self):
+        f(self,False)
+        f(self,True)
+    return inner
+
 class Tests(unittest.TestCase):
     def test_simd(self):
         d = 64
@@ -18,8 +24,27 @@ class Tests(unittest.TestCase):
             
             d = d >> 1
 
-    def test_triangle(self):
-        nt = NTracer(3)
+    @and_generic
+    def test_math(self,generic):
+        nt = NTracer(4,generic)
+        ma = nt.Matrix([[10,2,3,4],[5,6,7,8],[9,10,11,12],[13,14,15,16]])
+        mb = nt.Matrix([13,6,9,6,7,3,3,13,1,11,12,7,12,15,17,15])
+        mx = ma * mb
+        my = nt.Matrix([195,159,200,167,210,245,283,277,342,385,447,441,474,525,611,605])
+        
+        self.assertEqual(mx,my)
+        for vx,vy in zip(mx.values,my.values):
+            self.assertEqual(vx,vy)
+        
+        for a,b in zip((mb * mb.inverse()).values,[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]):
+            self.assertAlmostEqual(a,b,4)
+        
+        for a,b in zip(nt.Vector(13,2,16,14).unit(),[0.52,0.08,0.64,0.56]):
+            self.assertAlmostEqual(a,b,4)
+    
+    @and_generic
+    def test_triangle(self,generic):
+        nt = NTracer(3,generic)
         mat = Material((1,1,1))
         box = nt.AABB((-1,-1,-1),(1,1,1))
         
@@ -50,9 +75,10 @@ class Tests(unittest.TestCase):
                     (0.0,-1.0,0.0),
                     (0.723599970341,-0.447214990854,0.525720000267),
                     (-0.276385009289,-0.447214990854,0.850639998913)],mat)))
-        
-    def test_cube(self):
-        nt = NTracer(3)
+    
+    @and_generic
+    def test_cube(self,generic):
+        nt = NTracer(3,generic)
         mat = Material((1,1,1))
         box = nt.AABB((-1,-1,-1),(1,1,1))
         
@@ -95,9 +121,10 @@ class Tests(unittest.TestCase):
                       -0.7643852,-0.6406123,0.07301452,
                       0.5223108,-0.6816301,-0.5124177),
             mat)))
-        
-    def test_sphere(self):
-        nt = NTracer(3)
+    
+    @and_generic
+    def test_sphere(self,generic):
+        nt = NTracer(3,generic)
         mat = Material((1,1,1))
         box = nt.AABB((-1,-1,-1),(1,1,1))
         
@@ -113,8 +140,9 @@ class Tests(unittest.TestCase):
             nt.Matrix.identity(),
             mat)))
     
-    def test_batch_interface(self):
-        nt = NTracer(4)
+    @and_generic
+    def test_batch_interface(self,generic):
+        nt = NTracer(4,generic)
         mat = Material((1,1,1))
         
         lo = lambda: random.uniform(-1,1)

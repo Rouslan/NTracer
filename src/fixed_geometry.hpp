@@ -41,7 +41,7 @@ namespace fixed {
         
     private:
         template<typename F> void subinit(F f,size_t i) {
-            new(&(*this)[i]) T(f(i));
+            new(begin() + i) T(f(i));
             
             if(i < Size-1) {
                 try {
@@ -70,6 +70,7 @@ namespace fixed {
         }
         
         int dimension() const { return N; }
+        int real_size() const { return _real_size; }
         
         T items[_real_size];
     };
@@ -77,8 +78,8 @@ namespace fixed {
     template<int N,typename T> struct item_store {
         typedef T item_t;
         
-        static int v_dimension(int d) {
-            return simd::padded_size<T>(d);
+        template<typename U=T> static int v_dimension(int d) {
+            return simd::padded_size<U>(d);
         }
         
         static const int required_d = N;

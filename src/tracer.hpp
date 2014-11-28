@@ -2293,7 +2293,7 @@ template<typename Store> struct group_primitives<Store,false> {
             
             if(batch.size() < v_real::size) break;
             
-            auto tb = new wrapped_type<triangle_batch_prototype<Store> >(dimension,[&](int i){ return static_cast<triangle_prototype<Store>*>(*(batch[i].itr)); });
+            auto tb = new(dimension) wrapped_type<triangle_batch_prototype<Store> >(dimension,[&](int i){ return static_cast<triangle_prototype<Store>*>(*(batch[i].itr)); });
             private_allocs.emplace_back(py::new_ref(tb));
             *(batch[0].itr) = &tb->get_base();
             for(size_t i=1; i<v_real::size; ++i) {

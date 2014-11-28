@@ -230,6 +230,10 @@ class CustomBuildExt(build_ext):
                     e.extra_compile_args += GCC_OPTIMIZE_COMPILE_ARGS
                 if not self.debug:
                     e.extra_link_args = ['-s']
+                    
+                    # this is normally defined automatically, but not when
+                    # using Mingw32 under windows
+                    e.define_macros.append(('NDEBUG',1))
             return True
             
         return False
