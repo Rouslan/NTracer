@@ -367,6 +367,10 @@ namespace py {
             reset(b.ref());
             return *this;
         }
+        
+        ~nullable() {
+            Py_XDECREF(_ptr);
+        }
 
         operator bool() const { return _ptr != nullptr; }
         T operator*() const {

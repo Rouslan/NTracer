@@ -79,14 +79,15 @@ void get_arg::get_arg_base::finished() {
         PyObject *key;
         Py_ssize_t pos = 0;
         while(PyDict_Next(kwds,&pos,&key,NULL)){
-            if(!PyUnicode_Check(key)) {
+            if(!PYSTR(Check)(key)) {
                 PyErr_SetString(PyExc_TypeError,"keywords must be strings");
                 throw py_error_set();
             }
-#if PY_MAJOR_VERSION >= 3 && PY_MINOR_VERSION >= 3
+#if PY_MAJOR_VERSION >= 3
+  #if PY_MINOR_VERSION >= 3
             const char *kstr = PyUnicode_AsUTF8(key);
             if(!kstr) throw py_error_set();
-#else
+  #else
             PyObject *kstr_obj = PyUnicode_AsUTF8String(key);
             if(!kstr_obj) throw py_error_set();
             
@@ -97,13 +98,18 @@ void get_arg::get_arg_base::finished() {
             } _(kstr_obj);
             
             const char *kstr = PyBytes_AS_STRING(kstr_obj);
+  #endif
+#else
+            const char *kstr = PyBytes_AS_STRING(key);
 #endif
-            for(const char **name = names; *name; ++name) {
-                if(strcmp(kstr,*name) == 0) goto match;
+            if(names) {
+                for(const char **name = names; *name; ++name) {
+                    if(strcmp(kstr,*name) == 0) goto match;
+                }
             }
                 
-            PyErr_Format(PyExc_TypeError,"'%U' is an invalid keyword argument for %s%s",
-                key,
+            PyErr_Format(PyExc_TypeError,"'%s' is an invalid keyword argument for %s%s",
+                kstr,
                 fname ? fname : "this function",
                 fname ? "()" : "");
             throw py_error_set();

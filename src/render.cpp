@@ -123,7 +123,7 @@ PyTypeObject channel_obj_base::_pytype = make_type_object(
             try {
                 auto &val = reinterpret_cast<wrapped_type<channel>*>(ptr)->alloc_base();
                 
-                const char *names[] = {"bit_size","f_r","f_g","f_b","f_c","tfloat"};
+                const char *names[] = {"bit_size","f_r","f_g","f_b","f_c","tfloat",nullptr};
                 get_arg ga(args,kwds,names,"Channel.__new__");
                 int bit_size = from_pyobject<int>(ga(true));
                 val.f_r = from_pyobject<float>(ga(true));
@@ -250,7 +250,7 @@ PyTypeObject image_format_obj_base::_pytype = make_type_object(
                 auto &val = reinterpret_cast<wrapped_type<image_format>*>(ptr)->alloc_base();
                 new(&val) image_format();
             
-                const char *names[] = {"width","height","channels","pitch","reversed"};
+                const char *names[] = {"width","height","channels","pitch","reversed",nullptr};
                 get_arg ga(args,kwds,names,"ImageFormat.__new__");
                 val.width = from_pyobject<size_t>(ga(true));
                 val.height = from_pyobject<size_t>(ga(true));
@@ -640,7 +640,7 @@ FIX_STACK_ALIGN PyObject *obj_CallbackRenderer_begin_render(obj_CallbackRenderer
     try {
         callback_renderer &r = self->get_base();
         
-        const char *names[] = {"dest","format","scene","callback"};
+        const char *names[] = {"dest","format","scene","callback",nullptr};
         get_arg ga(args,kwds,names,"CallbackRenderer.begin_render");
         auto dest = ga(true);
         auto &format = get_base<image_format>(ga(true));
@@ -724,7 +724,7 @@ FIX_STACK_ALIGN int obj_CallbackRenderer_init(obj_CallbackRenderer *self,PyObjec
     }
     
     try {
-        const char *names[] = {"threads"};
+        const char *names[] = {"threads",nullptr};
         get_arg ga(args,kwds,names,"CallbackRenderer.__init__");
         PyObject *temp = ga(false);
         unsigned int threads = temp ? from_pyobject<unsigned int>(temp) : 0;
@@ -835,7 +835,7 @@ FIX_STACK_ALIGN PyObject *obj_BlockingRenderer_render(obj_BlockingRenderer *self
     try {
         auto &r = self->get_base();
         
-        const char *names[] = {"dest","format","scene"};
+        const char *names[] = {"dest","format","scene",nullptr};
         get_arg ga(args,kwds,names,"BlockingRenderer.render");
         auto dest = ga(true);
         auto &fmt = get_base<image_format>(ga(true));
@@ -918,7 +918,7 @@ FIX_STACK_ALIGN int obj_BlockingRenderer_init(obj_BlockingRenderer *self,PyObjec
     }
     
     try {
-        const char *names[] = {"threads"};
+        const char *names[] = {"threads",nullptr};
         get_arg ga(args,kwds,names,"BlockingRenderer.__init__");
         PyObject *temp = ga(false);
         int threads = temp ? from_pyobject<int>(temp) : -1;
@@ -1254,7 +1254,7 @@ PyMethodDef obj_Material_methods[] = {
 
 FIX_STACK_ALIGN PyObject *obj_Material_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
     try {
-        const char *names[] = {"color","opacity","reflectivity","specular_intensity","specular_exp","specular_color"};
+        const char *names[] = {"color","opacity","reflectivity","specular_intensity","specular_exp","specular_color",nullptr};
         get_arg ga(args,kwds,names,"Material.__new__");
         auto obj_c = ga(true);
         float o = 1;

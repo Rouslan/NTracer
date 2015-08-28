@@ -552,7 +552,7 @@ private:
     }
     
     template<typename... P,size_t... Indexes> static inline std::tuple<typename P::type...> _get_args(index_list<Indexes...>,const char *fname,PyObject *args,PyObject *kwds,const P&... params) {
-        const char *arg_names[] = {params.name...};
+        const char *arg_names[] = {params.name...,nullptr};
         get_arg_base ga(args,kwds,sizeof...(P),arg_names,fname);
         std::tuple<typename P::type...> r{as_param(params,Indexes,ga)...};
         ga.finished();
@@ -563,7 +563,9 @@ public:
     Py_ssize_t arg_index;
     
     get_arg(PyObject *args,PyObject *kwds,Py_ssize_t arg_len,const char **names=NULL,const char *fname=nullptr) : base(args,kwds,arg_len,names,fname), arg_index(0) {}
-    template<int N> get_arg(PyObject *args,PyObject *kwds,const char *(&names)[N],const char *fname=nullptr) : get_arg(args,kwds,N,names,fname) {}
+    template<int N> get_arg(PyObject *args,PyObject *kwds,const char *(&names)[N],const char *fname=nullptr) : get_arg(args,kwds,N-1,names,fname) {
+        assert(names[N-1] == nullptr);
+    }
     
     PyObject *operator()(bool required) { return base(arg_index++,required ? REQUIRED : OPTIONAL); }
     PyObject *operator()(arg_type type) { return base(arg_index++,type); }

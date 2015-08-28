@@ -735,7 +735,7 @@ FIX_STACK_ALIGN PyObject *obj_CompositeScene_set_background(obj_CompositeScene *
         ensure_unlocked(self);
         auto &base = self->get_base();
         
-        const char *names[] = {"c1","c2","c3","axis"};
+        const char *names[] = {"c1","c2","c3","axis",nullptr};
         get_arg ga(args,kwds,names,"CompositeScene.set_background");
         color c1;
         read_color(c1,ga(true));
@@ -798,7 +798,7 @@ FIX_STACK_ALIGN PyObject *obj_CompositeScene_new(PyTypeObject *type,PyObject *ar
     if(ptr) {
         try {
             try {
-                const char *names[] = {"boundary","data"};
+                const char *names[] = {"boundary","data",nullptr};
                 get_arg ga(args,kwds,names,"CompositeScene.__new__");
                 
                 auto &boundary = get_base<n_aabb>(ga(true));
@@ -1061,7 +1061,7 @@ PyMethodDef obj_Solid_methods[] = {
 
 FIX_STACK_ALIGN PyObject *obj_Solid_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
     try {
-        const char *names[] = {"type","position","orientation","material"};
+        const char *names[] = {"type","position","orientation","material",nullptr};
         get_arg ga(args,kwds,names,"Solid.__new__");
         auto type = from_pyobject<solid_type>(ga(true));
         auto position = from_pyobject<n_vector>(ga(true));
@@ -1137,7 +1137,7 @@ std::vector<n_vector,simd::allocator<n_vector> > points_for_triangle(PyObject *o
 
 FIX_STACK_ALIGN PyObject *obj_Triangle_from_points(PyObject*,PyObject *args,PyObject *kwds) {
     try {
-        const char *names[] = {"points","material"};
+        const char *names[] = {"points","material",nullptr};
         get_arg ga(args,kwds,names,"Triangle.from_points");
         auto obj_points = ga(true);
         auto m = checked_py_cast<material>(ga(true));
@@ -1174,7 +1174,7 @@ FIX_STACK_ALIGN PyObject *obj_Triangle_new(PyTypeObject *type,PyObject *args,PyO
     const char dim_err[] = "all supplied vectors must have the same dimension";
 
     try {
-        const char *names[] = {"p1","face_normal","edge_normals","material"};
+        const char *names[] = {"p1","face_normal","edge_normals","material",nullptr};
         get_arg ga(args,kwds,names,"Triangle.__new__");
         auto p1 = from_pyobject<n_vector>(ga(true));
         auto face_normal = from_pyobject<n_vector>(ga(true));
@@ -1496,7 +1496,7 @@ FIX_STACK_ALIGN PyObject *obj_KDLeaf_new(PyTypeObject *type,PyObject *args,PyObj
 
     try {
         try {
-            const char *names[] = {"primitives"};
+            const char *names[] = {"primitives",nullptr};
             get_arg ga(args,kwds,names,"KDLeaf.__new__");
             py::tuple primitives(py::object(py::borrowed_ref(ga(true))));
             ga.finished();
@@ -1559,7 +1559,7 @@ FIX_STACK_ALIGN PyObject *obj_KDBranch_new(PyTypeObject *type,PyObject *args,PyO
     if(ptr) {
         try {
             try {
-                const char *names[] = {"axis","split","left","right"};
+                const char *names[] = {"axis","split","left","right",nullptr};
                 get_arg ga(args,kwds,names,"KDBranch.__new__");
                 auto axis = from_pyobject<int>(ga(true));
                 auto split = from_pyobject<real>(ga(true));
@@ -1959,7 +1959,7 @@ PyMethodDef obj_Vector_methods[] = {
 
 FIX_STACK_ALIGN PyObject *obj_Vector_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
     try {
-        const char *names[] = {"dimension","values"};
+        const char *names[] = {"dimension","values",nullptr};
         get_arg ga(args,kwds,names,"Vector.__new__");
         int dimension = from_pyobject<int>(ga(true));
         py::nullable<py::object> values(py::borrowed_ref(ga(false)));
@@ -2300,7 +2300,7 @@ void copy_row(n_matrix &m,py::object values,int row,int len) {
 
 FIX_STACK_ALIGN PyObject *obj_Matrix_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
     try {
-        const char *names[] = {"dimension","values"};
+        const char *names[] = {"dimension","values",nullptr};
         get_arg ga(args,kwds,names,"Matrix.__new__");
         int dimension = from_pyobject<int>(ga(true));
         py::object values(py::borrowed_ref(ga(true)));
@@ -2562,7 +2562,7 @@ PyTypeObject obj_PrimitivePrototype::_pytype = make_type_object(
 
 FIX_STACK_ALIGN PyObject *obj_TrianglePrototype_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
     try {
-        const char *names[] = {"points","material"};
+        const char *names[] = {"points","material",nullptr};
         get_arg ga(args,kwds,names,"TrianglePrototype.__new__");
         auto points_obj = ga(true);
         auto m = checked_py_cast<material>(ga(true));
@@ -2753,7 +2753,7 @@ FIX_STACK_ALIGN PyObject *obj_SolidPrototype_new(PyTypeObject *type,PyObject *ar
     
     try {
         try {
-            const char *names[] = {"type","position","orientation","material"};
+            const char *names[] = {"type","position","orientation","material",nullptr};
             get_arg ga(args,kwds,names,"SolidPrototype.__new__");
             auto type = from_pyobject<solid_type>(ga(true));
             auto position = from_pyobject<n_vector>(ga(true));
@@ -2846,7 +2846,7 @@ FIX_STACK_ALIGN PyObject *obj_PointLight_new(PyTypeObject *type,PyObject *args,P
     
     try {
         try {
-            const char *names[] = {"position","color"};
+            const char *names[] = {"position","color",nullptr};
             get_arg ga(args,kwds,names,"PointLight.__new__");
             auto position = from_pyobject<n_vector>(ga(true));
             auto c = ga(false);
@@ -3089,7 +3089,7 @@ obj_PrimitivePrototype *p_proto_cast(PyObject *obj) {
 }
 
 std::tuple<n_aabb,kd_node<module_store>*> build_kdtree(const char *func,PyObject *args,PyObject *kwds) {
-    const char *names[] = {"primitives","extra_threads","max_depth","split_threshold","traversal_cost","intersection_cost"};
+    const char *names[] = {"primitives","extra_threads","max_depth","split_threshold","traversal_cost","intersection_cost",nullptr};
     
     get_arg ga{args,kwds,names,func};
     
