@@ -2,6 +2,7 @@
 #define simd_hpp
 
 #include <cstdint>
+#include <cstddef>
 #include <cmath>
 #include <algorithm>
 #include <cassert>
@@ -91,7 +92,7 @@
 
 namespace simd {
     template<typename T> struct _single {};
-    
+
 #ifdef SUPPORT_SSE2
     template<> struct _single<double> {
         struct type {
@@ -106,11 +107,11 @@ namespace simd {
                 data = _mm256_castpd256_pd128(b);
             }
     #endif
-            
+
             FORCE_INLINE operator double() const {
                 return _mm_cvtsd_f64(data);
             }
-            
+
             __m128d data;
         };
     };
@@ -127,7 +128,7 @@ namespace simd {
                 data = _mm256_castsi256_si128(b);
             }
     #endif
-            
+
             FORCE_INLINE operator int64_t() const {
     #if defined(__x86_64__) || defined(_M_X64)
                 return _mm_cvtsi128_si64(data);
@@ -140,7 +141,7 @@ namespace simd {
                 return tmp.s;
     #endif
             }
-            
+
             __m128i data;
         };
     };
@@ -157,11 +158,11 @@ namespace simd {
                 data = _mm256_castsi256_si128(b);
             }
     #endif
-            
+
             FORCE_INLINE operator int32_t() const {
                 return _mm_cvtsi128_si32(data);
             }
-            
+
             __m128i data;
         };
     };
@@ -173,11 +174,11 @@ namespace simd {
                 data = _mm256_castsi256_si128(b);
             }
     #endif
-            
+
             FORCE_INLINE operator int16_t() const {
                 return _mm_cvtsi128_si32(data) >> 16;
             }
-            
+
             __m128i data;
         };
     };
@@ -189,11 +190,11 @@ namespace simd {
                 data = _mm256_castsi256_si128(b);
             }
     #endif
-            
+
             FORCE_INLINE operator int8_t() const {
                 return _mm_cvtsi128_si32(data) >> 24;
             }
-            
+
             __m128i data;
         };
     };
@@ -212,71 +213,73 @@ namespace simd {
                 data = _mm256_castps256_ps128(b);
             }
     #endif
-            
+
             FORCE_INLINE operator float() const {
                 return _mm_cvtss_f32(data);
             }
-            
+
             __m128 data;
         };
     };
 #endif
-    
+
     template<typename T> using single = typename _single<T>::type;
-    
+
     namespace impl {
         template<typename T> struct negation_mask;
-        
+
         template<typename T,typename Packed,typename Item> struct common {
             typedef Item item_t;
-            
+
             static const size_t size = sizeof(Packed) / sizeof(Item);
-            
+
             Item &operator[](size_t i) {
                 return data.s[i];
             }
-            
+
             Item operator[](size_t i) const {
                 return data.s[i];
             }
-            
+
             FORCE_INLINE T operator-() const {
                 //return *reinterpret_cast<const T*>(negation_mask<Item>::value) ^ *static_cast<const T*>(this);
                 return T::zeros() - *static_cast<const T*>(this);
             }
-            
+
             template<typename F> T apply(F f) const {
                 T r;
                 for(size_t i=0; i<size; ++i) r.data.s[i] = f(data.s[i]);
                 return r;
             }
-            
+
             template<typename F> Item reduce(F f) const {
                 Item r = data.s[0];
                 for(size_t i=1; i<size; ++i) r = f(r,data.s[i]);
                 return r;
             }
-            
+
             void from_item(Item x) {
                 data.s[0] = x;
                 for(size_t i=1; i<size; ++i) data.s[i] = 0;
             }
-            
+
+            explicit operator bool() const;
+
             union {
                 Packed p;
                 Item s[size];
             } data;
-            
-            
+
+
             static constexpr bool has_vec_reduce_add = false;
-            
+
             // fall-back implementations for missing SIMD functions
             T abs() const { return apply(static_cast<Item (*)(Item)>(&std::abs)); }
             Item reduce_max() const { return reduce(&std::max<Item>); }
             Item reduce_min() const { return reduce(&std::min<Item>); }
             Item reduce_add() const { return reduce(std::plus<Item>()); }
         };
-        
+
         template<typename T,typename Packed,typename Item> struct common_real : common<T,Packed,Item> {
             FORCE_INLINE T operator*(Item b) const {
                 return *static_cast<const T*>(this) * T::repeat(b);
@@ -290,7 +293,7 @@ namespace simd {
             FORCE_INLINE T& operator*=(single<Item> b) {
                 return *static_cast<T*>(this) *= T::repeat(b);
             }
-            
+
             FORCE_INLINE T operator/(Item b) const {
                 return *static_cast<const T*>(this) / T::repeat(b);
             }
@@ -303,11 +306,11 @@ namespace simd {
             FORCE_INLINE T& operator/=(single<Item> b) {
                 return *static_cast<T*>(this) /= T::repeat(b);
             }
-            
+
             // fall-back implementations for missing SIMD functions
             T add_sub(T b) const {
                 static_assert(common<T,Packed,Item>::size % 2 == 0,"this algorithm assumes there is an even number of elements");
-                
+
                 T r;
                 for(int i=0; i<common<T,Packed,Item>::size; i+=2) {
                     r.data.s[i] = this->data.s[i] + b.data.s[i];
@@ -315,22 +318,22 @@ namespace simd {
                 }
                 return r;
             }
-            
+
             T ceil() const { return this->apply(static_cast<Item (*)(Item)>(&std::ceil)); }
             T floor() const { return this->apply(static_cast<Item (*)(Item)>(&std::floor)); }
         };
-        
+
         template<typename T,typename Packed,typename Item> FORCE_INLINE T operator*(Item a,const common_real<T,Packed,Item> &b) {
             return T::repeat(a) * static_cast<const T&>(b);
         }
         template<typename T,typename Packed,typename Item> FORCE_INLINE T operator*(typename T::single a,const common_real<T,Packed,Item> &b) {
             return T::repeat(a) * static_cast<const T&>(b);
         }
-        
+
         template<typename T,size_t Size,size_t Granularity=1> struct mask_common {
             static const size_t size = Size;
             static const size_t bit_granularity = Granularity;
-            
+
             bool any() const {
                 return static_cast<const T*>(this)->to_bits() != 0;
             }
@@ -339,18 +342,28 @@ namespace simd {
             }
         };
     }
-    
+
+    template<typename T> struct v_sizes;
+
     template<typename T,size_t Size> struct _v_type {};
-    template<typename T,size_t Size> using v_type = typename _v_type<T,Size>::type;
-    
+    template<typename T,size_t Size=v_sizes<T>::value[0]> using v_type = typename _v_type<T,Size>::type;
+
+    template<typename T,typename=std::void_t<>> struct _is_v_type {
+        static constexpr bool value = false;
+    };
+    template<typename T> struct _is_v_type<T,std::void_t<v_type<typename T::item_t,T::size>>> {
+        static constexpr bool value = true;
+    };
+    template<typename T> constexpr bool is_v_type = _is_v_type<T>::value;
+
     struct mask_s : impl::mask_common<mask_s,1> {
         bool data;
-        
+
         int to_bits() const {
             return data ? 1 : 0;
         }
         explicit mask_s(bool cond) : data(cond) {}
-        
+
         mask_s operator&&(mask_s b) const {
             return mask_s(data && b.data);
         }
@@ -372,141 +385,168 @@ namespace simd {
     }
 
     namespace impl {
+        /* de-interleaved vector arrays will have a type of
+           scalar<v_type<type,size> > */
+
+        template<typename T,bool=std::is_arithmetic_v<T>> struct support {
+            typedef mask_s mask;
+
+            static constexpr bool is_float = std::is_floating_point_v<T>;
+
+            static inline T sqrt(T x) { return std::sqrt(x); }
+            static inline T rsqrt(T x) { return T(1) / std::sqrt(x); }
+            static inline T floor(T x) { return std::floor(x); }
+            static inline T ceil(T x) { return std::ceil(x); }
+            static inline T zeros() { return T(0); }
+        };
+
+        template<typename T> struct support<T,false> {
+            typedef typename T::mask mask;
+
+            static constexpr bool is_float = std::is_floating_point_v<typename T::item_t>;
+
+            static inline T sqrt(T x) { return x.sqrt(); }
+            static inline T rsqrt(T x) { return x.rsqrt(); }
+            static inline T floor(T x) { return x.floor(); }
+            static inline T ceil(T x) { return x.ceil(); }
+            static inline T zeros() { return T::zeros(); }
+        };
+
         template<typename T,typename This> struct scalar {
             typedef T item_t;
-            typedef mask_s mask;
-            
+            typedef typename support<T>::mask mask;
+
             scalar() = default;
             scalar(T data) : data(data) {}
-            
+
             static const size_t size = 1;
-            
+
             This operator+(This b) const { return data + b.data; }
             This& operator+=(This b) { data += b.data; return *static_cast<This*>(this); }
-            
+
             This operator-(This b) const { return data - b.data; }
             This& operator-=(This b) { data -= b.data; return *static_cast<This*>(this); }
-            
+
             This operator-() const { return -data; }
-            
+
             This operator&(This b) const { return data & b.data; }
             This& operator&=(This b) { data &= b.data; return *static_cast<This*>(this); }
-            
+
             This operator|(This b) const { return data | b.data; }
             This& operator|=(This b) { data |= b.data; return *static_cast<This*>(this); }
-            
+
             This operator^(This b) const { return data ^ b.data; }
             This& operator^=(This b) { data ^= b.data; return *static_cast<This*>(this); }
-            
+
             T &operator[](size_t i) {
                 assert(i == 0);
                 return data;
             }
-            
+
             T operator[](size_t i) const {
                 assert(i == 0);
                 return data;
             }
-            
+
             mask operator==(This b) const { return mask(data == b.data); }
             mask operator!=(This b) const { return mask(data != b.data); }
             mask operator<(This b) const { return mask(data < b.data); }
             mask operator<=(This b) const { return mask(data <= b.data); }
             mask operator>(This b) const { return mask(data > b.data); }
             mask operator>=(This b) const { return mask(data >= b.data); }
-            
+
             template<typename F> This apply(F f) const {
                 return This(f(data));
             }
-            
+
             This abs() const { return std::abs(data); }
-            
+
             T reduce_max() const { return data; }
             T reduce_min() const { return data; }
             T reduce_add() const { return data; }
-            
+
             static This load(const T *source) { return *source; }
             static This loadu(const T *source) { return *source; }
-            
+
             void store(T *dest) const { *dest = data; }
             void storeu(T *dest) const { *dest = data; }
-            
+
+            This zfilter(mask m) const {
+                return m.data ? data : 0;
+            }
+
             static This repeat(T x) { return x; }
-            
-            static This zeros() { return T(0); }
-            
+
+            static This zeros() { return support<T>::zeros(); }
+
             T data;
         };
     }
-    
-    template<typename T,bool IsFloat=std::is_floating_point<T>::value> struct scalar : impl::scalar<T,scalar<T,IsFloat> > {
+
+    template<typename T,bool IsFloat=impl::support<T>::is_float> struct scalar : impl::scalar<T,scalar<T,IsFloat> > {
         scalar() = default;
-        scalar(T data) : impl::scalar<T,scalar<T,IsFloat> >(data) {}
+        scalar(T data) : impl::scalar<T,scalar>(data) {}
     };
-    
+
     template<typename T> struct scalar<T,true> : impl::scalar<T,scalar<T,true> > {
         scalar() = default;
-        scalar(T data) : impl::scalar<T,scalar<T,true> >(data) {}
-        
-        scalar<T,true> operator*(scalar<T,true> b) const { return this->data * b.data; }
-        scalar<T,true>& operator*=(scalar<T,true> b) { this->data *= b.data; return *this; }
-        
-        scalar<T,true> operator/(scalar<T,true> b) const { return this->data / b.data; }
-        scalar<T,true>& operator/=(scalar<T,true> b) { this->data /= b.data; return *this; }
-        
-        scalar<T,true> sqrt() const { return std::sqrt(this->data); }
-        scalar<T,true> rsqrt() const { return T(1) / std::sqrt(this->data); }
-        scalar<T,true> ceil() const { return std::ceil(this->data); }
-        scalar<T,true> floor() const { return std::floor(this->data); }
+        scalar(T data) : impl::scalar<T,scalar>(data) {}
+
+        scalar operator*(scalar b) const { return this->data * b.data; }
+        scalar& operator*=(scalar b) { this->data *= b.data; return *this; }
+
+        scalar operator/(scalar b) const { return this->data / b.data; }
+        scalar& operator/=(scalar b) { this->data /= b.data; return *this; }
+
+        scalar sqrt() const { return impl::support<T>::sqrt(this->data); }
+        scalar rsqrt() const { return impl::support<T>::rsqrt(this->data); }
+        scalar ceil() const { return impl::support<T>::ceil(this->data); }
+        scalar floor() const { return impl::support<T>::floor(this->data); }
     };
 
 
-    template<> struct _v_type<double,1> { typedef scalar<double> type; };
-    template<> struct _v_type<float,1> { typedef scalar<float> type; };
-    template<> struct _v_type<int64_t,1> { typedef scalar<int64_t> type; };
-    template<> struct _v_type<int32_t,1> { typedef scalar<int32_t> type; };
-    template<> struct _v_type<int16_t,1> { typedef scalar<int16_t> type; };
-    template<> struct _v_type<int8_t,1> { typedef scalar<int8_t> type; };
-    
-#ifdef SUPPORT_AVX_512    
+    template<typename T> struct _v_type<T,1> { typedef scalar<T> type; };
+
+
+#ifdef SUPPORT_AVX_512
     struct mask64_v_512 : impl::mask_common<mask64_v_512,8> {
         __mmask8 data;
         int to_bits() const {
             return static_cast<int>(data);
         }
-        
+
         explicit FORCE_INLINE mask64_v_512(__mmask8 data) : data(data) {}
     };
     // [[[mask-64-512]]]
-    
+
     struct mask32_v_512 : impl::mask_common<mask32_v_512,16> {
         __mmask16 data;
         int to_bits() const {
             return static_cast<int>(data);
         }
-        
+
         explicit FORCE_INLINE mask32_v_512(__mmask16 data) : data(data) {}
     };
     // [[[mask-32-512]]]
-    
+
     struct double_v_256;
     struct float_v_256;
     struct int64_v_256;
     struct int32_v_256;
-    
+
     struct double_v_128;
     struct float_v_128;
     struct int64_v_128;
     struct int32_v_128;
-    
+
     struct double_v_512 : impl::common_real<double_v_512,__m512d,double> {
         typedef impl::common_real<double_v_512,__m512d,double> base_t;
         typedef mask64_v_512 mask;
-        
+
         V_INIT_CODE(double_v_512,__m512d,double)
-        
+
         // [[[double-512]]]
-        
+
         using base_t::operator*;
         using base_t::operator/;
         using base_t::operator*=;
@@ -516,11 +556,11 @@ namespace simd {
     struct float_v_512 : impl::common_real<float_v_512,__m512,float> {
         typedef impl::common_real<float_v_512,__m512,float> base_t;
         typedef mask32_v_512 mask;
-        
+
         V_INIT_CODE(float_v_512,__m512,float)
-        
+
         // [[[float-512]]]
-        
+
         using base_t::operator*;
         using base_t::operator/;
         using base_t::operator*=;
@@ -530,24 +570,24 @@ namespace simd {
     struct int64_v_512 : impl::common<int64_v_512,__m512i,int64_t> {
         typedef impl::common<int64_v_512,__m512i,int64_t> base_t;
         typedef mask64_v_512 mask;
-        
+
         V_INIT_CODE(int64_v_512,__m512i,int64_t)
-        
+
         // [[[int64_t-512]]]
-        
+
         using base_t::operator-;
     };
     struct int32_v_512 : impl::common<int32_v_512,__m512i,int32_t> {
         typedef impl::common<int32_v_512,__m512i,int32_t> base_t;
         typedef mask32_v_512 mask;
-        
+
         V_INIT_CODE(int32_v_512,__m512i,int32_t)
-        
+
         // [[[int32_t-512]]]
-        
+
         using base_t::operator-;
     };
-    
+
     template<> struct _v_type<double,8> struct _v_type { typedef double_v_512 type; };
     template<> struct _v_type<float,16> struct _v_type { typedef float_v_512 type; };
     template<> struct _v_type<int64_t,8> struct _v_type { typedef int64_v_512 type; };
@@ -561,7 +601,7 @@ namespace simd {
         FORCE_INLINE int to_bits() const {
             return _mm256_movemask_pd(data);
         }
-        
+
         explicit mask64_v_256(__m256d data) : data(data) {}
     #ifdef SUPPORT_AVX2
         explicit make64_v_256(__m256i data) : data(reinterpret_cast<__m256d>(data)) {}
@@ -574,7 +614,7 @@ namespace simd {
         FORCE_INLINE int to_bits() const {
             return _mm256_movemask_ps(data);
         }
-        
+
         explicit mask32_v_256(__m256 data) : data(data) {}
     #ifdef SUPPORT_AVX2
         explicit make32_v_256(__m256i data) : data(reinterpret_cast<__m256>(data)) {}
@@ -590,7 +630,7 @@ namespace simd {
         FORCE_INLINE int to_bits() const {
             return _mm256_movemask_epi8(data);
         }
-        
+
         explicit mask16_v_256(__m256i data) : data(data) {}
     };
     // [[[mask-16-256]]]
@@ -600,7 +640,7 @@ namespace simd {
         FORCE_INLINE int to_bits() const {
             return _mm256_movemask_epi8(data);
         }
-        
+
         explicit mask8_v_256(__m256i data) : data(data) {}
     };
     // [[[mask-8-256]]]
@@ -609,53 +649,53 @@ namespace simd {
     struct int32_v_128;
     struct int16_v_128;
     struct int8_v_128;
-    
+
     struct int64_v_256 : impl::common<int64_v_256,__m256i,int64_t> {
         typedef impl::common<int64_v_256,__m256i,int64_t> base_t;
         typedef mask64_v_256 mask;
-        
+
         V_INIT_CODE(int64_v_256,__m256i,int64_t)
-        
+
         // [[[int64_t-256]]]
-        
+
         using base_t::operator-;
     };
     struct int32_v_256 : impl::common<int32_v_256,__m256i,int32_t> {
         typedef impl::common<int32_v_256,__m256i,int32_t> base_t;
         typedef mask32_v_256 mask;
-        
+
         V_INIT_CODE(int32_v_256,__m256i,int32_t)
-        
+
         // [[[int32_t-256]]]
-        
+
         using base_t::operator-;
     };
     struct int16_v_256 : impl::common<int16_v_256,__m256i,int16_t> {
         typedef impl::common<int16_v_256,__m256i,int16_t> base_t;
         typedef mask16_v_256 mask;
-        
+
         V_INIT_CODE(int16_v_256,__m256i,int16_t)
-        
+
         // [[[int16_t-256]]]
-        
+
         using base_t::operator-;
     };
     struct int8_v_256 : impl::common<int8_v_256,__m256i,int8_t> {
         typedef impl::common<int8_v_256,__m256i,int8_t> base_t;
         typedef mask8_v_256 mask;
-        
+
         V_INIT_CODE(int8_v_256,__m256i,int8_t)
-        
+
         // [[[int8_t-256]]]
-        
+
         using base_t::operator-;
     };
-    
+
     #ifdef SUPPORT_AVX_512
     // [[[int64_t-512-256]]]
     // [[[int32_t-512-256]]]
     #endif
-    
+
     template<> struct _v_type<int64_t,4> struct _v_type { typedef int64_v_256 type; };
     template<> struct _v_type<int32_t,8> struct _v_type { typedef int32_v_256 type; };
     template<> struct _v_type<int16_t,16> struct _v_type { typedef int16_v_256 type; };
@@ -665,15 +705,15 @@ namespace simd {
 #ifdef SUPPORT_AVX
     struct double_v_128;
     struct float_v_128;
-    
+
     struct double_v_256 : impl::common_real<double_v_256,__m256d,double> {
         typedef impl::common_real<double_v_256,__m256d,double> base_t;
         typedef mask64_v_256 mask;
-        
+
         V_INIT_CODE(double_v_256,__m256d,double)
-        
+
         // [[[double-256]]]
-        
+
         using base_t::operator*;
         using base_t::operator/;
         using base_t::operator*=;
@@ -683,23 +723,23 @@ namespace simd {
     struct float_v_256 : impl::common_real<float_v_256,__m256,float> {
         typedef impl::common_real<float_v_256,__m256,float> base_t;
         typedef mask32_v_256 mask;
-        
+
         V_INIT_CODE(float_v_256,__m256,float)
-        
+
         // [[[float-256]]]
-        
+
         using base_t::operator*;
         using base_t::operator/;
         using base_t::operator*=;
         using base_t::operator/=;
         using base_t::operator-;
     };
-    
+
     #ifdef SUPPORT_AVX_512
     // [[[double-512-256]]]
     // [[[float-512-256]]]
     #endif
-    
+
     template<> struct _v_type<double,4> struct _v_type { typedef double_v_256 type; };
     template<> struct _v_type<float,8> struct _v_type { typedef float_v_256 type; };
 #endif
@@ -711,7 +751,7 @@ namespace simd {
         FORCE_INLINE int to_bits() const {
             return _mm_movemask_ps(data);
         }
-        
+
         explicit mask32_v_128(__m128 data) : data(data) {}
     #ifdef SUPPORT_SSE2
         explicit mask32_v_128(__m128i data) : data(reinterpret_cast<__m128>(data)) {}
@@ -719,14 +759,14 @@ namespace simd {
     };
     // [[[mask-32-128]]]
 #endif
-    
+
 #ifdef SUPPORT_SSE2
     struct mask64_v_128 : impl::mask_common<mask64_v_128,2> {
         __m128d data;
         FORCE_INLINE int to_bits() const {
             return _mm_movemask_pd(data);
         }
-        
+
         explicit mask64_v_128(__m128d data) : data(data) {}
         explicit mask64_v_128(__m128i data) : data(reinterpret_cast<__m128d>(data)) {}
     };
@@ -737,7 +777,7 @@ namespace simd {
         FORCE_INLINE int to_bits() const {
             return _mm_movemask_epi8(data);
         }
-        
+
         explicit mask16_v_128(__m128i data) : data(data) {}
     };
     // [[[mask-16-128]]]
@@ -747,19 +787,19 @@ namespace simd {
         FORCE_INLINE int to_bits() const {
             return _mm_movemask_epi8(data);
         }
-        
+
         explicit mask8_v_128(__m128i data) : data(data) {}
     };
     // [[[mask-8-128]]]
-    
+
     struct double_v_128 : impl::common_real<double_v_128,__m128d,double> {
         typedef impl::common_real<double_v_128,__m128d,double> base_t;
         typedef mask64_v_128 mask;
-        
+
         V_INIT_CODE(double_v_128,__m128d,double)
-        
+
         // [[[double-128]]]
-        
+
         using base_t::operator*;
         using base_t::operator/;
         using base_t::operator*=;
@@ -769,61 +809,61 @@ namespace simd {
     struct int64_v_128 : impl::common<int64_v_128,__m128i,int64_t> {
         typedef impl::common<int64_v_128,__m128i,int64_t> base_t;
         typedef mask64_v_128 mask;
-        
+
         V_INIT_CODE(int64_v_128,__m128i,int64_t)
-        
+
         // [[[int64_t-128]]]
-        
+
         using base_t::operator-;
     };
     struct int32_v_128 : impl::common<int32_v_128,__m128i,int32_t> {
         typedef impl::common<int32_v_128,__m128i,int32_t> base_t;
         typedef mask32_v_128 mask;
-        
+
         V_INIT_CODE(int32_v_128,__m128i,int32_t)
-        
+
         // [[[int32_t-128]]]
-        
+
         using base_t::operator-;
     };
     struct int16_v_128 : impl::common<int16_v_128,__m128i,int16_t> {
         typedef impl::common<int16_v_128,__m128i,int16_t> base_t;
         typedef mask16_v_128 mask;
-        
+
         V_INIT_CODE(int16_v_128,__m128i,int16_t)
-        
+
         // [[[int16_t-128]]]
-        
+
         using base_t::operator-;
     };
     struct int8_v_128 : impl::common<int8_v_128,__m128i,int8_t> {
         typedef impl::common<int8_v_128,__m128i,int8_t> base_t;
         typedef mask8_v_128 mask;
-        
+
         V_INIT_CODE(int8_v_128,__m128i,int8_t)
-        
+
         // [[[int8_t-128]]]
-        
+
         using base_t::operator-;
     };
-    
+
     #ifdef SUPPORT_AVX_512
     // [[[double-512-128]]]
     // [[[int64_t-512-128]]]
     // [[[int32_t-512-128]]]
     #endif
-    
+
     #ifdef SUPPORT_AVX2
     // [[[int64_t-256-128]]]
     // [[[int32_t-256-128]]]
     // [[[int16_t-256-128]]]
     // [[[int8_t-256-128]]]
     #endif
-    
+
     #ifdef SUPPORT_AVX
     // [[[double-256-128]]]
     #endif
-    
+
     template<> struct _v_type<double,2> { typedef double_v_128 type; };
     template<> struct _v_type<int64_t,2> { typedef int64_v_128 type; };
     template<> struct _v_type<int32_t,4> { typedef int32_v_128 type; };
@@ -836,36 +876,36 @@ namespace simd {
     struct float_v_128 : impl::common_real<float_v_128,__m128,float> {
         typedef impl::common_real<float_v_128,__m128,float> base_t;
         typedef mask32_v_128 mask;
-        
+
         V_INIT_CODE(float_v_128,__m128,float)
-        
+
         // [[[float-128]]]
-        
+
         using base_t::operator*;
         using base_t::operator/;
         using base_t::operator*=;
         using base_t::operator/=;
         using base_t::operator-;
     };
-    
+
     #ifdef SUPPORT_AVX_512
     // [[[float-512-128]]]
     #endif
-    
+
     #ifdef SUPPORT_AVX
     // [[[float-256-128]]]
     #endif
-    
+
     template<> struct _v_type<float,4> { typedef float_v_128 type; };
 #endif
-    
-    
+
+
     /* the zeros at the end are just so "largest_fit" (defined below) doesn't
        need to check if its argument is zero */
     template<typename T> struct v_sizes {
         static constexpr size_t value[] = {1,0};
     };
-    
+
     template<> struct v_sizes<double> {
         static constexpr size_t value[] = {
 #ifdef SUPPORT_AVX_512
@@ -879,7 +919,7 @@ namespace simd {
 #endif
             1,0};
     };
-    
+
     template<> struct v_sizes<float> {
         static constexpr size_t value[] = {
 #ifdef SUPPORT_AVX_512
@@ -893,7 +933,7 @@ namespace simd {
 #endif
             1,0};
     };
-    
+
     template<> struct v_sizes<int64_t> {
         static constexpr size_t value[] = {
 #ifdef SUPPORT_AVX_512
@@ -907,7 +947,7 @@ namespace simd {
 #endif
             1,0};
     };
-    
+
     template<> struct v_sizes<int32_t> {
         static constexpr size_t value[] = {
 #ifdef SUPPORT_AVX_512
@@ -921,7 +961,7 @@ namespace simd {
 #endif
             1,0};
     };
-    
+
     template<> struct v_sizes<int16_t> {
         static constexpr size_t value[] = {
 #ifdef SUPPORT_AVX2
@@ -932,7 +972,7 @@ namespace simd {
 #endif
             1,0};
     };
-    
+
     template<> struct v_sizes<int8_t> {
         static constexpr size_t value[] = {
 #ifdef SUPPORT_AVX2
@@ -943,7 +983,7 @@ namespace simd {
 #endif
             1,0};
     };
-    
+
     namespace impl {
         //template<typename T> struct negation_mask_item {
         //    struct type {
@@ -963,23 +1003,23 @@ namespace simd {
         //        constexpr type() : value(-0.0) {}
         //    };
         //};
-        
+
         //template<typename T> struct negation_mask {
         //    /* we have to use alignof because when using GCC 4.7, alignas is
         //       just a macro wrapping __attribute__ ((aligned (X))) */
         //    alignas(alignof(v_type<T,v_sizes<T>::value[0]>)) static constexpr typename negation_mask_item<T>::type value[v_sizes<T>::value[0]] = {};
         //};
-        
-        
+
+
         // hide the second argument
-        
+
         template<typename T> constexpr size_t largest_fit(size_t size,size_t i) {
             return size >= v_sizes<T>::value[i] ? v_sizes<T>::value[i] : largest_fit<T>(size,i+1);
         }
 
         template<typename T> constexpr size_t padded_size(size_t size,size_t i) {
             typedef v_sizes<T> s;
-            
+
             //return size >= s::value[i+1] ?
             return size >= s::value[i] ?
                 (size / s::value[i] * s::value[i])
@@ -990,12 +1030,12 @@ namespace simd {
     template<typename T> constexpr size_t largest_fit(size_t size) {
         return impl::largest_fit<T>(size,0);
     }
-    
+
     template<typename T> constexpr size_t padded_size(size_t size) {
         return size > 1 ? impl::padded_size<T>(size,0) : size;
     }
-    
-    
+
+
     template<typename T> scalar<T> max(scalar<T> a,scalar<T> b) {
         return a.data > b.data ? a : b;
     }
@@ -1019,10 +1059,35 @@ namespace simd {
     template<typename T> mask_s cmp_nge(scalar<T> a,scalar<T> b) {
         return mask_s(!(a.data >= b.data));
     }
-    
+
+    template<typename T> int test_z(scalar<T> a,scalar<T> b) {
+        return a.data & b.data ? 1 : 0;
+    }
+
+    template<typename T> int test_z(scalar<T> a) {
+        return a.data ? 1 : 0;
+    }
+
+    // fall-back implementations for missing SIMD functions
+    template<typename T,size_t Size> int test_z(v_type<T,Size> a,v_type<T,Size> b) {
+        return ((a & b) == v_type<T,Size>::zeros()).all() ? 1 : 0;
+    }
+
+    template<typename T,size_t Size> int test_z(v_type<T,Size> a) {
+        return (a == v_type<T,Size>::zeros()).all() ? 1 : 0;
+    }
+    // end of fall-back functions
+
+
     // [[[functions]]]
-    
-    
+
+
+    namespace impl {
+        template<typename T,typename Packed,typename Item> FORCE_INLINE common<T,Packed,Item>::operator bool() const {
+            return test_z(*static_cast<const T*>(this));
+        }
+    }
+
 
     inline void *aligned_alloc(size_t align,size_t size) {
         void *dest;
@@ -1039,7 +1104,7 @@ namespace simd {
 #endif
         return dest;
     }
-    
+
     inline void aligned_free(void *m) noexcept {
 #if defined(USE_POSIX)
         free(m);
@@ -1049,11 +1114,11 @@ namespace simd {
         free(reinterpret_cast<void**>(m)[-1]);
 #endif
     }
-    
-    
+
+
     template<typename T> struct aligned_allocator {
         static_assert(sizeof(T) % alignof(T) == 0,"The object's size needs to be a multiple of its alignment");
-        
+
         typedef size_t size_type;
         typedef ptrdiff_t difference_type;
         typedef T* pointer;
@@ -1061,27 +1126,27 @@ namespace simd {
         typedef T& reference;
         typedef const T& const_reference;
         typedef T value_type;
-        
+
         template<typename U> struct rebind { typedef aligned_allocator<U> other; };
-        
+
         pointer address(reference x) const { return &x; }
         const_pointer address(const_reference x) const { return &x; }
-        
+
         pointer allocate(size_type n,void *hint = 0) const {
             return reinterpret_cast<pointer>(aligned_alloc(alignof(T),n * sizeof(T)));
         }
-        
+
         void deallocate(pointer p,size_type) const {
             aligned_free(p);
         }
-        
+
         size_type max_size() const throw() { return size_type(-1) / sizeof(T); }
-        
+
         void construct(pointer p,const_reference val) { new(p) T(val); }
-        
+
         void destroy(pointer p) { p->~T(); }
     };
-    
+
     namespace impl {
         template<typename T,bool need_align=(alignof(T) > alignof(std::max_align_t))> struct allocator {
             typedef std::allocator<T> type;
@@ -1090,7 +1155,7 @@ namespace simd {
             typedef aligned_allocator<T> type;
         };
     }
-    
+
     /* aliases std::allocator or aligned_allocator depending on whether T needs
        extra alignment */
     template<typename T> using allocator = typename impl::allocator<T>::type;

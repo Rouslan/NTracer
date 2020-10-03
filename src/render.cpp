@@ -31,8 +31,6 @@ template<> struct _wrapped_type<ROOT> { \
 #define GET_TRACERN_PREFIX "ntracer.tracer"
 
 
-using namespace type_object_abbrev;
-
 typedef char py_bool;
 typedef unsigned char byte;
 
@@ -112,12 +110,14 @@ PyMemberDef obj_Channel_members[] = {
     {NULL}
 };
 
-PyTypeObject channel_obj_base::_pytype = make_type_object(
-    FULL_MODULE_STR ".Channel",
-    sizeof(wrapped_type<channel>),
-    tp_dealloc = destructor_dealloc<wrapped_type<channel> >::value,
-    tp_members = obj_Channel_members,
-    tp_new = [](PyTypeObject *type,PyObject *args,PyObject *kwds) -> PyObject* {
+PyTypeObject channel_obj_base::_pytype = {
+    PyVarObject_HEAD_INIT(nullptr,0)
+    .tp_name = FULL_MODULE_STR ".Channel",
+    .tp_basicsize = sizeof(wrapped_type<channel>),
+    .tp_dealloc = destructor_dealloc<wrapped_type<channel> >::value,
+    .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE|Py_TPFLAGS_CHECKTYPES,
+    .tp_members = obj_Channel_members,
+    .tp_new = [](PyTypeObject *type,PyObject *args,PyObject *kwds) -> PyObject* {
         try {
             auto ptr = py::check_obj(type->tp_alloc(type,0));
             try {
@@ -160,7 +160,7 @@ PyTypeObject channel_obj_base::_pytype = make_type_object(
             
             return ptr;
         } PY_EXCEPT_HANDLERS(nullptr)
-    });
+    }};
 
 
 struct image_format {
@@ -236,14 +236,16 @@ PyMemberDef obj_ImageFormat_members[] = {
     {NULL}
 };
 
-PyTypeObject image_format_obj_base::_pytype = make_type_object(
-    FULL_MODULE_STR ".ImageFormat",
-    sizeof(wrapped_type<image_format>),
-    tp_dealloc = destructor_dealloc<wrapped_type<image_format> >::value,
-    tp_members = obj_ImageFormat_members,
-    tp_getset = obj_ImageFormat_getset,
-    tp_methods = obj_ImageFormat_methods,
-    tp_new = [](PyTypeObject *type,PyObject *args,PyObject *kwds) -> PyObject* {
+PyTypeObject image_format_obj_base::_pytype = {
+    PyVarObject_HEAD_INIT(nullptr,0)
+    .tp_name = FULL_MODULE_STR ".ImageFormat",
+    .tp_basicsize = sizeof(wrapped_type<image_format>),
+    .tp_dealloc = destructor_dealloc<wrapped_type<image_format> >::value,
+    .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE|Py_TPFLAGS_CHECKTYPES,
+    .tp_methods = obj_ImageFormat_methods,
+    .tp_members = obj_ImageFormat_members,
+    .tp_getset = obj_ImageFormat_getset,
+    .tp_new = [](PyTypeObject *type,PyObject *args,PyObject *kwds) -> PyObject* {
         try {
             auto ptr = py::check_obj(type->tp_alloc(type,0));
             try {
@@ -278,7 +280,7 @@ PyTypeObject image_format_obj_base::_pytype = make_type_object(
             
             return ptr;
         } PY_EXCEPT_HANDLERS(nullptr)
-    });
+    }};
 
 
 void check_index(const obj_ChannelList *cl,Py_ssize_t index) {
@@ -297,28 +299,21 @@ PyObject *obj_ChannelList_getitem(obj_ChannelList *self,Py_ssize_t index) {
 }
 
 PySequenceMethods obj_ChannelList_sequence_methods = {
-    reinterpret_cast<lenfunc>(&obj_ChannelList_len),
-    NULL,
-    NULL,
-    reinterpret_cast<ssizeargfunc>(&obj_ChannelList_getitem),
-    NULL,
-    NULL,
-    NULL,
-    NULL,
-    NULL,
-    NULL
+    .sq_length = reinterpret_cast<lenfunc>(&obj_ChannelList_len),
+    .sq_item = reinterpret_cast<ssizeargfunc>(&obj_ChannelList_getitem)
 };
 
-PyTypeObject obj_ChannelList::_pytype = make_type_object(
-    FULL_MODULE_STR ".ChannelList",
-    sizeof(obj_ChannelList),
-    tp_dealloc = destructor_dealloc<obj_ChannelList>::value,
-    tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_CHECKTYPES,
-    tp_as_sequence = &obj_ChannelList_sequence_methods,
-    tp_new = [](PyTypeObject*,PyObject*,PyObject*) -> PyObject* {
+PyTypeObject obj_ChannelList::_pytype = {
+    PyVarObject_HEAD_INIT(nullptr,0)
+    .tp_name = FULL_MODULE_STR ".ChannelList",
+    .tp_basicsize = sizeof(obj_ChannelList),
+    .tp_dealloc = destructor_dealloc<obj_ChannelList>::value,    
+    .tp_as_sequence = &obj_ChannelList_sequence_methods,
+    .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_CHECKTYPES,
+    .tp_new = [](PyTypeObject*,PyObject*,PyObject*) -> PyObject* {
         PyErr_SetString(PyExc_TypeError,"the ChannelList type cannot be instantiated directly");
         return nullptr;
-    });
+    }};
 
 
 struct renderer {
@@ -581,7 +576,7 @@ PyObject *obj_Scene_calculate_color(obj_Scene *self,PyObject *args,PyObject *kwd
         
         {
             py::allow_threads __;
-            r = apply(sc,&scene::calculate_color,vals);
+            r = sc.calculate_color(std::get<0>(vals),std::get<1>(vals),std::get<2>(vals),std::get<3>(vals));
         }
         
         return to_pyobject(r);
@@ -593,14 +588,16 @@ PyMethodDef obj_Scene_methods[] = {
     {NULL}
 };
 
-PyTypeObject obj_Scene::_pytype = make_type_object(
-    FULL_MODULE_STR ".Scene",
-    sizeof(obj_Scene),
-    tp_methods = obj_Scene_methods,
-    tp_new = [](PyTypeObject *type,PyObject *args,PyObject *kwds) -> PyObject* {
+PyTypeObject obj_Scene::_pytype = {
+    PyVarObject_HEAD_INIT(nullptr,0)
+    .tp_name = FULL_MODULE_STR ".Scene",
+    .tp_basicsize = sizeof(obj_Scene),
+    .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE|Py_TPFLAGS_CHECKTYPES,
+    .tp_methods = obj_Scene_methods,
+    .tp_new = [](PyTypeObject *type,PyObject *args,PyObject *kwds) -> PyObject* {
         PyErr_SetString(PyExc_TypeError,"the Scene type cannot be instantiated directly");
         return nullptr;
-    });
+    }};
 
 
 template<typename T> void obj_Renderer_dealloc(wrapped_type<T> *self) {
@@ -737,17 +734,18 @@ int obj_CallbackRenderer_init(obj_CallbackRenderer *self,PyObject *args,PyObject
     return 0;
 }
 
-PyTypeObject callback_renderer_obj_base::_pytype = make_type_object(
-    FULL_MODULE_STR ".CallbackRenderer",
-    sizeof(obj_CallbackRenderer),
-    tp_dealloc = &obj_Renderer_dealloc<callback_renderer>,
-    tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE|Py_TPFLAGS_CHECKTYPES|Py_TPFLAGS_HAVE_GC,
-    tp_traverse = &traverse_idict<obj_CallbackRenderer>,
-    tp_clear = &clear_idict<obj_CallbackRenderer>,
-    tp_weaklistoffset = offsetof(obj_CallbackRenderer,weaklist),
-    tp_methods = obj_CallbackRenderer_methods,
-    tp_dictoffset = offsetof(obj_CallbackRenderer,idict),
-    tp_init = &obj_CallbackRenderer_init);
+PyTypeObject callback_renderer_obj_base::_pytype = {
+    PyVarObject_HEAD_INIT(nullptr,0)
+    .tp_name = FULL_MODULE_STR ".CallbackRenderer",
+    .tp_basicsize = sizeof(obj_CallbackRenderer),
+    .tp_dealloc = reinterpret_cast<destructor>(&obj_Renderer_dealloc<callback_renderer>),
+    .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE|Py_TPFLAGS_CHECKTYPES|Py_TPFLAGS_HAVE_GC,
+    .tp_traverse = &traverse_idict<obj_CallbackRenderer>,
+    .tp_clear = &clear_idict<obj_CallbackRenderer>,
+    .tp_weaklistoffset = offsetof(obj_CallbackRenderer,weaklist),
+    .tp_methods = obj_CallbackRenderer_methods,
+    .tp_dictoffset = offsetof(obj_CallbackRenderer,idict),
+    .tp_init = reinterpret_cast<initproc>(&obj_CallbackRenderer_init)};
 
 
 struct blocking_renderer : renderer {
@@ -931,17 +929,18 @@ int obj_BlockingRenderer_init(obj_BlockingRenderer *self,PyObject *args,PyObject
     return 0;
 }
 
-PyTypeObject blocking_renderer_obj_base::_pytype = make_type_object(
-    FULL_MODULE_STR ".BlockingRenderer",
-    sizeof(obj_BlockingRenderer),
-    tp_dealloc = &obj_Renderer_dealloc<blocking_renderer>,
-    tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE|Py_TPFLAGS_CHECKTYPES|Py_TPFLAGS_HAVE_GC,
-    tp_traverse = &traverse_idict<obj_BlockingRenderer>,
-    tp_clear = &clear_idict<obj_BlockingRenderer>,
-    tp_weaklistoffset = offsetof(obj_BlockingRenderer,weaklist),
-    tp_methods = obj_BlockingRenderer_methods,
-    tp_dictoffset = offsetof(obj_BlockingRenderer,idict),
-    tp_init = &obj_BlockingRenderer_init);
+PyTypeObject blocking_renderer_obj_base::_pytype = {
+    PyVarObject_HEAD_INIT(nullptr,0)
+    .tp_name = FULL_MODULE_STR ".BlockingRenderer",
+    .tp_basicsize = sizeof(obj_BlockingRenderer),
+    .tp_dealloc = reinterpret_cast<destructor>(&obj_Renderer_dealloc<blocking_renderer>),
+    .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE|Py_TPFLAGS_CHECKTYPES|Py_TPFLAGS_HAVE_GC,
+    .tp_traverse = &traverse_idict<obj_BlockingRenderer>,
+    .tp_clear = &clear_idict<obj_BlockingRenderer>,
+    .tp_weaklistoffset = offsetof(obj_BlockingRenderer,weaklist),
+    .tp_methods = obj_BlockingRenderer_methods,
+    .tp_dictoffset = offsetof(obj_BlockingRenderer,idict),
+    .tp_init = reinterpret_cast<initproc>(&obj_BlockingRenderer_init)};
 
 
 PyObject *obj_Color_repr(wrapped_type<color> *self) {
@@ -1033,53 +1032,14 @@ PyObject *obj_Color___div__(PyObject *a,PyObject *b) {
 }
 
 PyNumberMethods obj_Color_number_methods = {
-    &obj_Color___add__,
-    &obj_Color___sub__,
-    &obj_Color___mul__,
+    .nb_add = &obj_Color___add__,
+    .nb_subtract = &obj_Color___sub__,
+    .nb_multiply = &obj_Color___mul__,
 #if PY_MAJOR_VERSION < 3
-    &obj_Color___div__,
+    .nb_divide = &obj_Color___div__,
 #endif
-    NULL,
-    NULL,
-    NULL,
-    reinterpret_cast<unaryfunc>(&obj_Color___neg__),
-    NULL,
-    NULL,
-    NULL,
-    NULL,
-    NULL,
-    NULL,
-    NULL,
-    NULL,
-    NULL,
-#if PY_MAJOR_VERSION < 3
-    NULL,
-#endif
-    NULL,
-    NULL,
-    NULL,
-#if PY_MAJOR_VERSION < 3
-    NULL,
-    NULL,
-#endif
-    NULL,
-    NULL,
-    NULL,
-#if PY_MAJOR_VERSION < 3
-    NULL,
-#endif
-    NULL,
-    NULL,
-    NULL,
-    NULL,
-    NULL,
-    NULL,
-    NULL,
-    NULL,
-    &obj_Color___div__,
-    NULL,
-    NULL,
-    NULL
+    .nb_negative = reinterpret_cast<unaryfunc>(&obj_Color___neg__),
+    .nb_true_divide = &obj_Color___div__
 };
 
 Py_ssize_t obj_Color___sequence_len__(PyObject *self) {
@@ -1099,16 +1059,8 @@ PyObject *obj_Color___sequence_getitem__(wrapped_type<color> *self,Py_ssize_t in
 }
 
 PySequenceMethods obj_Color_sequence_methods = {
-    [](PyObject*) { return Py_ssize_t(3); },
-    NULL,
-    NULL,
-    reinterpret_cast<ssizeargfunc>(&obj_Color___sequence_getitem__),
-    NULL,
-    NULL,
-    NULL,
-    NULL,
-    NULL,
-    NULL
+    .sq_length = [](PyObject*) { return Py_ssize_t(3); },
+    .sq_item = reinterpret_cast<ssizeargfunc>(&obj_Color___sequence_getitem__)
 };
 
 PyObject *obj_Color_apply(wrapped_type<color> *self,PyObject *_func) {
@@ -1163,17 +1115,19 @@ PyMemberDef obj_Color_members[] = {
     {NULL}
 };
 
-PyTypeObject color_obj_base::_pytype = make_type_object(
-    FULL_MODULE_STR ".Color",
-    sizeof(wrapped_type<color>),
-    tp_dealloc = destructor_dealloc<wrapped_type<color> >::value,
-    tp_repr = &obj_Color_repr,
-    tp_as_number = &obj_Color_number_methods,
-    tp_as_sequence = &obj_Color_sequence_methods,
-    tp_richcompare = &obj_Color_richcompare,
-    tp_methods = obj_Color_methods,
-    tp_members = obj_Color_members,
-    tp_new = &obj_Color_new);
+PyTypeObject color_obj_base::_pytype = {
+    PyVarObject_HEAD_INIT(nullptr,0)
+    .tp_name = FULL_MODULE_STR ".Color",
+    .tp_basicsize = sizeof(wrapped_type<color>),
+    .tp_dealloc = destructor_dealloc<wrapped_type<color> >::value,
+    .tp_repr = reinterpret_cast<reprfunc>(&obj_Color_repr),
+    .tp_as_number = &obj_Color_number_methods,
+    .tp_as_sequence = &obj_Color_sequence_methods,
+    .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE|Py_TPFLAGS_CHECKTYPES,
+    .tp_richcompare = reinterpret_cast<richcmpfunc>(&obj_Color_richcompare),
+    .tp_methods = obj_Color_methods,
+    .tp_members = obj_Color_members,
+    .tp_new = &obj_Color_new};
 
 
 struct py_mem_deleter {
@@ -1308,15 +1262,17 @@ PyMemberDef obj_Material_members[] = {
     {NULL}
 };
 
-PyTypeObject material::_pytype = make_type_object(
-    FULL_MODULE_STR ".Material",
-    sizeof(material),
-    tp_dealloc = destructor_dealloc<material>::value,
-    tp_repr = &obj_Material_repr,
-    tp_methods = obj_Material_methods,
-    tp_members = obj_Material_members,
-    tp_getset = obj_Material_getset,
-    tp_new = &obj_Material_new);
+PyTypeObject material::_pytype = {
+    PyVarObject_HEAD_INIT(nullptr,0)
+    .tp_name = FULL_MODULE_STR ".Material",
+    .tp_basicsize = sizeof(material),
+    .tp_dealloc = destructor_dealloc<material>::value,
+    .tp_repr = reinterpret_cast<reprfunc>(&obj_Material_repr),
+    .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE|Py_TPFLAGS_CHECKTYPES,
+    .tp_methods = obj_Material_methods,
+    .tp_members = obj_Material_members,
+    .tp_getset = obj_Material_getset,
+    .tp_new = &obj_Material_new};
 
 
 // like tracerx_cache_item except owns reference to mod

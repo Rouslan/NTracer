@@ -107,7 +107,7 @@ template<typename Store> real hypercube_intersects(const ray<Store> &target,ray<
             }
         }
     }
-        
+    
     return 0;
 }
 
@@ -129,6 +129,8 @@ template<typename Store> real hypersphere_intersects(const ray<Store> &target,ra
 }
 
 
+typedef simd::v_type<real> v_real;
+
 template<typename Store> struct primitive {
     real intersects(const ray<Store> &target,ray<Store> &normal) const;
     int dimension() const;
@@ -146,6 +148,26 @@ protected:
     }
     
     ~primitive() = default;
+};
+
+template<typename Store> struct primitive_batch {
+    real intersects(const ray<Store> &target,ray<Store> &normal,unsigned int &index) const;
+    int dimension() const;
+    
+    PyObject_HEAD
+    py::pyptr<material> m[v_real::size];
+    
+    bool opaque(unsigned int index) const {
+        return m[index]->opacity >= 1;
+    }
+    
+protected:
+    template<typename F> primitive_batch(F m,PyTypeObject *t) {
+        PyObject_Init(reinterpret_cast<PyObject*>(this),t);
+        for(size_t i=0; i<v_real::size; ++i) m[i].reset(py::borrowed_ref(reinterpret_cast<PyObject*>(m(i))));
+    }
+    
+    ~primitive_batch() = default;
 };
 
 
@@ -206,7 +228,7 @@ template<typename Store> struct solid : solid_obj_common, primitive<Store> {
     
     void *operator new(size_t size) {
         return (alignof(solid<Store>) <= PYOBJECT_ALIGNMENT) ?
-            py::malloc(size) :
+            ::operator new(size) :
             simd::aligned_alloc(alignof(solid<Store>),size);
     }
     void operator delete(void *ptr) {
@@ -225,7 +247,7 @@ template<typename T,typename Item> struct flexible_struct {
     void *operator new(size_t size,size_t item_count) {
         assert(size == sizeof(T));
         return (std::max(alignof(T),alignof(Item)) <= PYOBJECT_ALIGNMENT) ?
-            py::malloc(item_offset + sizeof(Item)*item_count) :
+            ::operator new(item_offset + sizeof(Item)*item_count) :
             simd::aligned_alloc(std::max(alignof(T),alignof(Item)),item_offset + sizeof(Item)*item_count);
     }
     void operator delete(void *ptr) {
@@ -387,6 +409,99 @@ private:
     }
 };
 
+struct triangle_batch_obj_common {
+    CONTAINED_PYTYPE_DEF
+};
+
+template<typename Store> struct triangle_batch : triangle_batch_obj_common, primitive_batch<Store>, flexible_struct<triangle_batch<Store>,vector_batch<Store> > {
+    typedef typename triangle_batch::flexible_struct flex_base;
+    
+    v_real d;
+    vector_batch<Store> p1;
+    vector_batch<Store> face_normal;
+    
+    int dimension() const {
+        return p1.dimension();
+    }
+    
+    size_t _item_size() const {
+        return size_t(dimension()-1);
+    }
+    
+    FORCE_INLINE real intersects(const ray<Store> &target,ray<Store> &normal) const {
+        auto zeros = v_real::zeros();
+        
+        auto denom = dot(face_normal,target.direction);
+        auto mask = denom != zeros;
+        
+        auto t = -(dot(face_normal,target.origin) + d) / denom;
+        mask &= t >= zeros;
+        
+        if(!mask.any()) return 0;
+        
+        vector_batch<Store> P = target.origin + t * target.direction;
+        vector_batch<Store> pside = p1 - P;
+        
+        auto a_min = v_real::repeat(-ROUNDING_FUZZ);
+        auto tot_area = zeros;
+        for(int i=0; i<dimension()-1; ++i) {
+            v_real area = dot(this->items()[i],pside);
+            mask &= area >= a_min;
+            tot_area += area;
+        }
+        
+        auto a_max = v_real::repeat(1+ROUNDING_FUZZ);
+        mask &= tot_area <= a_max;
+        
+        if(!mask.any()) return 0;
+        
+ 
+        t = t.zfilter(mask);
+        
+        real min_t = std::numeric_limits<real>::max();
+        unsigned int index=0;
+        for(unsigned int i=0; i<v_real::size; ++i) {
+            if(t[i] < min_t) {
+                min_t = t[i];
+                index = i;
+            }
+        }
+        
+        normal.origin = interleave1(P,index);
+        normal.direction = interleave1(face_normal,index).unit();
+        if(denom > 0) normal.direction = -normal.direction;
+        return min_t;
+    }
+    
+    static triangle_batch *from_triangles(const triangle<Store> **triangles) {
+        int n = triangles[0].dimension();
+        
+        return create(
+            deinterleave(n,[=](int i){ return triangles[i]->p1; }),
+            deinterleave(n,[=](int i){ return triangles[i]->face_normal; }),
+            [=](int i) { deinterleave(n,[=](int j){ return triangles[j]->items()[i]; }); },
+            [=](int i) { return triangles[i]->m; });
+    }
+    
+    template<typename Fe,typename Fm> static triangle_batch *create(const vector_batch<Store> &p1,const vector_batch<Store> &face_normal,Fe edge_normals,Fm m) {
+        return new(p1.dimension()-1) triangle_batch(p1,face_normal,edge_normals,m);
+    }
+    
+    void recalculate_d() {
+        d = -dot(face_normal,p1);
+    }
+    
+private:
+    template<typename Fe,typename Fm> triangle_batch(const vector<Store> &p1,const vector<Store> &face_normal,Fe edge_normals,Fm m)
+        : primitive_batch<Store>(m,pytype()), flex_base(p1.dimension()-1,edge_normals), p1(p1), face_normal(face_normal) {
+        assert(p1.dimension() == face_normal.dimension() &&
+            std::all_of(
+                ITR_RANGE(this->items()),
+                [&](const vector<Store> &e){ return e.dimension() == p1.dimension(); }));
+        recalculate_d();
+    }
+};
+
 template<typename Store> real primitive<Store>::intersects(const ray<Store> &target,ray<Store> &normal) const {
     if(Py_TYPE(this) == triangle_obj_common::pytype()) {
         INSTRUMENTATION_TIMER;
@@ -411,8 +526,8 @@ template<typename Store> int primitive<Store>::dimension() const {
 template<typename T> class quick_list {
     size_t _size;
     size_t alloc_size;
-    // see compatibility.hpp for why alignas(T) cannot be used
-    alignas(alignof(T)) char _members[QUICK_LIST_PREALLOC * sizeof(T)];
+
+    alignas(T) char _members[QUICK_LIST_PREALLOC * sizeof(T)];
     T *members_extra;
     
     T *members() {
@@ -447,22 +562,12 @@ public:
         }
     }
     
-    void add(const T &item) {
+    template<typename U=T> void add(U &&item) {
         if(_size >= QUICK_LIST_PREALLOC) {
             check_capacity();
-            new(&members_extra[_size]) T(item);
+            new(&members_extra[_size]) T(std::forward<U>(item));
         } else {
-            new(&members()[_size]) T(item);
-        }
-        ++_size;
-    }
-    
-    void add(T &&item) {
-        if(_size >= QUICK_LIST_PREALLOC) {
-            check_capacity();
-            new(&members_extra[_size]) T(std::move(item));
-        } else {
-            new(&members()[_size]) T(std::move(item));
+            new(&members()[_size]) T(std::forward<U>(item));
         }
         ++_size;
     }
@@ -501,9 +606,9 @@ public:
     void remove_at(size_t i) {
         assert(i < _size);
         T *d = data();
-        d[i].~T();
         --_size;
-        if(_size && i != _size) new(&d[i]) T(std::move(d[_size]));
+        if(i != _size) d[i] = std::move(d[_size]);
+        d[_size].~T();
     }
 };
 
@@ -514,6 +619,8 @@ template<typename Store> struct ray_intersection {
     ray<Store> normal;
     
     template<typename Ntype> ray_intersection(real dist,primitive<Store> *p,Ntype &&normal) : dist(dist), p(p), normal(std::forward<Ntype>(normal)) {}
+
+    ray_intersection(const ray_intersection &b) = default;
     
     bool operator<(const ray_intersection &b) const {
         return dist < b.dist;
@@ -541,13 +648,6 @@ template<typename Store> struct kd_node {
     
     real intersects(const ray<Store> &target,ray<Store> &normal,primitive<Store> *&p,ray_intersections<Store> &hits,real t_near,real t_far) const;
     real occludes(const ray<Store> &target,real ldistance,const primitive<Store> *source,ray_intersections<Store> &hits,real t_near,real t_far) const;
-    
-    void *operator new(size_t size) {
-        return py::malloc(size);
-    }
-    void operator delete(void *ptr) {
-        py::free(ptr);
-    }
     
 protected:
     kd_node(node_type type) : type(type) {}
@@ -661,6 +761,81 @@ template<typename Store> struct kd_branch : kd_node<Store> {
         return node ? node->occludes(target,ldistance,source,hits,t_near,t_far) : false;
     }
 };
+
+#if 0
+template<typename Store> struct nodes_by_dist {
+    const kd_node<Store> *near;
+    const kd_node<Store> *far;
+};
+
+template<typename Store> real kd_branch_intersects(
+        const kd_branch<Store> **branches,
+        const ray<Store,simd::v_type<real> > &targets,
+        ray<Store,simd::v_type<real> > &normals,
+        primitive<Store> *&p,
+        ray_intersections<Store> *hits,
+        simd::v_type<real> t_near,
+        simd::v_type<real> t_far) const {
+    assert(target.dimension() == normal.dimension());
+    
+    if(target.direction[axis]) {
+        if(target.origin[axis] == split) {
+            auto node = (target.direction[axis] > 0 ? right : left).get();
+            return node ? node->intersects(target,normal,p,hits,t_near,t_far) : 0;
+        }
+        
+        real t = (split - target.origin[axis]) / target.direction[axis];
+        
+        typename Store::init_array<nodes_by_dist> nodes{[](int i) -> nodes_by_dist {
+            auto n_near = branches[i]->left.get();
+            auto n_far = branches[i]->right.get();
+
+            if(targets.origin[branches[i]->axis][i] > branches[i]->split) {
+                n_near = branches[i]->right.get();
+                n_far = branches[i]->left.get();
+            }
+
+            return {n_near,n_far};
+        }};
+
+        if(t < 0 || t > t_far) return n_near ? n_near->intersects(target,normal,p,hits,t_near,t_far) : 0;
+        if(t < t_near) return n_far ? n_far->intersects(target,normal,p,hits,t_near,t_far) : 0;
+
+        if(n_near) {
+            size_t h_start = hits.size();
+            primitive<Store> *new_p = p;
+            real dist = n_near->intersects(target,normal,p,hits,t_near,t);
+            if((dist && dist <= t) || !n_far) return dist;
+            
+            if(dist) {
+                /* If dist is greater than t, the intersection was in a
+                   farther division (a primitive can span multiple
+                   divisions) and a closer primitive may exist, but if the
+                   intersection is with a primitive that is embedded in the
+                   split plane, dist can also be greater than t due to an
+                   error from limited precision, so we can't assume the
+                   primitive is also in t_far. */
+                
+                ray<Store> new_normal(target.dimension());
+                real new_dist = n_far->intersects(target,new_normal,new_p,hits,t,t_far);
+                if(new_dist && new_dist < dist) {
+                    dist = new_dist;
+                    normal = new_normal;
+                    p = new_p;
+                }
+                trim_intersections(hits,dist,h_start);
+                return dist;
+            }
+        }
+        
+        assert(n_far);
+        return n_far->intersects(target,normal,p,hits,t,t_far);
+    }
+
+    auto node = (target.origin[axis] >= split ? right : left).get();
+    return node ? node->intersects(target,normal,p,hits,t_near,t_far) : 0;
+}
+#endif
 
 template<typename Store> struct kd_leaf : kd_node<Store>, flexible_struct<kd_leaf<Store>,py::pyptr<primitive<Store> > > {
     typedef typename kd_leaf::flexible_struct flex_base;
@@ -779,6 +954,7 @@ template<typename Store> inline void kd_node_deleter<Store>::operator()(kd_node<
     }
 }
 
+/*
 struct p_instance_obj_common {
     CONTAINED_PYTYPE_DEF
     PyObject_HEAD
@@ -817,7 +993,7 @@ template<typename Store> struct p_instance : p_instance_obj_common, primitive<St
         
         return 0;
     }
-};
+};*/
 
 
 template<typename Store> struct solid_prototype;
@@ -1594,7 +1770,7 @@ template<typename Store> kd_node_unique_ptr<Store> create_node(kd_node_worker_po
         || !find_split(boundary,axis,contain_p,overlap_p,split))
         return kd_node_unique_ptr<Store>(kd_leaf<Store>::create(
             contain_p.size() + overlap_p.size(),
-            [&](int i){ return py::borrowed_ref((i < contain_p.size() ? contain_p[i] : overlap_p[i-contain_p.size()])->p.ref()); }));
+            [&](size_t i){ return py::borrowed_ref((i < contain_p.size() ? contain_p[i] : overlap_p[i-contain_p.size()])->p.ref()); }));
     
     proto_array<Store> l_contain_p, r_contain_p, l_overlap_p, r_overlap_p;
     
@@ -1653,7 +1829,7 @@ template<typename Store> std::tuple<aabb<Store>,kd_node<Store>*> build_kdtree(co
     assert(primitives.size());
     
     aabb<Store> boundary = primitives[0]->boundary;
-    for(int i=1; i<primitives.size(); ++i) {
+    for(size_t i=1; i<primitives.size(); ++i) {
         v_expr(boundary.start) = min(v_expr(boundary.start),v_expr(primitives[i]->boundary.start));
         v_expr(boundary.end) = max(v_expr(boundary.end),v_expr(primitives[i]->boundary.end));
     }

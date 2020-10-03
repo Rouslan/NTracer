@@ -24,7 +24,7 @@ def excepthook(type,value,traceback):
         print('error: '+str(value),file=sys.stderr)
     else:
         sys.__excepthook__(type,value,traceback)
-    
+
 sys.excepthook = excepthook
 
 
@@ -32,9 +32,9 @@ def schlafli_component(x):
     x = x.partition('/')
     p = int(x[0],10)
     if p < 3: raise argparse.ArgumentTypeError('a component cannot be less than 3')
-    
+
     if not x[2]: return fractions.Fraction(p)
-    
+
     s = int(x[2],10)
     if s < 1: raise argparse.ArgumentTypeError('for component p/q: q cannot be less than 1')
     if s >= p: raise argparse.ArgumentTypeError('for component p/q: q must be less than p')
@@ -84,7 +84,7 @@ def higher_dihedral_supplement(schlafli,ds):
     a = math.pi*schlafli.denominator/schlafli.numerator
     return 2*math.asin(math.sin(math.acos(1/(math.tan(ds/2)*math.tan(a))))*math.sin(a))
 
-def almost_equal(a,b,threshold=0.1):
+def almost_equal(a,b,threshold=0.001):
     return (a-b).absolute() < threshold
 
 def radial_vector(angle):
@@ -97,21 +97,21 @@ class Instance:
         self.position = position
         self.orientation = orientation
         self.inv_orientation = orientation.inverse()
-    
+
     def translated(self,position=nt.Vector(),orientation=nt.Matrix.identity()):
         return (
             position + (orientation * self.position),
             orientation * self.orientation)
-    
+
     def tesselate(self,*args):
         return self.shape.tesselate(*self.translated(*args))
-    
+
     def tesselate_inner(self,*args):
         return self.shape.tesselate_inner(*self.translated(*args))
-    
+
     def any_point(self,*args):
         return self.shape.any_point(*self.translated(*args))
-    
+
     def contains(self,p):
         return self.shape.contains(self.inv_orientation * (p - self.position))
 
@@ -121,12 +121,12 @@ def star_component(x):
 
 class LineSegment:
     star = False
-    
+
     def __init__(self,index,convex_ds,polygon):
         self.index = index
         self.p = polygon
         self.position = radial_vector(index*convex_ds)
-    
+
     def tesselate(self,position,orientation):
         return [
             orientation*self.p.base_points[self.index-1]+position,
@@ -135,16 +135,16 @@ class LineSegment:
 
 class Polygon:
     apothem = 1
-    
+
     def __init__(self,schlafli):
         self.star = star_component(schlafli)
         convex_ds = 2 * math.pi / schlafli.numerator
         self.dihedral_s = convex_ds * schlafli.denominator
         self.parts = [LineSegment(i,convex_ds,self) for i in range(schlafli.numerator)]
-        
+
         self._circumradius = 1/math.cos(convex_ds/2)
         self.base_points = [self._circumradius * radial_vector((i+0.5) * convex_ds) for i in range(schlafli.numerator)]
-        
+
         if self.star:
             self._circumradius = math.tan(convex_ds)*math.tan(convex_ds/2) + 1
             self.outer_points = [self._circumradius * radial_vector(i * convex_ds) for i in range(schlafli.numerator)]
@@ -152,40 +152,40 @@ class Polygon:
     def points(self,position,orientation,pset=None):
         if pset is None: pset = self.base_points
         return (orientation * bp + position for bp in pset)
-    
+
     def tesselate_inner(self,position,orientation):
         points = list(self.points(position,orientation))
         r = [points[0:3]]
         for i in range(len(points)-3):
             r.append([points[0],points[i+2],points[i+3]])
         return r
-    
+
     def tesselate(self,position,orientation):
         if not self.star:
             return self.tesselate_inner(position,orientation)
-        
+
         points = list(self.points(position,orientation))
         opoints = list(self.points(position,orientation,self.outer_points))
         return [[opoints[i],points[i-1],points[i]] for i in range(len(points))]
-    
+
     def any_point(self,position,orientation):
         return next(self.points(position,orientation))
-    
+
     def contains(self,p):
         return any(almost_equal(p,test_p) for test_p in self.base_points)
-    
+
     def hull(self,position=nt.Vector(),orientation=nt.Matrix.identity()):
         tris = [nt.TrianglePrototype(tri,material) for tri in self.tesselate_inner(position,orientation)]
         if self.star: tris.extend(nt.TrianglePrototype(tri,material) for tri in
             self.tesselate(position,orientation))
         return tris
-    
+
     def circumradius(self):
         return self._circumradius
-    
+
     def circumradius_square(self):
         return self._circumradius*self._circumradius
-    
+
     def line_apothem_square(self):
         return 1
 
@@ -195,7 +195,7 @@ class Plane:
         self.normal = position.unit()
         self.d = -position.absolute()
         self._dot = nt.dot
-    
+
     def distance(self,point):
         return self._dot(point,self.normal) + self.d
 
@@ -206,15 +206,15 @@ class Line:
         self.planes = set(planes)
         self.outer = outer
         self._dot = nt.dot
-    
+
     def point_at(self,t):
         return self.p0 + self.v*t
-    
+
     def dist_square(self,point):
         a = point - self.p0
         b = self._dot(a,self.v)
         return a.square() - b*b/self.v.square()
-    
+
     def __repr__(self):
         return 'Line({0!r},{1!r})'.format(self.p0,self.v)
 
@@ -256,16 +256,16 @@ class Node:
         self.planes = planes
         self.outer = outer
         self.neighbors = set() if alive else None
-    
+
     def detach(self):
         for n in self.neighbors:
             n.neighbors.remove(self)
         self.neighbors = None
-    
+
     @property
     def dead(self):
         return self.neighbors is None
-    
+
     def find_cycles(self,length,sequence=None,exclude=None):
         if sequence is None: sequence = [self]
         if len(sequence) < length:
@@ -288,29 +288,29 @@ def join(a,b):
 class FuzzyGraph:
     def __init__(self):
         self.nodes = []
-    
+
     def add(self,pos,planes,outer):
         for n in self.nodes:
-            if almost_equal(n.pos,pos,0.01):
+            if almost_equal(n.pos,pos):
                 n.planes |= planes
                 return n
         n = Node(pos,planes,outer)
         self.nodes.append(n)
         return n
-    
+
     def remove_at(self,i):
         self.nodes[i].detach()
         if i+1 != len(self.nodes):
             self.nodes[i] = self.nodes[-1]
         del self.nodes[-1]
-    
+
     def remove(self,pos):
         if isinstance(pos,Node):
             if not pos.dead:
                 self.remove_at(self.nodes.index(pos))
         else:
             for i,n in enumerate(self.nodes):
-                if almost_equal(n.pos,pos,0.01):
+                if almost_equal(n.pos,pos):
                     self.remove_at(i)
                     break
 
@@ -327,38 +327,38 @@ class PolyTope:
         self.apothem = math.tan((math.pi - dihedral_s)/2) * face_apothem
         self.star = star_component(schlafli)
         self.parts = []
-    
+
     @property
     def facet(self):
         return self.parts[0].shape
-        
+
     def propogate_faces(self,potentials):
         new_p = []
-        
+
         for instance,p in potentials:
             dir = (instance.orientation * p.position).unit()
-            
+
             reflect = nt.Matrix.reflection(dir)
 
             turn = nt.Matrix.rotation(
                 instance.position.unit(),
                 dir,
                 self.dihedral_s)
-            
+
             new_p += self.add_face(Instance(
                 instance.shape,
                 turn * instance.position,
                 fuzz_scale * turn * reflect * instance.orientation))
         return new_p
-    
+
     def add_face(self,instance):
         for p in self.parts:
             if almost_equal(instance.position,p.position): return []
 
         self.parts.append(instance)
-        
+
         return [(instance,p) for p in instance.shape.parts]
-    
+
     def star_tesselation(self):
         t = getattr(self,'_star_tesselation',None)
         if t is None:
@@ -401,9 +401,9 @@ class PolyTope:
                 if len(poss) == 1:
                     graph.remove(poss[0])
                     continue
-                
+
                 poss = sorted(poss.items(),key=(lambda x: x[1]))
-                
+
                 if line.outer:
                     for i in range(len(poss)-1):
                         join(poss[i][0],poss[i+1][0])
@@ -415,7 +415,7 @@ class PolyTope:
 
                     join(poss[0][0],poss[1][0])
                     join(poss[-1][0],poss[-2][0])
-            
+
             t = []
             self._star_tesselation = t
             for n in islice(graph.nodes,0,len(graph.nodes)-co_nt.dimension):
@@ -424,44 +424,44 @@ class PolyTope:
                 n.detach()
 
         return t
-    
+
     def tesselate(self,position,orientation):
         if self.star or self.facet.star:
             return [[orientation * p + position for p in tri] for tri in self.star_tesselation()]
 
         return self.tesselate_inner(position,orientation)
-    
+
     def tesselate_inner(self,position,orientation):
         tris = []
         point1 = self.parts[0].any_point(position,orientation)
-            
+
         inv_orientation = orientation.inverse()
         for part in self.parts[1:]:
             if not part.contains(inv_orientation * (point1 - position)):
                 new_t = part.tesselate(position,orientation)
                 for t in new_t: t.append(point1)
                 tris += new_t
-            
+
         return tris
-    
+
     def hull(self,position=nt.Vector(),orientation=nt.Matrix.identity()):
         tris = []
         for p in self.parts:
             tris += p.tesselate(position,orientation)
         return [nt.TrianglePrototype(tri,material) for tri in tris]
-    
+
     def any_point(self,position,orientation):
         return self.parts[0].any_point(position,orientation)
-    
+
     def contains(self,p):
         return any(part.contains(p) for part in self.parts)
-    
+
     def circumradius_square(self):
         return self.apothem*self.apothem + self.facet.circumradius_square()
-    
+
     def circumradius(self):
         return math.sqrt(self.circumradius_square())
-    
+
     def line_apothem_square(self):
         return self.apothem*self.apothem + self.facet.line_apothem_square()
 
@@ -483,7 +483,7 @@ def compose(part,order,schlafli):
 jitter = nt.Vector((0,0,0) + (0.0001,) * (nt.dimension-3))
 def process_movement():
     global x_move, y_move, w_move
-    
+
     if x_move or y_move or w_move:
         h = math.sqrt(x_move*x_move + y_move*y_move + w_move*w_move)
         a2 = camera.axes[0]*(x_move/h) + camera.axes[1]*(-y_move/h)
@@ -495,17 +495,17 @@ def process_movement():
         camera.normalize()
         camera.origin = camera.axes[2] * cam_distance + jitter
         scene.set_camera(camera)
-        
+
         x_move = 0
         y_move = 0
         w_move = 0
-        
+
         run()
 
 
 def run():
     global running
-    
+
     running = True
     render.begin_render(screen,scene)
 
@@ -523,37 +523,37 @@ than the actual time''',file=sys.stderr)
 class RotatingCamera(object):
     incr = 2 * math.pi / args.frames
     h = 1/math.sqrt(nt.dimension-1)
-    
+
     _timer = staticmethod(timer if args.benchmark else (lambda: 0))
-    
+
     def __enter__(self):
         self.frame = 0
         self.total_time = 0
         return self
-    
+
     def __exit__(self,type,value,tb):
         if type is None and self.total_time:
             print('''rendered {0} frame(s) in {1} seconds
 time per frame: {2} seconds
 frames per second: {3}'''.format(self.frame,self.total_time,self.total_time/self.frame,self.frame/self.total_time))
-    
+
     def start_timer(self):
         self.t = self._timer()
-    
+
     def end_timer(self):
         self.total_time += self._timer() - self.t
-    
+
     def advance_camera(self):
         self.frame += 1
         if self.frame >= args.frames: return False
-            
+
         a2 = camera.axes[0]*self.h + camera.axes[1]*self.h
         for i in range(nt.dimension-3): a2 += camera.axes[i+3]*self.h
         camera.transform(nt.Matrix.rotation(camera.axes[2],a2,self.incr))
         camera.normalize()
         camera.origin = camera.axes[2] * cam_distance
         scene.set_camera(camera)
-        
+
         return True
 
 
@@ -563,7 +563,7 @@ if nt.dimension >= 3 and args.schlafli[0] == 4 and all(c == 3 for c in args.schl
 else:
     print('building geometry...')
     timing = timer()
-    
+
     p = Polygon(args.schlafli[0])
     for i,s in enumerate(args.schlafli[1:]):
         p = compose(p,i+2,s)
@@ -579,7 +579,7 @@ else:
     scene = nt.build_composite_scene(hull)
     timing = timer() - timing
     print('done in {0} seconds'.format(timing))
-    
+
     del p
     del hull
 
@@ -598,9 +598,9 @@ if args.output is not None:
             [Channel(16,1,0,0),
              Channel(16,0,1,0),
              Channel(16,0,0,1)])
-        
+
         surf = bytearray(args.screen[0]*args.screen[1]*format.bytes_per_pixel)
-        
+
         pipe = subprocess.Popen(['ffmpeg',
                 '-y',
                 '-f','rawvideo',
@@ -614,7 +614,7 @@ if args.output is not None:
                 '-crf','10',
                 args.output],
             stdin=subprocess.PIPE)
-        
+
         try:
             with RotatingCamera() as rc:
                 while True:
@@ -623,7 +623,7 @@ if args.output is not None:
                     rc.end_timer()
 
                     print(surf,file=pipe.stdin,sep='',end='')
-                    
+
                     if not rc.advance_camera(): break
 
         finally:
@@ -638,7 +638,7 @@ if args.output is not None:
 
     def announce_frame(frame):
         print('drawing frame {0}/{1}'.format(frame+1,args.frames))
-    
+
     with RotatingCamera() as rc:
         announce_frame(0)
         rc.start_timer()
@@ -647,13 +647,13 @@ if args.output is not None:
             e = pygame.event.wait()
             if e.type == pygame.USEREVENT:
                 rc.end_timer()
-                
+
                 pygame.image.save(
                     surf,
                     os.path.join(args.output,'frame{0:04}.png'.format(rc.frame)))
 
                 if not rc.advance_camera(): break
-                
+
                 announce_frame(rc.frame)
                 rc.start_timer()
                 render.begin_render(surf,scene)
@@ -665,7 +665,7 @@ else:
     pygame.display.init()
     render = PygameRenderer()
     screen = pygame.display.set_mode(args.screen)
-    
+
     if args.benchmark:
         with RotatingCamera() as rc:
             rc.start_timer()
@@ -674,11 +674,11 @@ else:
                 e = pygame.event.wait()
                 if e.type == pygame.USEREVENT:
                     rc.end_timer()
-                    
+
                     pygame.display.flip()
 
                     if not rc.advance_camera(): break
-                    
+
                     rc.start_timer()
                     render.begin_render(screen,scene)
                 elif e.type == pygame.QUIT:
@@ -723,4 +723,3 @@ else:
             elif e.type == pygame.QUIT:
                 render.abort_render()
                 break
-

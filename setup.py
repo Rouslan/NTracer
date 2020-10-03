@@ -47,16 +47,22 @@ GCC_OPTIMIZE_COMPILE_ARGS = [
     '-march=native',
 #    '-DPROFILE_CODE',
     '--param','large-function-growth=500',
-    '--param','inline-unit-growth=1000']
+    '--param','inline-unit-growth=1000',
+    '-fdelete-dead-exceptions']
 GCC_EXTRA_COMPILE_ARGS = [
-    '-std=c++11',
+    '-std=c++17',
     '-fvisibility=hidden',
     '-Wno-format',
+    '-Wno-format-security',
     '-Wno-invalid-offsetof',
+    '-Wno-ignored-attributes',
+
+    # in the future, we may be able to mark classes as "trivially relocatable"
+    # which would make suppressing this warning unnecessary
+    '-Wno-class-memaccess',
+
     '-Werror=return-type']
 
-# At the time of this writing, no version of MSVC has enough C++11 support to
-# compile this package
 MSVC_OPTIMIZE_COMPILE_ARGS = ['/Ox','/fp:fast','/volatile:iso','/Za']
 
 DEFAULT_OPTIMIZED_DIMENSIONS = frozenset(range(3,9))
