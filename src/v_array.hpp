@@ -23,6 +23,10 @@ namespace impl {
 
     template<typename T> struct v_expr;
 
+    /* "v_expr" needs to know what "vec" returns in a given expression template,
+    but the expression template needs to be a sub-class of "v_expr", thus the
+    return type needs to be specified manually before the expression template's
+    definition. */
     template<typename,size_t> struct _v_item_t {};
     template<typename T,size_t Size> using v_item_t = typename _v_item_t<T,Size>::type;
     template<typename T> using s_item_t = typename _v_item_t<T,1>::type::item_t;
@@ -78,50 +82,50 @@ namespace impl {
 
 
     struct op_add {
-        template<typename A,typename B> static auto op(A a,B b) {
+        template<typename A,typename B> static FORCE_INLINE auto op(A a,B b) {
             return a + b;
         }
-        template<typename A,typename B> static auto assign(A &a,B b) {
+        template<typename A,typename B> static FORCE_INLINE auto assign(A &a,B b) {
             return a += b;
         }
-        template<typename T> static auto reduce(T x) {
+        template<typename T> static FORCE_INLINE auto reduce(T x) {
             return x.reduce_add();
         }
-        template<typename T> static constexpr T first() {
+        template<typename T> static FORCE_INLINE constexpr T first() {
             return T::zeros();
         }
     };
 
 #define BINARY_EQ_OP(NAME,OP) struct NAME { \
-        template<typename A,typename B> static auto op(A a,B b) { \
+        template<typename A,typename B> static FORCE_INLINE auto op(A a,B b) { \
             return a OP b; \
         } \
-        template<typename A,typename B> static auto assign(A &a,B b) { \
+        template<typename A,typename B> static FORCE_INLINE auto assign(A &a,B b) { \
             return a OP##= b; \
         } \
     }
 #define BINARY_OP(NAME,OP) struct NAME { \
-        template<typename A,typename B> static auto op(A a,B b) { \
+        template<typename A,typename B> static FORCE_INLINE auto op(A a,B b) { \
             return a OP b; \
         } \
     }
 #define BINARY_FUNC(NAME,F) struct NAME { \
-        template<typename A,typename B> static auto op(A a,B b) { \
+        template<typename A,typename B> static FORCE_INLINE auto op(A a,B b) { \
             return F(a,b); \
         } \
     }
 #define UNARY_OP(NAME,OP) struct NAME { \
-        template<typename T> static auto op(T a) { \
+        template<typename T> static FORCE_INLINE auto op(T a) { \
             return OP a; \
         } \
     }
 #define UNARY_FUNC(NAME,F) struct NAME { \
-        template<typename T> static auto op(T a) { \
+        template<typename T> static FORCE_INLINE auto op(T a) { \
             return a.F(); \
         } \
     }
 #define NCMP_FUNC(NAME,F,INT_OP) struct NAME { \
-        template<typename A> static auto op(A a,A b) { \
+        template<typename A> static FORCE_INLINE auto op(A a,A b) { \
             if constexpr(std::is_floating_point_v<typename A::item_t>) return F(a,b); \
             else return a INT_OP b; \
         } \
@@ -160,25 +164,25 @@ namespace impl {
 #undef NCMP_FUNC
 
     struct op_max {
-        template<typename T> static T op(T a,T b) {
+        template<typename T> static FORCE_INLINE T op(T a,T b) {
             return simd::max(a,b);
         }
-        template<typename T> static typename T::item_t reduce(T x) {
+        template<typename T> static FORCE_INLINE typename T::item_t reduce(T x) {
             return x.reduce_max();
         }
-        template<typename T> static constexpr T first() {
+        template<typename T> static FORCE_INLINE constexpr T first() {
             return T::repeat(std::numeric_limits<typename T::item_t>::lowest());
         }
     };
 
     struct op_min {
-        template<typename T> static T op(T a,T b) {
+        template<typename T> static FORCE_INLINE T op(T a,T b) {
             return simd::min(a,b);
         }
-        template<typename T> static typename T::item_t reduce(T x) {
+        template<typename T> static FORCE_INLINE typename T::item_t reduce(T x) {
             return x.reduce_min();
         }
-        template<typename T> static constexpr T first() {
+        template<typename T> static FORCE_INLINE constexpr T first() {
             return T::repeat(std::numeric_limits<typename T::item_t>::max());
         }
     };
@@ -215,16 +219,13 @@ namespace impl {
         size_t _size() const { return std::get<0>(values)._size(); }
         size_t _v_size() const { return std::get<0>(values)._v_size(); }
 
-        template<size_t Size> FORCE_INLINE v_item_t<v_op_expr<Op,T...>,Size> vec(size_t n) const {
-            return _vec<Size>(n,std::make_index_sequence<sizeof...(T)>());
+        template<size_t Size> FORCE_INLINE v_item_t<v_op_expr,Size> vec(size_t n) const {
+            return std::apply(
+                [n](auto... x) { return Op::op(x.template vec<Size>(n)...); },
+                values);
         }
 
         v_op_expr(const T&... args) : values(args...) {}
-
-    private:
-        template<size_t Size,size_t... Indexes> FORCE_INLINE v_item_t<v_op_expr<Op,T...>,Size> _vec(size_t n,std::index_sequence<Indexes...>) const {
-            return Op::op(std::get<Indexes>(values).template vec<Size>(n)...);
-        }
     };
 
     template<typename T,typename F> struct v_apply;
@@ -242,7 +243,7 @@ namespace impl {
         size_t _size() const { return a._size(); }
         size_t _v_size() const { return a._v_size(); }
 
-        template<size_t Size> FORCE_INLINE v_item_t<v_apply<T,F>,Size> vec(size_t n) const {
+        template<size_t Size> FORCE_INLINE v_item_t<v_apply,Size> vec(size_t n) const {
             return a.template vec<Size>(n).apply(f);
         }
 
@@ -382,7 +383,7 @@ namespace impl {
                 self.template vec<Size>(n) = b.template vec<Size>(n);
             }
         };
-        template<typename B> FORCE_INLINE void fill_with(const v_expr<B> &b) {
+        template<typename B> void fill_with(const v_expr<B> &b) {
             assert(b.v_size() >= _v_size());
             v_rep(_size(),_v_size(),_v_assign<B>{*this,b});
         }
@@ -425,7 +426,7 @@ namespace impl {
         const T &a;
 
         template<size_t Size> FORCE_INLINE void operator()(size_t n) const {
-            if(Size == 1) {
+            if constexpr(Size == 1) {
                 r_small = Op::op(r_small,a.template vec<1>(n));
             } else {
                 /* If the AVX instruction set is used, this relies on all vector
@@ -512,7 +513,7 @@ namespace impl {
 
         size_t _size() const { return a._size(); }
 
-        template<size_t Size> FORCE_INLINE typename v_item_t<T,Size>::mask vec(size_t n) const {
+        template<size_t Size> FORCE_INLINE auto vec(size_t n) const {
             return !a.template vec<Size>(n);
         }
 
@@ -555,7 +556,7 @@ namespace impl {
 
         const T &self;
 
-        template<size_t Size> FORCE_INLINE bool operator()(size_t n) const {
+        template<size_t Size> bool operator()(size_t n) const {
             return self.template vec<Size>(n).any();
         }
     };
@@ -570,7 +571,7 @@ namespace impl {
 
         const T &self;
 
-        template<size_t Size> FORCE_INLINE bool operator()(size_t n) const {
+        template<size_t Size> bool operator()(size_t n) const {
             return !self.template vec<Size>(n).all();
         }
     };

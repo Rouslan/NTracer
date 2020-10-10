@@ -10,23 +10,11 @@ const char *init_on_derived_msg = "__init__ cannot be used directly on a derived
 const char *not_implemented_msg = "This method is not implemented";
 
 
-#if PY_MAJOR_VERSION < 3 || (PY_MARJOR_VERSION == 3 && PY_MINOR_VERSION < 3)
-Py_ssize_t PyObject_LengthHint(PyObject *o,Py_ssize_t defaultlen) {
-    Py_ssize_t r = PyObject_Size(o);
-    if(r >= 0) return r;
-    
-    if(!PyErr_ExceptionMatches(PyExc_TypeError)) return -1;
-    PyErr_Clear();
-    return defaultlen;
-}
-#endif
-
-
 get_arg::get_arg_base::get_arg_base(PyObject *args,PyObject *kwds,Py_ssize_t arg_len,const char **names,const char *fname)
         : args(args), kwds(kwds), names(names), fname(fname), kcount(0) {
     assert(args != NULL && PyTuple_Check(args));
     assert(kwds == NULL || PyDict_Check(kwds));
-    
+
     Py_ssize_t given = PyTuple_GET_SIZE(args);
     if(kwds) given += PyDict_Size(kwds);
     if(UNLIKELY(given > arg_len)) {
@@ -76,35 +64,24 @@ void get_arg::get_arg_base::finished() {
                 PyErr_SetString(PyExc_TypeError,"keywords must be strings");
                 throw py_error_set();
             }
-#if PY_MAJOR_VERSION >= 3 && PY_MINOR_VERSION >= 3
+
             const char *kstr = PyUnicode_AsUTF8(key);
             if(!kstr) throw py_error_set();
-#else
-            PyObject *kstr_obj = PyUnicode_AsUTF8String(key);
-            if(!kstr_obj) throw py_error_set();
-            
-            struct deleter {
-                PyObject *ptr;
-                deleter(PyObject *ptr) : ptr(ptr) {}
-                ~deleter() { Py_DECREF(ptr); }
-            } _(kstr_obj);
-            
-            const char *kstr = PyBytes_AS_STRING(kstr_obj);
-#endif
+
             for(const char **name = names; *name; ++name) {
                 if(strcmp(kstr,*name) == 0) goto match;
             }
-                
+
             PyErr_Format(PyExc_TypeError,"'%U' is an invalid keyword argument for %s%s",
                 key,
                 fname ? fname : "this function",
                 fname ? "()" : "");
             throw py_error_set();
-            
+
         match:
             ;
         }
-        
+
         // should never reach here
         assert(false);
     }

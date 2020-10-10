@@ -1,10 +1,6 @@
 """generates wrapper methods for several different vector types, which would be
 tedious to do by hand"""
 
-# must work in CPython 2.7 and 3.0+
-
-from __future__ import print_function
-
 import json
 import re
 
@@ -140,7 +136,7 @@ def print_mask_function(output,swidth,pwidth,func,args,body,fallback,explicit_ca
         ','.join('mask{0}_v_{1} {2}'.format(swidth,pwidth,chr(ord('a')+i)) for i in range(args))),end='',file=output)
     if explicit_cast:
         print('mask{0}_v_{1}('.format(swidth,pwidth),end='',file=output)
-    
+
     if fallback:
         print(
             '\n    ',
@@ -149,14 +145,14 @@ def print_mask_function(output,swidth,pwidth,func,args,body,fallback,explicit_ca
             body,
             '\n    #else\n            '
             ,sep='',end='',file=output)
-        
+
         body = fallback[1]
-    
+
     print(body,end='',file=output)
 
     if fallback:
         print('\n    #endif\n        ',end='',file=output)
-    
+
     if explicit_cast:
         print(')',end='',file=output)
     print(';\n    }',file=output)
@@ -181,7 +177,7 @@ def int_log2(x):
         x >>= 1
     return r
 
-class FTransform(object):
+class FTransform:
     def __init__(self,base_name,template,extra=None,support=FLOAT|INTEGER,prefer=None,scalar=False):
         self.base_name = base_name
         self.template = template
@@ -189,13 +185,13 @@ class FTransform(object):
         self.support = support
         self.prefer = prefer
         self.scalar = scalar
-        
+
     def supported(self,type,width):
         return self.support & type.float and (width != 512 or type.size >= 32)
-        
+
     def intrinsic(self,type,width):
         return generic_intrinsic_name(type,width,self.base_name,self.scalar)
-    
+
     def output(self,type,width,intr):
         return self.template.format(
             intr=intr['name'],
@@ -204,7 +200,7 @@ class FTransform(object):
             base_type=base_type(type,width),
             item_type=type.name,
             extra=self.extra)
-    
+
     def antirequisite(self,type,width,intrinsics):
         if self.prefer:
             if self.prefer.supported(type,width):
@@ -212,11 +208,11 @@ class FTransform(object):
                 if r: return r['tech']
             return self.prefer.antirequisite(type,width,intrinsics)
         return None
-    
+
 class ShuffleTransform(FTransform):
     def __init__(self,prefer=None):
         super(ShuffleTransform,self).__init__('shuffle',shuffle_meth,prefer=prefer)
-    
+
     def supported(self,type,width):
         return width == 128 and type.size >= 32
 
@@ -230,21 +226,21 @@ class ShuffleTransform(FTransform):
 class BroadcastTransform(FTransform):
     def __init__(self):
         super(BroadcastTransform,self).__init__(None,broadcast_meth)
-    
+
     def intrinsic(self,type,width):
-        return generic_intrinsic_name(type,width,'broadcast' + {'int8_t':'b','int16_t':'w','int32_t':'d','int64_t':'q','float':'ss','double':'sd'}[type.name]) 
+        return generic_intrinsic_name(type,width,'broadcast' + {'int8_t':'b','int16_t':'w','int32_t':'d','int64_t':'q','float':'ss','double':'sd'}[type.name])
 
 class ReduceAddBTransform(FTransform):
     def __init__(self,prefer=None):
         super(ReduceAddBTransform,self).__init__('hadd',reduce_add_meth_b,prefer=prefer)
-    
+
     def output(self,type,width,intr):
         ms = int_log2(width//type.size) - 2
         if ms:
             ms = '\n            r = {0}(r,r);'.format(intr['name']) * ms
         else:
             ms = ''
-        
+
         return self.template.format(
             intr=intr['name'],
             wrap_type=wrap_type(type,width),
@@ -258,7 +254,7 @@ class AltIFTransform(FTransform):
                 mm_prefix(width),
                 self.base_name,
                 width)
-        
+
         return super(AltIFTransform,self).intrinsic(type,width)
 
 class CmpFTransform(FTransform):
@@ -266,18 +262,18 @@ class CmpFTransform(FTransform):
         self.op = op
         self.code = code
         super(CmpFTransform,self).__init__(None,template)
-        
+
     def intrinsic(self,type,width):
         base = 'cmp'
         if width < 256 or type.float != FLOAT: base += self.code
-        
+
         r = generic_intrinsic_name(type,width,base)
-        
+
         if width == 512:
             r += '_mask'
-        
+
         return r
-    
+
     def output(self,type,width,intr):
         arg3 = ''
         if width >= 256 and type.float == FLOAT:
@@ -298,12 +294,12 @@ class RepeatTransform(FTransform):
             r += 'x'
         return r
 
-class CastTransform(object):
+class CastTransform:
     def supported(self,type,width,src_width,inline):
         return not (width == src_width or
             (width < src_width and not inline) or
             ((width == 512 or src_width == 512) and type.size < 32))
-    
+
     def intrinsic(self,type,width,src_width,inline):
         code = 'si'
         if type is types['double']: code = 'pd'
@@ -313,14 +309,14 @@ class CastTransform(object):
             code,
             src_width,
             width)
-    
+
     def output(self,type,width,src_width,intr,inline):
         tmpl = cast_meth
         if width > src_width:
             tmpl = cast_meth_dec if inline else cast_meth_def
         else:
             assert inline
-        
+
         return tmpl.format(
             intr=intr['name'],
             wrap_type=wrap_type(type,width),
@@ -331,10 +327,10 @@ class MixedFTransformAdapter(FTransform):
         self.src_width = src_width
         self.base = base
         super(MixedFTransformAdapter,self).__init__('',None)
-        
+
     def intrinsic(self,type,width):
         return CastTransform().intrinsic(type,width,self.src_width,True)
-    
+
     def output(self,type,width,intr):
         return CastTransform().output(type,width,self.src_width,intr,True)
 
@@ -406,29 +402,29 @@ def avx512_mask_body(swidth,base,args):
 
 def common_mask_function(output,intrinsics,swidth,pwidth,type_req,suffix,name,intr_base):
     fallback = None
-    
+
     if pwidth == 512:
         body = avx512_mask_body(swidth,intr_base,2)
     else:
         intr = intrinsics['{0}_{1}_si{2}'.format(mm_prefix(pwidth),intr_base,pwidth)]
 
         body = '{0}_{1}_si{2}({3})'.format(mm_prefix(pwidth),intr_base,pwidth,ideal_args(swidth,pwidth,2))
-        
+
         if intr['tech'] not in IMPLIED_REQ[type_req]:
             assert swidth >= 32
             fallback = intr['tech'],'{0}_{1}_{2}(a.data,b.data)'.format(mm_prefix(pwidth),intr_base,suffix)
-        
+
     print_mask_function(output,swidth,pwidth,name,2,body,fallback)
 
 def get_eq_intr(intrinsics,pwidth,swidth):
     intr = intrinsics.get('{0}_cmpeq_epi{1}'.format(mm_prefix(pwidth),swidth))
     if intr: return intr,True
-    
+
     return intrinsics['{0}_cmp_epi{1}'.format(mm_prefix(pwidth),swidth)],False
 
 def not_mask_function(output,intrinsics,swidth,pwidth,type_req,suffix):
     fallback = None
-    
+
     if pwidth == 512:
         body = avx512_mask_body(swidth,'not',1)
     else:
@@ -441,7 +437,7 @@ def not_mask_function(output,intrinsics,swidth,pwidth,type_req,suffix):
             ideal_args(swidth,pwidth,1),
             pwidth,
             [',_CMP_EQ_UQ',''][in_name])
-        
+
         if intr['tech'] not in IMPLIED_REQ[type_req]:
             assert swidth >= 32
             fallback = [intr['tech'],'{0}_cmp{1}_{2}(a.data,a.data{3})'.format(
@@ -449,17 +445,17 @@ def not_mask_function(output,intrinsics,swidth,pwidth,type_req,suffix):
                 ['','unord'][in_name],
                 suffix,
                 [',_CMP_UNORD_Q',''][in_name])]
-        
+
     print_mask_function(output,swidth,pwidth,'operator!',1,body,fallback)
 
 def xnor_mask_function(output,intrinsics,swidth,pwidth,type_req,suffix):
     fallback = None
-    
+
     if pwidth == 512:
         body = avx512_mask_body(swidth,'xnor',2)
     else:
         intr,in_name = get_eq_intr(intrinsics,pwidth,swidth)
-        
+
         body = 'mask{0}_v_{1}({2}_cmp{3}_epi{0}({4}{5}))'.format(
             swidth,
             pwidth,
@@ -467,11 +463,11 @@ def xnor_mask_function(output,intrinsics,swidth,pwidth,type_req,suffix):
             ['','eq'][in_name],
             ideal_args(swidth,pwidth,2),
             [',_CMP_EQ_UQ',''][in_name])
-        
+
         if intr['tech'] not in IMPLIED_REQ[type_req]:
             assert swidth >= 32
             fallback = intr['tech'],'!l_xor(a,b)'
-        
+
     print_mask_function(output,swidth,pwidth,'l_xnor',2,body,fallback,pwidth == 512)
 
 
@@ -502,10 +498,10 @@ def ifdef_support(req,antireq=None,indent=0):
 def print_dependent(d_list,file,indent=0):
     for req,mt_list in d_list.items():
         print(ifdef_support(req[0],req[1],indent=indent),file=file)
-            
+
         for trans,intr,type,width in mt_list:
             print(trans.output(type,width,intr),file=file)
-            
+
         print('    ' * indent + '#endif',file=file)
 
 
@@ -543,7 +539,7 @@ def generate(data_file,template_file,output_file):
         if m:
             swidth = int(m.group(1),10)
             pwidth = int(m.group(2),10)
-            
+
             if pwidth == 512:
                 type_req = 'AVX-512'
             elif pwidth == 256:
@@ -551,14 +547,14 @@ def generate(data_file,template_file,output_file):
             else:
                 assert pwidth == 128
                 type_req = 'SSE' if swidth == 32 else 'SSE2'
-            
+
             if swidth == 64:
                 suffix = 'pd'
             elif swidth == 32:
                 suffix = 'ps'
             else:
                 suffix = 'epi{0}'.format(swidth)
-            
+
             common_mask_function(output,intrinsics,swidth,pwidth,type_req,suffix,'operator&&','and')
             common_mask_function(output,intrinsics,swidth,pwidth,type_req,suffix,'operator||','or')
             not_mask_function(output,intrinsics,swidth,pwidth,type_req,suffix)
@@ -566,20 +562,20 @@ def generate(data_file,template_file,output_file):
             common_mask_function(output,intrinsics,swidth,pwidth,type_req,suffix,'l_xor','xor')
             xnor_mask_function(output,intrinsics,swidth,pwidth,type_req,suffix)
             continue
-        
+
         m = meth_search.match(line)
         if m:
             type = types[m.group(1)]
             width = int(m.group(2),10)
             assert width in widths
-            
+
             if m.group(3):
                 width2 = int(m.group(3),10)
                 assert width2 in widths
-                
+
                 for mt in mixed_method_transforms:
                     if not mt.supported(type,width,width2,False): continue
-                
+
                     intr_name = mt.intrinsic(type,width,width2,False)
                     intr = intr_name and intrinsics.get(intr_name)
                     if intr:
@@ -597,7 +593,7 @@ def generate(data_file,template_file,output_file):
                 else:
                     assert width == 128
                     type_req = 'SSE2'
-                
+
                 dependent = {}
                 for mt in method_transforms:
                     if mt.supported(type,width):
@@ -613,7 +609,7 @@ def generate(data_file,template_file,output_file):
                                 if rs not in dependent:
                                     dependent[rs] = []
                                 dependent[rs].append((mt,intr,type,width))
-                        
+
                 print_dependent(dependent,output,1)
             continue
 
@@ -624,19 +620,18 @@ def generate(data_file,template_file,output_file):
                 for width in widths:
                     for ft in function_transforms:
                         if not ft.supported(type,width): continue
-                        
+
                         intr = intrinsics.get(ft.intrinsic(type,width))
                         if intr:
                             rs = (intr['tech'],ft.antirequisite(type,width,intrinsics))
                             if rs not in dependent:
                                 dependent[rs] = []
                             dependent[rs].append((ft,intr,type,width))
-                        
+
             print_dependent(dependent,output)
             continue
 
         print(line,end='',file=output)
-                
+
     template.close()
     output.close()
-

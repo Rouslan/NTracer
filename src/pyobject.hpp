@@ -38,13 +38,13 @@ namespace py {
         Py_XINCREF(o);
         return o;
     }
-    
+
     /* wrapping it in a function prevents evaluating an expression more than
        once due to macro expansion */
     inline void decref(PyObject *o) {
         Py_DECREF(o);
     }
-    
+
     /* wrapping it in a function prevents evaluating an expression more than
        once due to macro expansion */
     inline void xdecref(PyObject *o) {
@@ -60,20 +60,20 @@ namespace py {
         PyObject *_ptr;
         explicit new_ref(PyObject *ptr) : _ptr(ptr) {}
     };
-    
+
     // alias for classes to use, that have new_ref function
     typedef new_ref _new_ref;
-    
+
     inline new_ref check_new_ref(PyObject *o) {
         return new_ref(check_obj(o));
     }
-    
+
     inline void *malloc(size_t size) {
         void *r = PyMem_Malloc(size);
         if(UNLIKELY(!r)) throw std::bad_alloc();
         return r;
     }
-    
+
     inline void free(void *ptr) noexcept {
         PyMem_Free(ptr);
     }
@@ -81,10 +81,10 @@ namespace py {
     template<typename T> inline T *get_base_or_none(PyObject *o) {
         return o == Py_None ? NULL : &get_base<T>(o);
     }
-    
+
     inline const char *typename_base(const char *name) {
         assert(name);
-        
+
         while(true) {
             assert(*name);
             if(*name == '.') return name+1;
@@ -117,7 +117,7 @@ namespace py {
         _object_base(borrowed_ref r) : _ptr(incref(r._ptr)) {}
         _object_base(py::new_ref r) : _ptr(r._ptr) { assert(_ptr); }
         _object_base(const _object_base &b) : _ptr(incref(b._ptr)) {}
-        
+
         _object_base &operator=(const _object_base &b) {
             reset(b._ptr);
             return *this;
@@ -144,7 +144,7 @@ namespace py {
 
         bool has_attr(const char *name) const { return PyObject_HasAttrString(_ptr,name); }
         bool has_attr(const _object_base &name) const { return PyObject_HasAttr(_ptr,name._ptr); }
-        
+
         inline object operator()() const;
         template<typename Arg1,typename... Args> inline object operator()(const Arg1 &arg1,const Args&... args) const;
 
@@ -159,7 +159,7 @@ namespace py {
 
         template<typename T> object_item_proxy at(T key) const;
         template<typename T> object_item_proxy operator[](T key) const;
-        
+
         PyTypeObject *type() const {
             return Py_TYPE(_ptr);
         }
@@ -179,7 +179,7 @@ namespace py {
             reset(b.ref());
             return *this;
         }
-        
+
         object &operator=(borrowed_ref r) {
             reset(r._ptr);
             return *this;
@@ -190,7 +190,7 @@ namespace py {
         }
 
         void swap(object &b) { _object_base::swap(b); }
-        
+
         inline object_iterator begin() const;
         inline object_iterator end() const;
     };
@@ -198,7 +198,7 @@ namespace py {
     template<typename T> inline typename std::enable_if<!std::is_base_of<_object_base,typename std::decay<T>::type>::value,object>::type make_object(T &&x) {
         return object(new_ref(to_pyobject(std::forward<T>(x))));
     }
-    
+
     inline object make_object(const _object_base &x) {
         return x;
     }
@@ -227,7 +227,7 @@ namespace py {
         template<typename... Args> object operator()(const Args&... args) const {
             return check_new_ref(PyObject_CallMethodObjArgs(
                 _ptr,
-                object(check_new_ref(PYSTR(InternFromString)(name))).ref(),
+                object(check_new_ref(PyUnicode_InternFromString(name))).ref(),
                 make_object(args).ref()...,
                 0));
         }
@@ -306,13 +306,13 @@ namespace py {
         nullable(const T &b) : _ptr(b.new_ref()) {}
         nullable(borrowed_ref r) : _ptr(r._ptr) { Py_XINCREF(_ptr); }
         nullable(new_ref r) : _ptr(r._ptr) {}
-        
+
         nullable &operator=(borrowed_ref r) {
             Py_XINCREF(r._ptr);
             reset(r._ptr);
             return *this;
         }
-        
+
         nullable &operator=(new_ref r) {
             reset(r._ptr);
             return *this;
@@ -340,7 +340,7 @@ namespace py {
         }
 
         PyObject *ref() const { return _ptr; }
-        
+
         void swap(nullable &b) {
             std::swap(_ptr,b._ptr);
         }
@@ -349,8 +349,6 @@ namespace py {
         void gc_clear() { reset(nullptr); }
     };
 
-
-#if PY_VERSION_HEX >= 0x02060000
     class buffer_view {
         Py_buffer view;
     public:
@@ -361,7 +359,7 @@ namespace py {
         buffer_view(object obj,int flags) {
             if(PyObject_GetBuffer(obj.ref(),&view,flags)) throw py_error_set();
         }
-        
+
         buffer_view(const buffer_view &b) = delete;
         buffer_view &operator=(const buffer_view &b) = delete;
 
@@ -379,7 +377,6 @@ namespace py {
         Py_ssize_t *suboffsets() const { return view.suboffsets; }
         Py_ssize_t itemsize() const { return view.itemsize; }
     };
-#endif
 
     class tuple_iterator {
         PyObject **data;
@@ -391,11 +388,11 @@ namespace py {
         typedef std::random_access_iterator_tag iterator_category;
 
         explicit tuple_iterator(PyObject **data) : data(data) {}
-        
+
         object operator*() const {
             return borrowed_ref(*data);
         }
-        
+
         tuple_iterator &operator++() {
             ++data;
             return *this;
@@ -411,7 +408,7 @@ namespace py {
         bool operator!=(tuple_iterator b) const {
             return data != b.data;
         }
-        
+
         tuple_iterator operator+(Py_ssize_t b) const {
             return tuple_iterator(data + b);
         }
@@ -443,7 +440,7 @@ namespace py {
         tuple(std::initializer_list<object> ol) : tuple(ol.size()) {
             auto li = std::begin(ol);
             auto ti = &PyTuple_GET_ITEM(_ptr,0);
-            
+
             for(; li != std::end(ol); ++li, ++ti) {
                 *ti = li->new_ref();
             }
@@ -460,16 +457,16 @@ namespace py {
         void set_unsafe(Py_ssize_t i,PyObject *item) const { PyTuple_SET_ITEM(_ptr,i,item); }
         object operator[](Py_ssize_t i) const { return borrowed_ref(PyTuple_GET_ITEM(_ptr,i)); }
         Py_ssize_t size() const { return PyTuple_GET_SIZE(_ptr); }
-        
+
         tuple_iterator begin() const {
             return tuple_iterator(&PyTuple_GET_ITEM(_ptr,0));
         }
-        
+
         tuple_iterator end() const {
             return tuple_iterator(&PyTuple_GET_ITEM(_ptr,size()));
         }
     };
-    
+
     template<typename... Args> tuple make_tuple(Args&&... args) {
         return {make_object(std::forward<Args>(args))...};
     }
@@ -502,7 +499,7 @@ namespace py {
             return operator=(static_cast<object>(val));
         }
     };
-    
+
     class list : public _object_base {
     public:
         list(borrowed_ref r) : _object_base(r) { assert(PyList_Check(r._ptr)); }
@@ -512,26 +509,26 @@ namespace py {
         explicit list(const _object_base &b) : _object_base(object(py::borrowed_ref(reinterpret_cast<PyObject*>(&PyList_Type)))(b)) {
             assert(PyList_Check(_ptr));
         }
-        
+
         list &operator=(const list &b) {
             reset(b._ptr);
             return *this;
         }
-        
+
         void swap(list &b) { _object_base::swap(b); }
-        
+
         list_item_proxy operator[](Py_ssize_t index) const {
             assert(index >= 0 && index < size());
             return list_item_proxy(_ptr,index);
         }
-        
+
         Py_ssize_t size() const { return PyList_GET_SIZE(_ptr); }
-        
+
         void append(const object &item) {
             if(PyList_Append(_ptr,item.ref())) throw py_error_set();
         }
     };
-    
+
     inline void del(const list_item_proxy &item) {
         if(PyList_SetSlice(item._ptr,item.index,item.index,NULL)) throw py_error_set();
     }
@@ -588,22 +585,9 @@ namespace py {
         template<typename T> dict_item_proxy operator[](T key) const { return dict_item_proxy(_ptr,to_pyobject(key)); }
         Py_ssize_t size() const { return PyDict_Size(_ptr); }
         template<typename T> nullable<object> find(T key) const {
-#if PY_MAJOR_VERSION >= 3
             PyObject *item = PyDict_GetItemWithError(_ptr,to_pyobject(key));
             if(!item && PyErr_Occurred()) throw py_error_set();
             return borrowed_ref(item);
-#else
-            /* mp_subscript is used instead of PyDict_GetItem because
-               PyDict_GetItem swallows all errors */
-            PyMappingMethods *m = _ptr->ob_type->tp_as_mapping;
-            assert(m && m->mp_subscript);
-            PyObject *item = (*m->mp_subscript)(_ptr,to_pyobject(key));
-            if(!item) {
-                if(!PyErr_ExceptionMatches(PyExc_KeyError)) throw py_error_set();
-                PyErr_Clear();
-            }
-            return _new_ref(item);
-#endif
         }
 
         dict copy(const dict &b) const {
@@ -614,37 +598,37 @@ namespace py {
     inline void del(const dict_item_proxy &attr) {
         if(PyDict_DelItem(attr._ptr,attr.key)) throw py_error_set();
     }
-    
-    
+
+
     class bytes : public _object_base {
     public:
-        bytes(borrowed_ref r) : _object_base(r) { assert(PYBYTES(Check)(r._ptr)); }
-        bytes(_new_ref r) : _object_base(r) { assert(PYBYTES(Check)(r._ptr)); }
-        bytes(const char *str="") : _object_base(check_new_ref(PYBYTES(FromString)(str))) {}
-        explicit bytes(Py_ssize_t s) : _object_base(check_new_ref(PYBYTES(FromStringAndSize)(nullptr,s))) {}
-        bytes(const char *str,Py_ssize_t s) : _object_base(check_new_ref(PYBYTES(FromStringAndSize)(str,s))) {}
+        bytes(borrowed_ref r) : _object_base(r) { assert(PyBytes_Check(r._ptr)); }
+        bytes(_new_ref r) : _object_base(r) { assert(PyBytes_Check(r._ptr)); }
+        bytes(const char *str="") : _object_base(check_new_ref(PyBytes_FromString(str))) {}
+        explicit bytes(Py_ssize_t s) : _object_base(check_new_ref(PyBytes_FromStringAndSize(nullptr,s))) {}
+        bytes(const char *str,Py_ssize_t s) : _object_base(check_new_ref(PyBytes_FromStringAndSize(str,s))) {}
         bytes(const bytes &b) : _object_base(b) {}
 
         bytes &operator=(const bytes &b) {
             reset(b._ptr);
             return *this;
         }
-        
+
         void swap(bytes &b) { _object_base::swap(b); }
-        
+
         //bytes &operator+=(const bytes &b);
-        
-        Py_ssize_t size() const { return PYBYTES(GET_SIZE)(_ptr); }
-        
-        char *data() { return PYBYTES(AS_STRING)(_ptr); }
-        const char *data() const { return PYBYTES(AS_STRING)(_ptr); }
+
+        Py_ssize_t size() const { return PyBytes_GET_SIZE(_ptr); }
+
+        char *data() { return PyBytes_AS_STRING(_ptr); }
+        const char *data() const { return PyBytes_AS_STRING(_ptr); }
     };
-    
-    
+
+
     class set_base : public _object_base {
     public:
         Py_ssize_t size() const { return PySet_GET_SIZE(_ptr); }
-        
+
         bool contains(PyObject *x) {
             int r = PySet_Contains(_ptr,x);
             if(UNLIKELY(r == -1)) throw py_error_set();
@@ -653,25 +637,25 @@ namespace py {
         template<typename T> bool contains(const T &x) {
             return contains(make_object(x).ref());
         }
-        
+
     protected:
         template<typename T> set_base(T x) : _object_base(x) {}
         ~set_base() = default;
     };
-    
+
     class set : public set_base {
     public:
         set(borrowed_ref r) : set_base(r) { assert(PySet_Check(r._ptr)); }
         set(_new_ref r) : set_base(r) { assert(PySet_Check(r._ptr)); }
         set() : set_base(check_new_ref(PySet_New(nullptr))) {}
-        
+
         void add(PyObject *x) {
             if(UNLIKELY(PySet_Add(_ptr,x)) == -1) throw py_error_set();
         }
         template<typename T> bool add(const T &x) {
             return add(make_object(x).ref());
         }
-        
+
         bool discard(PyObject *x) {
             int r = PySet_Discard(_ptr,x);
             if(UNLIKELY(r == -1)) throw py_error_set();
@@ -681,38 +665,38 @@ namespace py {
             return discard(make_object(x).ref());
         }
     };
-    
-    
+
+
     template<typename T=object> class weak_ref {
         object obj;
-        
+
         PyObject *deref() const {
             // obj will be None if gc_clear is called
             assert(obj.ref() != Py_None);
-            
+
             return PyWeakref_GET_OBJECT(obj.ref());
         }
-        
+
     public:
         weak_ref(borrowed_ref r) : obj(r) { assert(PyWeakref_CheckRef(obj.ref())); }
         weak_ref(new_ref r) : obj(r) { assert(PyWeakref_CheckRef(obj.ref())); }
         explicit weak_ref(const object &b,PyObject *callback=nullptr) : obj(check_new_ref(PyWeakref_NewRef(b.ref(),callback))) {}
         weak_ref(const object &b,const nullable<object> &callback) : weak_ref(b,callback.ref()) {}
-        
+
         operator bool() const { return deref() != nullptr; }
-        
+
         T operator*() const {
             assert(deref());
             return borrowed_ref(deref());
         }
         T operator->() const { return operator*(); }
-        
+
         nullable<T> try_deref() const {
             return borrowed_ref(deref());
         }
 
         PyObject *ref() const { return obj.ref(); }
-        
+
         void swap(weak_ref &b) {
             std::swap(obj,b.obj);
         }
@@ -798,7 +782,7 @@ namespace py {
     template<typename T,typename U> inline pyptr<T> python_cast(const pyptr<U> &a) {
         return pyptr<T>(a.obj());
     }*/
-    
+
     template<typename T> class pyptr {
 
         nullable<object> _obj;
@@ -827,7 +811,7 @@ namespace py {
             assert(_obj);
             return reinterpret_cast<T*>(_obj.ref());
         }
-        
+
         PyObject *ref() const { return _obj.ref(); }
 
         object obj() const { return *_obj; }
@@ -835,7 +819,7 @@ namespace py {
         void swap(pyptr<T> &b) {
             _obj.swap(b._obj);
         }
-        
+
         int gc_traverse(visitproc visit,void *arg) const { return _obj.gc_traverse(visit,arg); }
         void gc_clear() { _obj.gc_clear(); }
     };
@@ -852,27 +836,27 @@ namespace py {
     inline Py_ssize_t len(const dict &o) {
         return PyDict_Size(o.ref());
     }
-    
+
     inline Py_ssize_t len(const list &o) {
         return PyList_GET_SIZE(o.ref());
     }
-    
+
     inline Py_ssize_t len(const bytes &o) {
-        return PYBYTES(GET_SIZE)(o.ref());
+        return PyBytes_GET_SIZE(o.ref());
     }
-    
+
     inline object str(const object &o) {
         return check_new_ref(PyObject_Str(o.ref()));
     }
-    
+
     inline object repr(const object &o) {
         return check_new_ref(PyObject_Repr(o.ref()));
     }
-    
+
     inline object import_module(const char *mod) {
         return check_new_ref(PyImport_ImportModule(mod));
     }
-    
+
     inline object iter(PyObject *o) {
         return check_new_ref(PyObject_GetIter(o));
     }
@@ -886,7 +870,7 @@ namespace py {
         if(!r && PyErr_Occurred()) throw py_error_set();
         return new_ref(r);
     }
-    
+
     class object_iterator {
         object itr;
         nullable<object> item;
@@ -898,11 +882,11 @@ namespace py {
         typedef std::input_iterator_tag iterator_category;
 
         object_iterator(const _object_base &itr,const nullable<object> &item) : itr(itr), item(item) {}
-        
+
         object operator*() const {
             return *item;
         }
-        
+
         object_iterator &operator++() {
             item = next(itr);
             return *this;
@@ -912,7 +896,7 @@ namespace py {
             item = next(itr);
             return tmp;
         }
-        
+
         bool operator==(const object_iterator &b) const {
             return itr.ref() == b.itr.ref() && !item && !b.item;
         }
@@ -920,11 +904,11 @@ namespace py {
             return itr.ref() != b.itr.ref() || item || b.item;
         }
     };
-    
+
     inline object_iterator object::begin() const {
         return object_iterator(*this,next(*this));
     }
-    
+
     inline object_iterator object::end() const {
         return object_iterator(*this,nullable<object>());
     }
@@ -939,7 +923,7 @@ namespace py {
         }
 
         array_adapter(PyObject *origin,size_t size,T *items) : origin(borrowed_ref(origin)), size(size), items(items) {}
-        T &sequence_getitem(Py_ssize_t i) const { 
+        T &sequence_getitem(Py_ssize_t i) const {
             index_check(i);
             return items[i];
         }
@@ -950,33 +934,33 @@ namespace py {
         Py_ssize_t length() const { return size; }
         int gc_traverse(visitproc visit,void *arg) const { return (*visit)(origin.ref(),arg); }
     };
-    
+
     template<typename Item,const char* FullName,bool GC,bool ReadOnly=false> struct obj_array_adapter;
-    
+
     namespace impl {
         template<typename Item,const char* FullName,bool GC,bool ReadOnly> struct array_adapter_alloc {
             static constexpr traverseproc traverse = nullptr;
-            static constexpr long tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_CHECKTYPES;
-            
+            static constexpr long tp_flags = Py_TPFLAGS_DEFAULT;
+
             PY_MEM_NEW_DELETE
         protected:
             array_adapter_alloc() = default;
             ~array_adapter_alloc() = default;
         };
-        
+
         template<typename Item,const char* FullName,bool ReadOnly> struct array_adapter_alloc<Item,FullName,true,ReadOnly> {
             static int _traverse(PyObject *self,visitproc visit,void *arg) {
                 return reinterpret_cast<obj_array_adapter<Item,FullName,true,ReadOnly>*>(self)->data.gc_traverse(visit,arg);
             }
             static constexpr traverseproc traverse = &_traverse;
-            static constexpr long tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_CHECKTYPES|Py_TPFLAGS_HAVE_GC;
-            
+            static constexpr long tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_HAVE_GC;
+
             PY_MEM_GC_NEW_DELETE
         protected:
             array_adapter_alloc() = default;
             ~array_adapter_alloc() = default;
         };
-        
+
         template<typename Item,const char* FullName,bool GC,bool ReadOnly> struct array_adapter_set_item {
             static int _value(PyObject *self,Py_ssize_t index,PyObject *value) {
                 try {
@@ -986,45 +970,37 @@ namespace py {
             }
             static constexpr ssizeobjargproc value = &_value;
         };
-        
+
         template<typename Item,const char* FullName,bool GC> struct array_adapter_set_item<Item,FullName,GC,true> {
             static constexpr ssizeobjargproc value = nullptr;
         };
     }
-    
-    template<typename Item,const char* FullName,bool GC,bool ReadOnly> struct obj_array_adapter : impl::array_adapter_alloc<Item,FullName,GC,ReadOnly> {
+
+    template<typename Item,const char* FullName,bool GC,bool ReadOnly>
+    struct obj_array_adapter : impl::array_adapter_alloc<Item,FullName,GC,ReadOnly> {
         static PySequenceMethods seq_methods;
         CONTAINED_PYTYPE_DEF
         PyObject_HEAD
-            
+
         obj_array_adapter(PyObject *origin,size_t size,Item *items) : data(origin,size,items) {
             PyObject_Init(reinterpret_cast<PyObject*>(this),pytype());
         }
-            
+
         array_adapter<Item> data;
     };
-    
+
     template<typename Item,const char* FullName,bool GC,bool ReadOnly>
-        PySequenceMethods obj_array_adapter<Item,FullName,GC,ReadOnly>::seq_methods = {
-        
-        [](PyObject *self) {
+    PySequenceMethods obj_array_adapter<Item,FullName,GC,ReadOnly>::seq_methods = {
+        .sq_length = [](PyObject *self) {
             return reinterpret_cast<obj_array_adapter<Item,FullName,GC,ReadOnly>*>(self)->data.length();
         },
-        NULL,
-        NULL,
-        [](PyObject *self,Py_ssize_t index) -> PyObject* {
+        .sq_item = [](PyObject *self,Py_ssize_t index) -> PyObject* {
             try {
                 return to_pyobject(reinterpret_cast<obj_array_adapter<Item,FullName,GC,ReadOnly>*>(self)->data.sequence_getitem(index));
             } PY_EXCEPT_HANDLERS(nullptr)
         },
-        NULL,
-        impl::array_adapter_set_item<Item,FullName,GC,ReadOnly>::value,
-        NULL,
-        NULL,
-        NULL,
-        NULL
-    };
-    
+        .sq_ass_item = impl::array_adapter_set_item<Item,FullName,GC,ReadOnly>::value};
+
     template<typename Item,const char* FullName,bool GC,bool ReadOnly>
         PyTypeObject obj_array_adapter<Item,FullName,GC,ReadOnly>::_pytype = {
             PyVarObject_HEAD_INIT(nullptr,0)
@@ -1032,7 +1008,7 @@ namespace py {
             .tp_basicsize = sizeof(obj_array_adapter<Item,FullName,GC,ReadOnly>),
             .tp_dealloc = [](PyObject *self) -> void {
                 typedef obj_array_adapter<Item,FullName,GC,ReadOnly> self_t;
-            
+
                 reinterpret_cast<self_t*>(self)->~self_t();
                 (*self_t::pytype()->tp_free)(self);
             },
@@ -1111,14 +1087,8 @@ template<> inline py::list from_pyobject<py::list>(PyObject *o) {
 }
 
 template<> inline py::bytes from_pyobject<py::bytes>(PyObject *o) {
-    if(!PYBYTES(Check(o)))
-        THROW_PYERR_STRING(TypeError,"object is not an instance of "
-#if PY_MAJOR_VERSION >= 3
-            "bytes"
-#else
-            "str"
-#endif
-            );
+    if(!PyBytes_Check(o))
+        THROW_PYERR_STRING(TypeError,"object is not an instance of bytes");
 
     return py::borrowed_ref(o);
 }
@@ -1136,7 +1106,7 @@ template<typename T> inline PyObject *to_pyobject(const py::pyptr<T> &x) {
 }
 
 template<typename... T> inline PyObject *to_pyobject(const std::tuple<T...> &x) {
-    return apply(&py::make_tuple<T...>,x).new_ref();
+    return std::apply(&py::make_tuple<T...>,x).new_ref();
 }
 
 #endif

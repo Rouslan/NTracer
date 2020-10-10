@@ -4,11 +4,13 @@ import os.path
 import re
 import subprocess
 
+from setuptools import setup,Command,Extension
 from distutils import sysconfig
-from distutils.core import setup,Command
-from distutils.extension import Extension
+
+# at the time of this writing, there is no setuptools.command.build module
 from distutils.command.build import build
-from distutils.command.build_ext import build_ext
+
+from setuptools.command.build_ext import build_ext
 from distutils.errors import DistutilsSetupError
 from distutils.dir_util import mkpath
 from distutils import log
@@ -16,16 +18,6 @@ from distutils.dep_util import newer
 from distutils.util import split_quoted, strtobool
 from distutils.spawn import find_executable
 from distutils.file_util import copy_file
-
-try:
-    from distutils.command.bdist_msi import bdist_msi
-except ImportError:
-    bdist_msi = None
-
-try:
-    from distutils.command.bdist_wininst import bdist_wininst
-except ImportError:
-    bdist_wininst = None
 
 
 base_dir = os.path.dirname(os.path.realpath(__file__))
@@ -45,23 +37,55 @@ GCC_OPTIMIZE_COMPILE_ARGS = [
     '-fno-enforce-eh-specs',
     '-fnothrow-opt',
     '-march=native',
-#    '-DPROFILE_CODE',
     '--param','large-function-growth=500',
     '--param','inline-unit-growth=1000',
     '-fdelete-dead-exceptions']
 GCC_EXTRA_COMPILE_ARGS = [
     '-std=c++17',
     '-fvisibility=hidden',
+    '-fno-rtti',
     '-Wno-format',
     '-Wno-format-security',
     '-Wno-invalid-offsetof',
+
+    # using SIMD types in templates causes the __may_alias__ attribute to be
+    # dropped, but since we do all type punning through unions, this isn't a
+    # problem
     '-Wno-ignored-attributes',
 
     # in the future, we may be able to mark classes as "trivially relocatable"
     # which would make suppressing this warning unnecessary
     '-Wno-class-memaccess',
 
+    # I get "iteration 4611686018427387903 invokes undefined behavior" warnings
+    # when compiling fixed_geometry versions, but I don't see any way the
+    # pertinent loops could reach such high values.
+    '-Wno-aggressive-loop-optimizations',
+
     '-Werror=return-type']
+
+CLANG_OPTIMIZE_COMPILE_ARGS = [
+    '-O3',
+    '-fmerge-all-constants',
+    '-ffast-math',
+    '-fstrict-enums',
+    '-march=native']
+CLANG_EXTRA_COMPILE_ARGS = [
+    '-std=c++17',
+    '-fvisibility=hidden',
+    '-fno-rtti',
+    '-Wno-format',
+    '-Wno-format-security',
+    '-Wno-invalid-offsetof',
+    '-Wno-c99-designator',
+    '-Werror=return-type']
+
+# If Python was compiled with GCC and we want to compile the extension with
+# Clang, certain arguments need to be omitted (because they are not supported
+# and cause an error). There may also be arguments that need omitting when
+# Python was compiled with Clang and we're compiling with GCC, but I haven't
+# looked into it.
+GCC_TO_CLANG_FILTER = {'-fstack-clash-protection'}
 
 MSVC_OPTIMIZE_COMPILE_ARGS = ['/Ox','/fp:fast','/volatile:iso','/Za']
 
@@ -82,7 +106,7 @@ typedef fixed::item_store<{0},real> module_store;
 def check_min(x):
     if x < 3:
         raise DistutilsSetupError('dimension cannot be less than 3')
-        
+
 def parse_int(x):
     try:
         return int(x,10)
@@ -105,7 +129,7 @@ def parse_ranges(x):
             items.update(range(start,end+1))
         else:
             items.add(start)
-            
+
     return items
 
 
@@ -125,14 +149,14 @@ class CustomBuild(build):
         self.optimize_dimensions = None
         self.cpp_opts = ''
         self.copy_mingw_deps = None
-    
+
     def finalize_options(self):
         build.finalize_options(self)
-        
+
         self.optimize_dimensions = (parse_ranges(self.optimize_dimensions)
             if self.optimize_dimensions is not None
             else DEFAULT_OPTIMIZED_DIMENSIONS)
-        
+
         self.cpp_opts = split_quoted(self.cpp_opts)
         self.copy_mingw_deps = strtobool(self.copy_mingw_deps) if self.copy_mingw_deps is not None else True
 
@@ -143,12 +167,7 @@ def get_dll_list(f):
     for line in f:
         m = p.match(line)
         if m:
-            name = m.group(1)
-            
-            # Python 2/3 compatibility
-            if not isinstance(name,str): name = name.decode()
-            
-            dlls.append(name)
+            dlls.append(m.group(1).decode())
     return dlls
 
 
@@ -160,15 +179,15 @@ class CustomBuildExt(build_ext):
         self.optimize_dimensions = None
         self.cpp_opts = None
         self.copy_mingw_deps = None
-        
+
     def special_tracer_file(self,n):
         return os.path.join(self.build_temp,'tracer{0}.cpp'.format(n))
-        
+
     def special_tracer_ext(self,n):
         n = str(n)
         return Extension(
             'tracer'+n,
-            [self.special_tracer_file(n),'src/py_common.cpp','src/simd.cpp'],
+            ['src/py_common.cpp'],
             depends=['src/simd.hpp.in','src/ntracer_body.hpp',
                 'src/py_common.hpp','src/pyobject.hpp','src/geometry.hpp',
                 'src/fixed_geometry.hpp','src/tracer.hpp','src/light.hpp',
@@ -176,21 +195,34 @@ class CustomBuildExt(build_ext):
                 'src/v_array.hpp','src/instrumentation.hpp',
                 'src/index_list.hpp'],
             include_dirs=['src'])
-    
+
     def finalize_options(self):
-        build_ext.finalize_options(self)
-        
         self.set_undefined_options('build',
             ('optimize_dimensions',)*2,
             ('cpp_opts',)*2,
             ('copy_mingw_deps',)*2)
 
-        for d in self.optimize_dimensions:
-            self.extensions.append(self.special_tracer_ext(d))
-        
+        # we can't add to self.extensions after running
+        # build_ext.finalize_options because the items are modified by it
+        old_ext_mods = self.distribution.ext_modules
+        self.distribution.ext_modules = new_ext_mods = old_ext_mods[:]
+        try:
+            for d in self.optimize_dimensions:
+                new_ext_mods.append(self.special_tracer_ext(d))
+
+            build_ext.finalize_options(self)
+        finally:
+            self.distribution.ext_modules = old_ext_mods
+
         # needed for simd.hpp (derived from simd.hpp.in)
         self.include_dirs.append(self.build_temp)
         self.include_dirs.append('src')
+
+        # these have to be added after calling build_ext.finalize_options
+        # because they rely on self.build_temp, which is set by
+        # build_ext.finalize_options
+        for d,ext in zip(self.optimize_dimensions,self.extensions[-len(self.optimize_dimensions):]):
+            ext.sources.insert(0,self.special_tracer_file(d))
 
     def add_optimization(self):
         c = self.compiler.compiler_type
@@ -198,51 +230,54 @@ class CustomBuildExt(build_ext):
             for e in self.extensions:
                 e.extra_compile_args = MSVC_OPTIMIZE_COMPILE_ARGS
             return True
-        if c in ('unix','cygwin','mingw32'):
+        if c in {'unix','cygwin','mingw32'}:
             if c == 'unix':
-                cc = sysconfig.get_config_var('CXX')
-                if cc is None:
-                    self.warn('the environment variable "CXX" is not set so ' +
-                        "I'll just assume the compiler is GCC or Clang and " +
-                        "hope for the best")
+                cc = os.path.basename(self.compiler.compiler_so[0])
+                if 'clang' in cc:
+                    args = CLANG_EXTRA_COMPILE_ARGS + CLANG_OPTIMIZE_COMPILE_ARGS
+                    default_cc = os.path.basename(sysconfig.get_config_var('CC'))
+                    if 'gcc' in default_cc or 'g++' in default_cc:
+                        self.compiler.compiler_so = [
+                            arg for arg in self.compiler.compiler_so if arg not in GCC_TO_CLANG_FILTER]
+                elif 'gcc' in cc or 'g++' in cc:
+                    args = GCC_EXTRA_COMPILE_ARGS + GCC_OPTIMIZE_COMPILE_ARGS
                 else:
-                    cc = os.path.basename(cc)
-                    if not ('gcc' in cc or 'g++' in cc or 'clang' in cc):
-                        return False
+                    return False
+            else:
+                args = GCC_EXTRA_COMPILE_ARGS + GCC_OPTIMIZE_COMPILE_ARGS
 
             for e in self.extensions:
-                e.extra_compile_args = GCC_EXTRA_COMPILE_ARGS[:]
-                e.extra_compile_args += GCC_OPTIMIZE_COMPILE_ARGS
+                e.extra_compile_args = args
                 if not self.debug:
                     e.extra_link_args = ['-s']
             return True
-            
+
         return False
-    
+
     def mingw_dlls(self):
         if self.dry_run: return []
-        
+
         dir = find_executable('gcc')
         if dir is None: raise DistutilsSetupError('cannot determine location of gcc.exe')
         dir = os.path.dirname(dir)
-        
+
         suffix = sysconfig.get_config_vars('EXT_SUFFIX','SO')
         info = subprocess.check_output(['objdump','-p',os.path.join(self.build_lib,'ntracer','render'+(suffix[0] or suffix[1]))])
         r = []
         for dll in get_dll_list(info.splitlines()):
             p = os.path.join(dir,dll)
             if os.path.exists(p): r.append(p)
-        
+
         return r
 
     def build_extensions(self):
         if not self.add_optimization():
             self.warn("don't know how to set optimization flags for this compiler")
-        
+
         for e in self.extensions:
             # these need to be added last
             e.extra_compile_args += self.cpp_opts
-        
+
         mkpath(self.build_temp,dry_run=self.dry_run)
         if self.optimize_dimensions:
             for d in self.optimize_dimensions:
@@ -252,7 +287,7 @@ class CustomBuildExt(build_ext):
                     if not self.dry_run:
                         with open(f,'w') as out:
                             out.write(TRACER_TEMPLATE.format(d))
-        
+
         simd_out = os.path.join(self.build_temp,'simd.hpp')
         simd_in = os.path.join(base_dir,'src','simd.hpp.in')
         if self.force or newer(simd_in,simd_out):
@@ -262,9 +297,9 @@ class CustomBuildExt(build_ext):
                     os.path.join(base_dir,'src','intrinsics.json'),
                     simd_in,
                     simd_out)
-        
+
         build_ext.build_extensions(self)
-        
+
         if self.copy_mingw_deps and self.compiler.compiler_type == 'mingw32':
             log.info('copying MinGW-specific dependencies')
             out = os.path.join(self.build_lib,'ntracer')
@@ -273,26 +308,8 @@ class CustomBuildExt(build_ext):
                 copy_file(dll,out,update=True,link=link)
 
 
-def custom_installer(base,suffix):
-    class inner(base):
-        user_options = base.user_options + [
-            ('arch-name=',None,
-             'Use an alternate installer naming scheme that includes the supplied architecture name')]
-        
-        def initialize_options(self):
-            base.initialize_options(self)
-            self.arch_name = None
-
-        def get_installer_filename(self,fullname):
-            if self.arch_name is None: return base.get_installer_filename(self,fullname)
-            
-            base_name = '{0}.{1}-py{2}.{3}'.format(fullname,self.arch_name,self.target_version,suffix)
-            return os.path.join(self.dist_dir,base_name)
-    
-    return inner
-
-
-long_description = open('README.rst').read()
+with open('README.rst') as readme:
+    long_description = readme.read()
 
 
 float_format = {
@@ -300,10 +317,6 @@ float_format = {
     'IEEE, little-endian' : '1',
     'IEEE, big-endian' : '2'}[float.__getformat__('float')]
 byteorder = {'little' : '1','big' : '2'}[sys.byteorder]
-
-cmdclass = {'build' : CustomBuild,'build_ext' : CustomBuildExt}
-if bdist_msi is not None: cmdclass['bdist_msi'] = custom_installer(bdist_msi,'msi')
-if bdist_wininst is not None: cmdclass['bdist_wininst'] = custom_installer(bdist_wininst,'msi')
 
 setup(name='ntracer',
     author='Rouslan Korneychuk',
@@ -326,15 +339,14 @@ setup(name='ntracer',
                 ('NATIVE_BYTEORDER',byteorder)]),
         Extension(
             'tracern',
-            ['src/tracern.cpp','src/py_common.cpp','src/simd.cpp'],
+            ['src/tracern.cpp','src/py_common.cpp'],
             depends=['src/simd.hpp.in','src/ntracer_body.hpp',
                 'src/py_common.hpp','src/pyobject.hpp','src/geometry.hpp',
                 'src/var_geometry.hpp','src/tracer.hpp','src/light.hpp',
                 'src/render.hpp','src/camera.hpp','src/compatibility.hpp',
-                'src/v_array.hpp','src/instrumentation.hpp',
-                'src/index_list.hpp'])],
-#    extras_require={'PygameRenderer': ['pygame']},
-    description='A fast hyper-spacial ray-tracing library',
+                'src/v_array.hpp','src/instrumentation.hpp'])],
+    extras_require={'PygameRenderer': ['pygame']},
+    description='A hyper-spacial ray-tracing library',
     long_description=long_description,
     license='MIT',
     classifiers=[
@@ -343,14 +355,10 @@ setup(name='ntracer',
         'Operating System :: OS Independent',
         'Programming Language :: C++',
         'Programming Language :: Python',
-        'Programming Language :: Python :: 2',
-        'Programming Language :: Python :: 2.7',
         'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.0',
-        'Programming Language :: Python :: 3.1',
-        'Programming Language :: Python :: 3.2',
-        'Programming Language :: Python :: 3.3',
-        'Programming Language :: Python :: 3.4',
+        'Programming Language :: Python :: 3.8',
         'Topic :: Multimedia :: Graphics :: 3D Rendering',
         'Topic :: Scientific/Engineering :: Mathematics'],
-    cmdclass=cmdclass)
+    zip_safe=True,
+    entry_points={},
+    cmdclass={'build' : CustomBuild,'build_ext' : CustomBuildExt})

@@ -67,8 +67,6 @@ namespace var {
     };
 
     template<typename T,bool=std::is_arithmetic_v<T> || simd::is_v_type<T>> struct item_array_repr {
-        /* all possible types are represented in this union to allow type
-        punning */
         union {
             T *raw;
             simd::scalar<T> *s;

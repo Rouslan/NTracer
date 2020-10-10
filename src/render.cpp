@@ -53,7 +53,7 @@ py::bytes encode_float_ieee754(int length,const float *data);
 
 struct tracerx_cache_item {
     const tracerx_constructors *ctrs;
-    
+
     /* This is a non-owning reference. The module will call invalidate_reference
        upon destruction to remove this. */
     PyObject *mod;
@@ -69,17 +69,9 @@ struct instance_data_t {
     PyObject *solid_unpickle;
 };
 
-#if PY_MAJOR_VERSION >= 3
 inline instance_data_t &get_instance_data(PyObject *mod) {
     return *reinterpret_cast<instance_data_t*>(PyModule_GetState(mod));
 }
-#else
-instance_data_t instance_data;
-
-inline instance_data_t &get_instance_data(PyObject*) {
-    return instance_data;
-}
-#endif
 
 instance_data_t &get_instance_data();
 
@@ -101,12 +93,12 @@ struct channel {
 SIMPLE_WRAPPER(channel);
 
 PyMemberDef obj_Channel_members[] = {
-    {const_cast<char*>("f_r"),T_FLOAT,offsetof(wrapped_type<channel>,base.f_r),READONLY,NULL},
-    {const_cast<char*>("f_g"),T_FLOAT,offsetof(wrapped_type<channel>,base.f_g),READONLY,NULL},
-    {const_cast<char*>("f_b"),T_FLOAT,offsetof(wrapped_type<channel>,base.f_b),READONLY,NULL},
-    {const_cast<char*>("f_c"),T_FLOAT,offsetof(wrapped_type<channel>,base.f_c),READONLY,NULL},
-    {const_cast<char*>("bit_size"),T_UBYTE,offsetof(wrapped_type<channel>,base.bit_size),READONLY,NULL},
-    {const_cast<char*>("tfloat"),T_BOOL,offsetof(wrapped_type<channel>,base.tfloat),READONLY,NULL},
+    {"f_r",T_FLOAT,offsetof(wrapped_type<channel>,base.f_r),READONLY,NULL},
+    {"f_g",T_FLOAT,offsetof(wrapped_type<channel>,base.f_g),READONLY,NULL},
+    {"f_b",T_FLOAT,offsetof(wrapped_type<channel>,base.f_b),READONLY,NULL},
+    {"f_c",T_FLOAT,offsetof(wrapped_type<channel>,base.f_c),READONLY,NULL},
+    {"bit_size",T_UBYTE,offsetof(wrapped_type<channel>,base.bit_size),READONLY,NULL},
+    {"tfloat",T_BOOL,offsetof(wrapped_type<channel>,base.tfloat),READONLY,NULL},
     {NULL}
 };
 
@@ -115,14 +107,14 @@ PyTypeObject channel_obj_base::_pytype = {
     .tp_name = FULL_MODULE_STR ".Channel",
     .tp_basicsize = sizeof(wrapped_type<channel>),
     .tp_dealloc = destructor_dealloc<wrapped_type<channel> >::value,
-    .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE|Py_TPFLAGS_CHECKTYPES,
+    .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE,
     .tp_members = obj_Channel_members,
     .tp_new = [](PyTypeObject *type,PyObject *args,PyObject *kwds) -> PyObject* {
         try {
             auto ptr = py::check_obj(type->tp_alloc(type,0));
             try {
                 auto &val = reinterpret_cast<wrapped_type<channel>*>(ptr)->alloc_base();
-                
+
                 const char *names[] = {"bit_size","f_r","f_g","f_b","f_c","tfloat"};
                 get_arg ga(args,kwds,names,"Channel.__new__");
                 int bit_size = from_pyobject<int>(ga(true));
@@ -131,10 +123,10 @@ PyTypeObject channel_obj_base::_pytype = {
                 val.f_b = from_pyobject<float>(ga(true));
                 val.f_c = 0;
                 val.tfloat = 0;
-            
+
                 auto tmp = ga(false);
                 if(tmp) val.f_c = from_pyobject<float>(tmp);
-            
+
                 tmp = ga(false);
                 if(tmp) val.tfloat = char(from_pyobject<bool>(tmp));
 
@@ -151,13 +143,13 @@ PyTypeObject channel_obj_base::_pytype = {
                     } else if(bit_size < 1) THROW_PYERR_STRING(ValueError,"\"bit_size\" cannot be less than 1");
                 }
                 val.bit_size = bit_size;
-            
+
                 ga.finished();
             } catch(...) {
                 Py_DECREF(ptr);
                 throw;
             }
-            
+
             return ptr;
         } PY_EXCEPT_HANDLERS(nullptr)
     }};
@@ -177,7 +169,7 @@ struct obj_ChannelList {
     PY_MEM_NEW_DELETE
     PyObject_HEAD
     py::pyptr<wrapped_type<image_format> > parent;
-    
+
     obj_ChannelList(wrapped_type<image_format> *parent) : parent(py::borrowed_ref(reinterpret_cast<PyObject*>(parent))) {
         PyObject_Init(reinterpret_cast<PyObject*>(this),pytype());
     }
@@ -191,7 +183,7 @@ void im_check_buffer_size(const image_format &im,const Py_buffer &buff) {
 void im_set_channels(image_format &im,PyObject *arg) {
     auto channels_obj = py::iter(arg);
     std::vector<channel> channels;
-    
+
     long bits = 0;
     while(auto item = py::next(channels_obj)) {
         auto &c = get_base<channel>(item.ref());
@@ -202,7 +194,7 @@ void im_set_channels(image_format &im,PyObject *arg) {
         PyErr_Format(PyExc_ValueError,"Too many bytes per pixel. The maximum is %d.",MAX_PIXELSIZE);
         throw py_error_set();
     }
-    
+
     im.channels = std::move(channels);
     im.bytes_per_pixel = (bits + 7) / 8;
 }
@@ -210,7 +202,7 @@ void im_set_channels(image_format &im,PyObject *arg) {
 PyObject *obj_ImageFormat_set_channels(wrapped_type<image_format> *self,PyObject *arg) {
     try{
         im_set_channels(self->get_base(),arg);
-        
+
         Py_RETURN_NONE;
     } PY_EXCEPT_HANDLERS(nullptr)
 }
@@ -221,18 +213,18 @@ PyMethodDef obj_ImageFormat_methods[] = {
 };
 
 PyGetSetDef obj_ImageFormat_getset[] = {
-    {const_cast<char*>("channels"),OBJ_GETTER(
+    {"channels",OBJ_GETTER(
         wrapped_type<image_format>,
         reinterpret_cast<PyObject*>(new obj_ChannelList(self))),NULL,NULL,NULL},
     {NULL}
 };
 
 PyMemberDef obj_ImageFormat_members[] = {
-    {const_cast<char*>("width"),member_macro<size_t>::value,offsetof(wrapped_type<image_format>,base.width),0,NULL},
-    {const_cast<char*>("height"),member_macro<size_t>::value,offsetof(wrapped_type<image_format>,base.height),0,NULL},
-    {const_cast<char*>("pitch"),member_macro<size_t>::value,offsetof(wrapped_type<image_format>,base.pitch),0,NULL},
-    {const_cast<char*>("reversed"),T_BOOL,offsetof(wrapped_type<image_format>,base.reversed),0,NULL},
-    {const_cast<char*>("bytes_per_pixel"),T_UBYTE,offsetof(wrapped_type<image_format>,base.bytes_per_pixel),READONLY,NULL},
+    {"width",member_macro<size_t>::value,offsetof(wrapped_type<image_format>,base.width),0,NULL},
+    {"height",member_macro<size_t>::value,offsetof(wrapped_type<image_format>,base.height),0,NULL},
+    {"pitch",member_macro<size_t>::value,offsetof(wrapped_type<image_format>,base.pitch),0,NULL},
+    {"reversed",T_BOOL,offsetof(wrapped_type<image_format>,base.reversed),0,NULL},
+    {"bytes_per_pixel",T_UBYTE,offsetof(wrapped_type<image_format>,base.bytes_per_pixel),READONLY,NULL},
     {NULL}
 };
 
@@ -241,7 +233,7 @@ PyTypeObject image_format_obj_base::_pytype = {
     .tp_name = FULL_MODULE_STR ".ImageFormat",
     .tp_basicsize = sizeof(wrapped_type<image_format>),
     .tp_dealloc = destructor_dealloc<wrapped_type<image_format> >::value,
-    .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE|Py_TPFLAGS_CHECKTYPES,
+    .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE,
     .tp_methods = obj_ImageFormat_methods,
     .tp_members = obj_ImageFormat_members,
     .tp_getset = obj_ImageFormat_getset,
@@ -251,7 +243,7 @@ PyTypeObject image_format_obj_base::_pytype = {
             try {
                 auto &val = reinterpret_cast<wrapped_type<image_format>*>(ptr)->alloc_base();
                 new(&val) image_format();
-            
+
                 const char *names[] = {"width","height","channels","pitch","reversed"};
                 get_arg ga(args,kwds,names,"ImageFormat.__new__");
                 val.width = from_pyobject<size_t>(ga(true));
@@ -259,17 +251,17 @@ PyTypeObject image_format_obj_base::_pytype = {
                 auto channels = ga(true);
                 val.pitch = 0;
                 val.reversed = 0;
-            
+
                 auto tmp = ga(false);
                 if(tmp) val.pitch = from_pyobject<size_t>(tmp);
-            
+
                 tmp = ga(false);
                 if(tmp) val.reversed = from_pyobject<bool>(tmp) ? 1 : 0;
-            
+
                 ga.finished();
-            
+
                 im_set_channels(val,channels);
-            
+
                 if(val.pitch) {
                     if(val.pitch < val.width * val.bytes_per_pixel) THROW_PYERR_STRING(ValueError,"\"pitch\" must be at least \"width\" times the size of one pixel in bytes");
                 } else val.pitch = val.width * val.bytes_per_pixel;
@@ -277,7 +269,7 @@ PyTypeObject image_format_obj_base::_pytype = {
                 Py_DECREF(ptr);
                 throw;
             }
-            
+
             return ptr;
         } PY_EXCEPT_HANDLERS(nullptr)
     }};
@@ -307,9 +299,9 @@ PyTypeObject obj_ChannelList::_pytype = {
     PyVarObject_HEAD_INIT(nullptr,0)
     .tp_name = FULL_MODULE_STR ".ChannelList",
     .tp_basicsize = sizeof(obj_ChannelList),
-    .tp_dealloc = destructor_dealloc<obj_ChannelList>::value,    
+    .tp_dealloc = destructor_dealloc<obj_ChannelList>::value,
     .tp_as_sequence = &obj_ChannelList_sequence_methods,
-    .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_CHECKTYPES,
+    .tp_flags = Py_TPFLAGS_DEFAULT,
     .tp_new = [](PyTypeObject*,PyObject*,PyObject*) -> PyObject* {
         PyErr_SetString(PyExc_TypeError,"the ChannelList type cannot be instantiated directly");
         return nullptr;
@@ -343,42 +335,30 @@ struct callback_renderer : renderer {
     ~callback_renderer();
 };
 
-
-struct obj_Scene {
-    CONTAINED_PYTYPE_DEF
-    PyObject_HEAD
-    
-    scene &(obj_Scene::*_get_base)();
-
-    scene &get_base() {
-        return (this->*_get_base)();
-    }
-};
-
 template<> struct _wrapped_type<scene> {
     typedef obj_Scene type;
 };
 
 struct callback_renderer_obj_base {
     typedef callback_renderer type;
-    
+
     CONTAINED_PYTYPE_DEF
 };
 
 template<typename Base> struct obj_Renderer : Base {
     PyObject_HEAD
     storage_mode mode;
-    
+
     typename Base::type base;
-    
+
     PyObject *idict;
     PyObject *weaklist;
-    
+
     ~obj_Renderer() {
         Py_XDECREF(idict);
         if(weaklist) PyObject_ClearWeakRefs(reinterpret_cast<PyObject*>(this));
     }
-    
+
     typename Base::type &cast_base() {
         return base;
     }
@@ -411,10 +391,10 @@ void worker_draw(renderer &r) {
         if(start_y > chunks_y) break;
         start_x *= RENDER_CHUNK_SIZE;
         start_y *= RENDER_CHUNK_SIZE;
-        
+
         for(size_t y = start_y; y < std::min(start_y+RENDER_CHUNK_SIZE,r.format.height); ++y) {
             byte *pixels = reinterpret_cast<byte*>(r.buffer.buf) + y * r.format.pitch + start_x * r.format.bytes_per_pixel;
-            
+
             for(size_t x = start_x; x < std::min(start_x+RENDER_CHUNK_SIZE,r.format.width); ++x) {
                 if(UNLIKELY(r.state != renderer::NORMAL)) return;
 
@@ -426,17 +406,17 @@ void worker_draw(renderer &r) {
                         float f;
                         uint32_t i;
                     } val;
-                    
+
                     val.f = ch.f_r*c.r() + ch.f_g*c.g() + ch.f_b*c.b() + ch.f_c;
                     if(val.f > 1) val.f = 1;
                     else if(val.f < 0) val.f = 0;
-                    
+
                     unsigned long ival;
-                    
+
                     if(ch.tfloat) {
                         assert(ch.bit_size == 32);
                         static_assert(sizeof(float) == 4,"A float is assumed to be 32 bits");
-                        
+
                         ival = val.i;
                     } else {
                         assert(ch.bit_size < 32);
@@ -447,10 +427,10 @@ void worker_draw(renderer &r) {
                     int rm = b_offset % (sizeof(long)*8);
                     int s = sizeof(long)*8 - rm - ch.bit_size;
                     temp[o] |= s >= 0 ? ival << s : ival >> -s;
-                    
+
                     if(rm + ch.bit_size > int(sizeof(long)*8))
                         temp[o+1] = ival << (sizeof(long)*16 - rm - ch.bit_size);
-                    
+
                     b_offset += ch.bit_size;
                 }
 
@@ -468,10 +448,10 @@ void worker_draw(renderer &r) {
 
 void callback_worker(obj_CallbackRenderer *self) {
     callback_renderer &r = self->base;
-    
+
     if(!r.busy_threads) {
         std::unique_lock<std::mutex> lock(r.mut);
-        
+
         do {
             if(UNLIKELY(r.state == renderer::QUIT)) return;
 
@@ -485,23 +465,23 @@ void callback_worker(obj_CallbackRenderer *self) {
 
         {
             std::unique_lock<std::mutex> lock(r.mut);
-            
+
             /* This needs to be set before calling the callback, in case the
                callback calls start_render. */
             unsigned int finished = r.job;
 
             if(--r.busy_threads == 0) {
                 // when all the workers are finished
-                
+
                 r.sc->unlock();
-                
+
                 PyGILState_STATE gilstate = PyGILState_Ensure();
-                
+
                 PyBuffer_Release(&r.buffer);
-                
+
                 if(LIKELY(r.state == renderer::NORMAL)) {
                     // notify the main thread
-                    
+
                     // in case the callback calls start_render/abort_render
                     lock.unlock();
                     try {
@@ -513,18 +493,18 @@ void callback_worker(obj_CallbackRenderer *self) {
                     }
                     lock.lock();
                 } else if(r.state == renderer::CANCEL) {
-                    /* If the job is being canceled, abort_render is waiting on 
-                       this condition. The side-effect of waking the other 
+                    /* If the job is being canceled, abort_render is waiting on
+                       this condition. The side-effect of waking the other
                        workers is harmless. */
                     r.barrier.notify_all();
                 }
 
                 Py_DECREF(r.callback);
                 Py_DECREF(self);
-                
+
                 PyGILState_Release(gilstate);
             }
-            
+
             while(finished == r.job) {
                 if(UNLIKELY(r.state == renderer::QUIT)) return;
 
@@ -551,7 +531,7 @@ callback_renderer::~callback_renderer() {
         state = QUIT;
         barrier.notify_all();
     }
-    
+
     for(auto &w : workers) w.join();
 }
 
@@ -559,26 +539,26 @@ callback_renderer::~callback_renderer() {
 PyObject *obj_Scene_calculate_color(obj_Scene *self,PyObject *args,PyObject *kwds) {
     try {
         auto &sc = self->get_base();
-        
+
         auto vals = get_arg::get_args("Scene.calculate_color",args,kwds,
             param<int>("x"),
             param<int>("y"),
             param<int>("width"),
             param<int>("height"));
-        
+
         color r;
-        
+
         struct s_lock {
             scene &sc;
             s_lock(scene &sc) : sc(sc) { sc.lock(); }
             ~s_lock() { sc.unlock(); }
         } _(sc);
-        
+
         {
             py::allow_threads __;
             r = sc.calculate_color(std::get<0>(vals),std::get<1>(vals),std::get<2>(vals),std::get<3>(vals));
         }
-        
+
         return to_pyobject(r);
     } PY_EXCEPT_HANDLERS(nullptr)
 }
@@ -592,7 +572,7 @@ PyTypeObject obj_Scene::_pytype = {
     PyVarObject_HEAD_INIT(nullptr,0)
     .tp_name = FULL_MODULE_STR ".Scene",
     .tp_basicsize = sizeof(obj_Scene),
-    .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE|Py_TPFLAGS_CHECKTYPES,
+    .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE,
     .tp_methods = obj_Scene_methods,
     .tp_new = [](PyTypeObject *type,PyObject *args,PyObject *kwds) -> PyObject* {
         PyErr_SetString(PyExc_TypeError,"the Scene type cannot be instantiated directly");
@@ -603,7 +583,7 @@ PyTypeObject obj_Scene::_pytype = {
 template<typename T> void obj_Renderer_dealloc(wrapped_type<T> *self) {
     switch(self->mode) {
     case CONTAINS:
-        self->~wrapped_type<T>();
+        std::destroy_at(self);
         break;
 
     default:
@@ -615,30 +595,13 @@ template<typename T> void obj_Renderer_dealloc(wrapped_type<T> *self) {
 }
 
 void get_writable_buffer(PyObject *obj,Py_buffer &buff) {
-    if(PyObject_GetBuffer(obj,&buff,PyBUF_WRITABLE))
-#if PY_MAJOR_VERSION >= 3
-        throw py_error_set();
-#else
-    {
-        if(!PyErr_ExceptionMatches(PyExc_TypeError)) throw py_error_set();
-        
-        // try the old buffer protocol
-        
-        PyErr_Clear();
-        
-        void *bufptr;
-        Py_ssize_t bufsize;
-        
-        if(PyObject_AsWriteBuffer(obj,&bufptr,&bufsize)) throw py_error_set();
-        if(PyBuffer_FillInfo(&buff,obj,bufptr,bufsize,0,0)) throw py_error_set();
-    }
-#endif
+    if(PyObject_GetBuffer(obj,&buff,PyBUF_WRITABLE)) throw py_error_set();
 }
 
 PyObject *obj_CallbackRenderer_begin_render(obj_CallbackRenderer *self,PyObject *args,PyObject *kwds) {
     try {
         callback_renderer &r = self->get_base();
-        
+
         const char *names[] = {"dest","format","scene","callback"};
         get_arg ga(args,kwds,names,"CallbackRenderer.begin_render");
         auto dest = ga(true);
@@ -646,21 +609,21 @@ PyObject *obj_CallbackRenderer_begin_render(obj_CallbackRenderer *self,PyObject 
         auto &sc = get_base<scene>(ga(true));
         auto callback = ga(true);
         ga.finished();
-        
+
         Py_buffer view;
         get_writable_buffer(dest,view);
-        
+
         Py_INCREF(self);
         Py_INCREF(callback);
-        
+
         try {
             im_check_buffer_size(format,view);
-            
+
             py::allow_threads _; // without this, a dead-lock can occur
             std::lock_guard<std::mutex> lock(r.mut);
-            
+
             if(r.busy_threads) throw already_running_error();
-            
+
             assert(r.state == renderer::NORMAL);
 
             r.format = format;
@@ -686,11 +649,11 @@ PyObject *obj_CallbackRenderer_begin_render(obj_CallbackRenderer *self,PyObject 
 PyObject *obj_CallbackRenderer_abort_render(obj_CallbackRenderer *self,PyObject*) {
     try {
         callback_renderer &r = self->get_base();
-        
+
         {
             py::allow_threads _; // without this, a dead-lock can occur
             std::unique_lock<std::mutex> lock(r.mut);
-            
+
             if(r.busy_threads) {
                 r.state = renderer::CANCEL;
                 r.barrier.notify_all();
@@ -700,7 +663,7 @@ PyObject *obj_CallbackRenderer_abort_render(obj_CallbackRenderer *self,PyObject*
                 r.state = renderer::NORMAL;
             }
         }
-        
+
         Py_RETURN_NONE;
     } PY_EXCEPT_HANDLERS(nullptr)
 }
@@ -721,7 +684,7 @@ int obj_CallbackRenderer_init(obj_CallbackRenderer *self,PyObject *args,PyObject
         self->mode = CONTAINS;
         break;
     }
-    
+
     try {
         const char *names[] = {"threads"};
         get_arg ga(args,kwds,names,"CallbackRenderer.__init__");
@@ -730,7 +693,7 @@ int obj_CallbackRenderer_init(obj_CallbackRenderer *self,PyObject *args,PyObject
         ga.finished();
         new(&self->base) callback_renderer(self,threads);
     } PY_EXCEPT_HANDLERS(-1)
-    
+
     return 0;
 }
 
@@ -739,7 +702,7 @@ PyTypeObject callback_renderer_obj_base::_pytype = {
     .tp_name = FULL_MODULE_STR ".CallbackRenderer",
     .tp_basicsize = sizeof(obj_CallbackRenderer),
     .tp_dealloc = reinterpret_cast<destructor>(&obj_Renderer_dealloc<callback_renderer>),
-    .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE|Py_TPFLAGS_CHECKTYPES|Py_TPFLAGS_HAVE_GC,
+    .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE|Py_TPFLAGS_HAVE_GC,
     .tp_traverse = &traverse_idict<obj_CallbackRenderer>,
     .tp_clear = &clear_idict<obj_CallbackRenderer>,
     .tp_weaklistoffset = offsetof(obj_CallbackRenderer,weaklist),
@@ -757,7 +720,7 @@ struct blocking_renderer : renderer {
 
 struct blocking_renderer_obj_base {
     typedef blocking_renderer type;
-    
+
     CONTAINED_PYTYPE_DEF
 };
 
@@ -775,7 +738,7 @@ bool wait_for_job(blocking_renderer &r,std::unique_lock<std::mutex> &lock) {
 
         r.start_cond.wait(lock);
     } while(finished == r.job);
-    
+
     return true;
 }
 
@@ -801,7 +764,7 @@ void blocking_worker(blocking_renderer &r) {
                     PyGILState_Release(gilstate);
                 }
             }
-            
+
             if(!wait_for_job(r,lock)) return;
         }
     }
@@ -826,7 +789,7 @@ blocking_renderer::~blocking_renderer() {
             state = QUIT;
             start_cond.notify_all();
         }
-        
+
         for(auto &w : workers) w.join();
     }
 }
@@ -834,7 +797,7 @@ blocking_renderer::~blocking_renderer() {
 PyObject *obj_BlockingRenderer_render(obj_BlockingRenderer *self,PyObject *args,PyObject *kwds) {
     try {
         auto &r = self->get_base();
-        
+
         const char *names[] = {"dest","format","scene"};
         get_arg ga(args,kwds,names,"BlockingRenderer.render");
         auto dest = ga(true);
@@ -847,19 +810,19 @@ PyObject *obj_BlockingRenderer_render(obj_BlockingRenderer *self,PyObject *args,
             buffer(PyObject *dest) { get_writable_buffer(dest,data); }
             ~buffer() { PyBuffer_Release(&data); }
         } buff(dest);
-        
+
         im_check_buffer_size(fmt,buff.data);
-        
+
         bool finished;
 
         {
             py::allow_threads _;
-            
+
             {
                 std::lock_guard<std::mutex> lock(r.mut);
-                
+
                 if(r.busy_threads) throw already_running_error();
-                
+
                 r.format = fmt;
                 r.buffer = buff.data;
                 r.state = renderer::NORMAL;
@@ -870,12 +833,12 @@ PyObject *obj_BlockingRenderer_render(obj_BlockingRenderer *self,PyObject *args,
                 r.start_cond.notify_all();
                 ++r.job;
             }
-        
+
             worker_draw(r);
-            
+
             {
                 std::unique_lock<std::mutex> lock(r.mut);
-                
+
                 while(r.busy_threads) r.finish_cond.wait(lock);
                 finished = r.state == renderer::NORMAL;
                 sc.unlock();
@@ -889,13 +852,13 @@ PyObject *obj_BlockingRenderer_render(obj_BlockingRenderer *self,PyObject *args,
 PyObject *obj_BlockingRenderer_signal_abort(obj_BlockingRenderer *self,PyObject*) {
     try {
         auto &r = self->get_base();
-        
+
         {
             py::allow_threads _;
             std::lock_guard<std::mutex> lock(r.mut);
             r.state = renderer::CANCEL;
         }
-        
+
         Py_RETURN_NONE;
     } PY_EXCEPT_HANDLERS(nullptr)
 }
@@ -916,7 +879,7 @@ int obj_BlockingRenderer_init(obj_BlockingRenderer *self,PyObject *args,PyObject
         self->mode = CONTAINS;
         break;
     }
-    
+
     try {
         const char *names[] = {"threads"};
         get_arg ga(args,kwds,names,"BlockingRenderer.__init__");
@@ -925,7 +888,7 @@ int obj_BlockingRenderer_init(obj_BlockingRenderer *self,PyObject *args,PyObject
         ga.finished();
         new(&self->base) blocking_renderer(threads);
     } PY_EXCEPT_HANDLERS(-1)
-    
+
     return 0;
 }
 
@@ -934,7 +897,7 @@ PyTypeObject blocking_renderer_obj_base::_pytype = {
     .tp_name = FULL_MODULE_STR ".BlockingRenderer",
     .tp_basicsize = sizeof(obj_BlockingRenderer),
     .tp_dealloc = reinterpret_cast<destructor>(&obj_Renderer_dealloc<blocking_renderer>),
-    .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE|Py_TPFLAGS_CHECKTYPES|Py_TPFLAGS_HAVE_GC,
+    .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE|Py_TPFLAGS_HAVE_GC,
     .tp_traverse = &traverse_idict<obj_BlockingRenderer>,
     .tp_clear = &clear_idict<obj_BlockingRenderer>,
     .tp_weaklistoffset = offsetof(obj_BlockingRenderer,weaklist),
@@ -949,25 +912,25 @@ PyObject *obj_Color_repr(wrapped_type<color> *self) {
     char *cr;
     char *cg = nullptr;
     char *cb = nullptr;
-    
+
     if((cr = PyOS_double_to_string(base.r(),'r',0,0,nullptr))) {
         if((cg = PyOS_double_to_string(base.g(),'r',0,0,nullptr))) {
             if((cb = PyOS_double_to_string(base.b(),'r',0,0,nullptr))) {
-                r = PYSTR(FromFormat)("Color(%s,%s,%s)",cr,cg,cb);
+                r = PyUnicode_FromFormat("Color(%s,%s,%s)",cr,cg,cb);
             }
         }
     }
-    
+
     PyMem_Free(cr);
     PyMem_Free(cg);
     PyMem_Free(cb);
-    
+
     return r;
 }
 
 PyObject *obj_Color_richcompare(wrapped_type<color> *self,PyObject *arg,int op) {
     color *cb = get_base_if_is_type<color>(arg);
-    
+
     if((op == Py_EQ || op == Py_NE) && cb) {
         return to_pyobject((self->get_base() == *cb) == (op == Py_EQ));
     }
@@ -984,29 +947,29 @@ PyObject *obj_Color___neg__(wrapped_type<color> *self) {
 
 PyObject *obj_Color___add__(PyObject *a,PyObject *b) {
     color *ca, *cb;
-    
+
     if((ca = get_base_if_is_type<color>(a)) && (cb = get_base_if_is_type<color>(b))) {
         return to_pyobject(*ca + *cb);
     }
-    
+
     Py_INCREF(Py_NotImplemented);
     return Py_NotImplemented;
 }
 
 PyObject *obj_Color___sub__(PyObject *a,PyObject *b) {
     color *ca, *cb;
-    
+
     if((ca = get_base_if_is_type<color>(a)) && (cb = get_base_if_is_type<color>(b))) {
         return to_pyobject(*ca - *cb);
     }
-        
+
     Py_INCREF(Py_NotImplemented);
     return Py_NotImplemented;
 }
 
 PyObject *obj_Color___mul__(PyObject *a,PyObject *b) {
     color *ca, *cb;
- 
+
     if((ca = get_base_if_is_type<color>(a))) {
         if((cb = get_base_if_is_type<color>(b))) return to_pyobject(*ca * *cb);
         if(PyNumber_Check(b)) return to_pyobject(*ca * from_pyobject<float>(b));
@@ -1021,7 +984,7 @@ PyObject *obj_Color___mul__(PyObject *a,PyObject *b) {
 
 PyObject *obj_Color___div__(PyObject *a,PyObject *b) {
     color *ca, *cb;
- 
+
     if((ca = get_base_if_is_type<color>(a))) {
         if((cb = get_base_if_is_type<color>(b))) return to_pyobject(*ca / *cb);
         if(PyNumber_Check(b)) return to_pyobject(*ca / from_pyobject<float>(b));
@@ -1035,9 +998,6 @@ PyNumberMethods obj_Color_number_methods = {
     .nb_add = &obj_Color___add__,
     .nb_subtract = &obj_Color___sub__,
     .nb_multiply = &obj_Color___mul__,
-#if PY_MAJOR_VERSION < 3
-    .nb_divide = &obj_Color___div__,
-#endif
     .nb_negative = reinterpret_cast<unaryfunc>(&obj_Color___neg__),
     .nb_true_divide = &obj_Color___div__
 };
@@ -1103,15 +1063,15 @@ PyObject *obj_Color_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
             std::get<0>(vals),
             std::get<1>(vals),
             std::get<2>(vals));
-        
+
         return ptr;
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
 PyMemberDef obj_Color_members[] = {
-    {const_cast<char*>("r"),T_FLOAT,offsetof(wrapped_type<color>,base.vals[0]),READONLY,NULL},
-    {const_cast<char*>("g"),T_FLOAT,offsetof(wrapped_type<color>,base.vals[1]),READONLY,NULL},
-    {const_cast<char*>("b"),T_FLOAT,offsetof(wrapped_type<color>,base.vals[2]),READONLY,NULL},
+    {"r",T_FLOAT,offsetof(wrapped_type<color>,base.vals[0]),READONLY,NULL},
+    {"g",T_FLOAT,offsetof(wrapped_type<color>,base.vals[1]),READONLY,NULL},
+    {"b",T_FLOAT,offsetof(wrapped_type<color>,base.vals[2]),READONLY,NULL},
     {NULL}
 };
 
@@ -1123,7 +1083,7 @@ PyTypeObject color_obj_base::_pytype = {
     .tp_repr = reinterpret_cast<reprfunc>(&obj_Color_repr),
     .tp_as_number = &obj_Color_number_methods,
     .tp_as_sequence = &obj_Color_sequence_methods,
-    .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE|Py_TPFLAGS_CHECKTYPES,
+    .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE,
     .tp_richcompare = reinterpret_cast<richcmpfunc>(&obj_Color_richcompare),
     .tp_methods = obj_Color_methods,
     .tp_members = obj_Color_members,
@@ -1143,7 +1103,7 @@ std::unique_ptr<char,py_mem_deleter> f_to_s(float x) {
 
 PyObject *obj_Material_repr(material *self) {
     try {
-        return PYSTR(FromFormat)("Material((%s,%s,%s),%s,%s,%s,%s,(%s,%s,%s))",
+        return PyUnicode_FromFormat("Material((%s,%s,%s),%s,%s,%s,%s,(%s,%s,%s))",
             f_to_s(self->c.r()).get(),
             f_to_s(self->c.g()).get(),
             f_to_s(self->c.b()).get(),
@@ -1181,7 +1141,7 @@ PyObject *obj_Material_reduce(material *self,PyObject*) {
         encode_float_ieee754(data.data()+7*sizeof(float),1,&self->reflectivity);
         encode_float_ieee754(data.data()+8*sizeof(float),1,&self->specular_intensity);
         encode_float_ieee754(data.data()+9*sizeof(float),1,&self->specular_exp);
-        
+
         return py::make_tuple(get_instance_data().material_unpickle,py::make_tuple(data)).new_ref();
     } PY_EXCEPT_HANDLERS(nullptr)
 }
@@ -1194,14 +1154,14 @@ PyObject *obj_Material_copy(material *self,PyObject*) {
         PyErr_NoMemory();
         return nullptr;
     }
-    
+
     r->c = self->c;
     r->specular = self->specular;
     r->opacity = self->opacity;
     r->reflectivity = self->reflectivity;
     r->specular_intensity = self->specular_intensity;
     r->specular_exp = self->specular_exp;
-    
+
     return reinterpret_cast<PyObject*>(r);
 }
 
@@ -1231,34 +1191,34 @@ PyObject *obj_Material_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
         if(temp) se = from_pyobject<float>(temp);
         auto obj_s = ga(false);
         ga.finished();
-        
+
         auto ptr = py::check_obj(type->tp_alloc(type,0));
         auto base = reinterpret_cast<material*>(ptr);
-        
+
         read_color(base->c,obj_c,"color");
         if(obj_s) read_color(base->specular,obj_s,"specular_color");
         else base->specular = color(1,1,1);
-        
+
         base->opacity = o;
         base->reflectivity = r;
         base->specular_intensity = si;
         base->specular_exp = se;
-        
+
         return ptr;
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
 PyGetSetDef obj_Material_getset[] = {
-    {const_cast<char*>("color"),OBJ_GETTER(material,self->c),OBJ_BASE_SETTER(material,self->c),NULL,NULL},
-    {const_cast<char*>("specular"),OBJ_GETTER(material,self->specular),OBJ_BASE_SETTER(material,self->specular),NULL,NULL},
+    {"color",OBJ_GETTER(material,self->c),OBJ_BASE_SETTER(material,self->c),NULL,NULL},
+    {"specular",OBJ_GETTER(material,self->specular),OBJ_BASE_SETTER(material,self->specular),NULL,NULL},
     {NULL}
 };
 
 PyMemberDef obj_Material_members[] = {
-    {const_cast<char*>("opacity"),T_FLOAT,offsetof(material,opacity),0,NULL},
-    {const_cast<char*>("reflectivity"),T_FLOAT,offsetof(material,reflectivity),0,NULL},
-    {const_cast<char*>("specular_intensity"),T_FLOAT,offsetof(material,reflectivity),0,NULL},
-    {const_cast<char*>("specular_exp"),T_FLOAT,offsetof(material,reflectivity),0,NULL},
+    {"opacity",T_FLOAT,offsetof(material,opacity),0,NULL},
+    {"reflectivity",T_FLOAT,offsetof(material,reflectivity),0,NULL},
+    {"specular_intensity",T_FLOAT,offsetof(material,reflectivity),0,NULL},
+    {"specular_exp",T_FLOAT,offsetof(material,reflectivity),0,NULL},
     {NULL}
 };
 
@@ -1268,7 +1228,7 @@ PyTypeObject material::_pytype = {
     .tp_basicsize = sizeof(material),
     .tp_dealloc = destructor_dealloc<material>::value,
     .tp_repr = reinterpret_cast<reprfunc>(&obj_Material_repr),
-    .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE|Py_TPFLAGS_CHECKTYPES,
+    .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE,
     .tp_methods = obj_Material_methods,
     .tp_members = obj_Material_members,
     .tp_getset = obj_Material_getset,
@@ -1283,39 +1243,39 @@ struct held_cache_item {
 
 held_cache_item get_tracerx_cache_item(PyObject *mod,int dim) {
     auto &cache = get_instance_data(mod).tracerx_cache;
-    
+
     held_cache_item item;
-    
+
     auto itr = cache.find(dim);
     if(itr != cache.end()) {
         item.mod = py::borrowed_ref(std::get<1>(*itr).mod);
         item.ctrs = std::get<1>(*itr).ctrs;
         return item;
     }
-    
+
     constexpr int blen = sizeof(GET_TRACERN_PREFIX) + std::numeric_limits<int>::digits10 + 1;
     char buffer[blen];
     const char *mod_name = buffer;
-    
+
 #ifndef NDEBUG
     int printed =
 #endif
     PyOS_snprintf(buffer,blen,GET_TRACERN_PREFIX "%d",dim);
     assert(printed > 0 && printed < blen);
-    
+
     try {
         item.mod = py::import_module(buffer);
     } catch(py_error_set&) {
         if(!PyErr_ExceptionMatches(PyExc_ImportError)) throw;
-        
+
         PyErr_Clear();
         mod_name = GET_TRACERN_PREFIX "n";
         item.mod = py::import_module(mod_name);
     }
-    
+
     item.ctrs = reinterpret_cast<const tracerx_constructors*>(PyCapsule_GetPointer(static_cast<py::object>(item.mod.attr(tracerx_capsule_name)).ref(),tracerx_capsule_name));
     if(!item.ctrs) throw py_error_set();
-    
+
     cache[dim] = {item.ctrs,item.mod.ref()};
     return item;
 }
@@ -1345,7 +1305,7 @@ void encode_float_ieee754(char *str,int length,const float *data) {
     for(int i=0; i<length; ++i) {
         uint32_t buff = 0;
         if(std::signbit(data[i])) buff = 1 << 31;
-        
+
         if(std::isinf(data[i])) buff |= 0xff << 23;
         else if(std::isnan(data[i]) THROW_PYERR_STRING(ValueError,"cannot pack value of NaN on non-IEEE platform");
         else if(data[i] != 0) {
@@ -1356,7 +1316,7 @@ void encode_float_ieee754(char *str,int length,const float *data) {
             buff |= exp << 23;
             buff |= static_cast<uint32_t>(std::ldexp(sig,24)) & 0x7fffff;
         }
-            
+
   #if NATIVE_BYTEORDER == BYTEORDER_BIG
         reinterpret_cast<uint32_t*>(str)[i] = buff;
   #else
@@ -1382,10 +1342,10 @@ void decode_float_ieee754(const char *str,int length,float *data) {
     copy_byteswap_dwords(reinterpret_cast<char*>(data),str,length);
 #else
     typedef std::numeric_limits<float> limits;
-    
+
     for(int i=0; i<length; ++i) {
         uint32_t buff;
-        
+
   #if NATIVE_BYTEORDER == BYTEORDER_BIG
         buff = reinterpret_cast<const uint32_t*>(str)[i];
   #else
@@ -1395,7 +1355,7 @@ void decode_float_ieee754(const char *str,int length,float *data) {
         buff |= bytes[i*4+2] << 8;
         buff |= bytes[i*4+3];
   #endif
-        
+
         int exp = (buff >> 23) & 0xff;
         int sig = buff & 0x7fffff;
         float val = 0;
@@ -1463,14 +1423,14 @@ PyMethodDef func_table[] = {
             try {
                 auto args = from_pyobject<py::tuple>(arg);
                 if(args.size() != 2) THROW_PYERR_STRING(TypeError,"_vector_unpickle takes exactly 2 arguments");
-                
+
                 int dim = get_dimension(args[0].ref());
                 auto str = from_pyobject<py::bytes>(args[1]);
                 if(str.size() != dim * Py_ssize_t(sizeof(float))) {
                     PyErr_SetString(PyExc_ValueError,"vector data is malformed");
                     return nullptr;
                 }
-                
+
                 auto item = get_tracerx_cache_item(mod,dim);
                 auto objdata = item.ctrs->vector(dim);
                 decode_float_ieee754(str.data(),dim,objdata.data);
@@ -1481,14 +1441,14 @@ PyMethodDef func_table[] = {
             try {
                 auto args = from_pyobject<py::tuple>(arg);
                 if(args.size() != 2) THROW_PYERR_STRING(TypeError,"_matrix_unpickle takes exactly 2 arguments");
-                
+
                 int dim = get_dimension(args[0].ref());
                 auto str = from_pyobject<py::bytes>(args[1]);
                 if(str.size() != dim * dim * Py_ssize_t(sizeof(float))) {
                     PyErr_SetString(PyExc_ValueError,"matrix data is malformed");
                     return nullptr;
                 }
-                
+
                 auto item = get_tracerx_cache_item(mod,dim);
                 auto objdata = item.ctrs->matrix(dim);
                 decode_float_ieee754(str.data(),dim*dim,objdata.data);
@@ -1499,7 +1459,7 @@ PyMethodDef func_table[] = {
             try {
                 auto args = from_pyobject<py::tuple>(arg);
                 if(args.size() != 3) THROW_PYERR_STRING(TypeError,"_triangle_unpickle takes exactly 3 arguments");
-                
+
                 int dim = get_dimension(args[0].ref());
                 auto str = from_pyobject<py::bytes>(args[1]);
                 if(str.size() != dim * (dim+1) * Py_ssize_t(sizeof(float))) {
@@ -1507,12 +1467,12 @@ PyMethodDef func_table[] = {
                     return nullptr;
                 }
                 auto mat = checked_py_cast<material>(args[2].ref());
-                
+
                 auto item = get_tracerx_cache_item(mod,dim);
                 auto objdata = item.ctrs->triangle(dim,mat);
                 for(int i=0; i<dim+1; ++i) decode_float_ieee754(str.data() + sizeof(float)*dim*i,dim,objdata.data[i]);
                 item.ctrs->triangle_extra(objdata.obj.ref());
-                
+
                 return objdata.obj.new_ref();
             } PY_EXCEPT_HANDLERS(nullptr)
         },METH_VARARGS,NULL},
@@ -1520,7 +1480,7 @@ PyMethodDef func_table[] = {
             try {
                 auto args = from_pyobject<py::tuple>(arg);
                 if(args.size() != 3) THROW_PYERR_STRING(TypeError,"_solid_unpickle takes exactly 3 arguments");
-                
+
                 int dim = get_dimension(args[0].ref());
                 auto str = from_pyobject<py::bytes>(args[1]);
                 if(str.size() != dim * (dim + 1) * Py_ssize_t(sizeof(float)) + 1) {
@@ -1532,13 +1492,13 @@ PyMethodDef func_table[] = {
                     return nullptr;
                 }
                 auto mat = checked_py_cast<material>(args[2].ref());
-                
+
                 auto item = get_tracerx_cache_item(mod,dim);
                 auto objdata = item.ctrs->solid(dim,str.data()[0],mat);
                 decode_float_ieee754(str.data() + 1,dim*dim,objdata.orientation);
                 decode_float_ieee754(str.data() + dim*dim*sizeof(float) + 1,dim,objdata.position);
                 item.ctrs->solid_extra(objdata.obj.ref());
-                
+
                 return objdata.obj.new_ref();
             } PY_EXCEPT_HANDLERS(nullptr)
         },METH_VARARGS,NULL},
@@ -1546,7 +1506,6 @@ PyMethodDef func_table[] = {
 };
 
 
-#if PY_MAJOR_VERSION >= 3
 PyModuleDef module_def = {
     PyModuleDef_HEAD_INIT,
     "render",
@@ -1564,11 +1523,6 @@ PyModuleDef module_def = {
 inline instance_data_t &get_instance_data() {
     return get_instance_data(PyState_FindModule(&module_def));
 }
-#else
-inline instance_data_t &get_instance_data() {
-    return instance_data;
-}
-#endif
 
 
 const package_common package_common_data = {
@@ -1585,29 +1539,29 @@ const package_common package_common_data = {
     },
     [](int dim,const float *const *data,material *m) -> PyObject* {
         py::bytes values{Py_ssize_t(sizeof(float))*dim*(dim+1)};
-        
+
         for(int i=0; i<dim+1; ++i) encode_float_ieee754(values.data() + sizeof(float)*dim*i,dim,data[i]);
-        
+
         return py::make_tuple(
             get_instance_data().triangle_unpickle,
             py::make_tuple(dim,values,reinterpret_cast<PyObject*>(m))).new_ref();
     },
     [](int dim,char type,const float *orientation,const float *position,material *m) -> PyObject* {
         py::bytes values{Py_ssize_t(sizeof(float))*dim*(dim+1)+1};
-        
+
         values.data()[0] = type;
         encode_float_ieee754(values.data() + 1,dim*dim,orientation);
         encode_float_ieee754(values.data() + sizeof(float)*dim*dim + 1,dim,position);
-        
+
         return py::make_tuple(
             get_instance_data().solid_unpickle,
             py::make_tuple(dim,values,reinterpret_cast<PyObject*>(m))).new_ref();
     },
     [](PyObject *mod) -> void {
         assert(mod);
-        
+
         auto &idata = get_instance_data();
-        
+
         auto itr = idata.tracerx_cache.begin();
         while(itr != idata.tracerx_cache.end()) {
             if(std::get<1>(*itr).mod == mod) itr = idata.tracerx_cache.erase(itr);
@@ -1626,52 +1580,36 @@ PyTypeObject *classes[] = {
     material::pytype()};
 
 
-#if PY_MAJOR_VERSION >= 3
-#define INIT_ERR_VAL nullptr
-
 extern "C" SHARED(PyObject) * PyInit_render(void) {
-#else
-#define INIT_ERR_VAL
-
-extern "C" SHARED(void) initrender(void) {
-#endif
     if(!PyEval_ThreadsInitialized()) PyEval_InitThreads();
 
     obj_CallbackRenderer::pytype()->tp_new = PyType_GenericNew;
     obj_BlockingRenderer::pytype()->tp_new = PyType_GenericNew;
 
     for(auto cls : classes) {
-        if(UNLIKELY(PyType_Ready(cls) < 0)) return INIT_ERR_VAL;
+        if(UNLIKELY(PyType_Ready(cls) < 0)) return nullptr;
     }
 
-#if PY_MAJOR_VERSION >= 3
     PyObject *m = PyModule_Create(&module_def);
-#else
-    PyObject *m = Py_InitModule3("render",func_table,0);
-#endif
-    if(UNLIKELY(!m)) return INIT_ERR_VAL;
+    if(UNLIKELY(!m)) return nullptr;
 
     instance_data_t *idata;
 
-#if PY_MAJOR_VERSION >= 3
     try {
         idata = new(PyModule_GetState(m)) instance_data_t();
     } catch(std::bad_alloc&) {
         PyErr_NoMemory();
-        return INIT_ERR_VAL;
+        return nullptr;
     } catch(std::exception &e) {
         PyErr_SetString(PyExc_RuntimeError,e.what());
-        return INIT_ERR_VAL;
+        return nullptr;
     }
-#else
-    idata = &instance_data;
-#endif
 
 #define LOAD_IDATA(NAME) \
     idata->NAME = PyObject_GetAttrString(m,"_" #NAME); \
-    if(!idata->NAME) return INIT_ERR_VAL; \
+    if(!idata->NAME) return nullptr; \
     Py_DECREF(idata->NAME)
-    
+
     LOAD_IDATA(color_unpickle);
     LOAD_IDATA(material_unpickle);
     LOAD_IDATA(vector_unpickle);
@@ -1682,12 +1620,10 @@ extern "C" SHARED(void) initrender(void) {
     for(auto cls : classes) {
         add_class(m,cls->tp_name + sizeof(FULL_MODULE_STR),cls);
     }
-    
+
     auto cap = PyCapsule_New(const_cast<package_common*>(&package_common_data),"render._PACKAGE_COMMON",nullptr);
-    if(!cap) return INIT_ERR_VAL;
+    if(!cap) return nullptr;
     PyModule_AddObject(m,"_PACKAGE_COMMON",cap);
 
-#if PY_MAJOR_VERSION >= 3
     return m;
-#endif
 }

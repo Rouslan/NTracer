@@ -35,18 +35,6 @@
         PyObject_GC_Del(ptr);                                       \
     }
 
-#ifndef PyVarObject_HEAD_INIT
-    #define PyVarObject_HEAD_INIT(type, size) \
-        PyObject_HEAD_INIT(type) size,
-#endif
-
-#if PY_MAJOR_VERSION == 3 && PY_MINOR_VERSION == 3
-    // TODO: find the earliest version this was defined in
-    #define PyObject_LengthHint _PyObject_LengthHint
-#elif PY_MAJOR_VERSION < 3 || (PY_MARJOR_VERSION == 3 && PY_MINOR_VERSION < 3)
-    Py_ssize_t PyObject_LengthHint(PyObject *o,Py_ssize_t defaultlen);
-#endif
-
 #define PY_EXCEPT_HANDLERS(RET) catch(py_error_set&) {              \
         return RET;                                                 \
     } catch(std::bad_alloc&) {                                      \
@@ -97,9 +85,9 @@ constexpr size_t aligned(size_t size,size_t alignment) {
 template<typename T> struct range {
     T begin() const { return _begin; }
     T end() const { return _end; }
-    
+
     range(T begin,T end) : _begin(begin), _end(end) {}
-    
+
 private:
     const T _begin;
     const T _end;
@@ -126,43 +114,22 @@ long narrow(long x,long max,long min);
 template<typename T> inline T py_to_xint(PyObject *po);
 
 
-#if PY_MAJOR_VERSION >= 3
-    #define _compat_Int_FromLong PyLong_FromLong
-    inline bool is_int_or_long(PyObject *x) {
-        return PyLong_Check(x) != 0;
-    }
-
-    #define Py_TPFLAGS_CHECKTYPES 0
-
-    #define PYBYTES(X) PyBytes_ ## X
-    #define PYSTR(X) PyUnicode_ ## X
-#else
-    #define _compat_Int_FromLong PyInt_FromLong
-    inline bool is_int_or_long(PyObject *x) {
-        return PyInt_Check(x) or PyLong_Check(x);
-    }
-
-    #define PYBYTES(X) PyString_ ## X
-    #define PYSTR(X) PyString_ ## X
-#endif
-
 inline PyObject *to_pyobject(short x) {
-    return _compat_Int_FromLong(x);
+    return PyLong_FromLong(x);
 }
 
 inline PyObject *to_pyobject(unsigned short x) {
-    return _compat_Int_FromLong(x);
+    return PyLong_FromLong(x);
 }
 
 inline PyObject *to_pyobject(long x) {
-    return _compat_Int_FromLong(x);
+    return PyLong_FromLong(x);
 }
 
 inline PyObject *to_pyobject(unsigned long x) {
     return PyLong_FromUnsignedLong(x);
 }
 
-#ifdef HAVE_LONG_LONG
 inline PyObject *to_pyobject(long long x) {
     return PyLong_FromLongLong(x);
 }
@@ -170,15 +137,14 @@ inline PyObject *to_pyobject(long long x) {
 inline PyObject *to_pyobject(unsigned long long x) {
     return PyLong_FromUnsignedLongLong(x);
 }
-#endif
 
 inline PyObject *to_pyobject(int x) {
-    return _compat_Int_FromLong(x);
+    return PyLong_FromLong(x);
 }
 
 inline PyObject *to_pyobject(unsigned int x) {
 #if INT_MAX < LONG_MAX
-    return _compat_Int_FromLong(x);
+    return PyLong_FromLong(x);
 #else
     return PyLong_FromUnsignedLong(x);
 #endif
@@ -199,7 +165,7 @@ inline PyObject *to_pyobject(double x) {
 }
 
 inline PyObject *to_pyobject(const char *x) {
-    return PYSTR(FromString)(x);
+    return PyUnicode_FromString(x);
 }
 
 inline PyObject *to_pyobject(PyObject *x) {
@@ -220,15 +186,9 @@ template<> inline unsigned short from_pyobject<unsigned short>(PyObject *o) {
 }
 
 template<> inline long from_pyobject<long>(PyObject *o) {
-#if PY_MAJOR_VERSION >= 3
     long r = PyLong_AsLong(o);
     if(UNLIKELY(PyErr_Occurred())) throw py_error_set();
     return r;
-#else
-    long r = PyInt_AsLong(o);
-    if(UNLIKELY(r == -1 && PyErr_Occurred())) throw py_error_set();
-    return r;
-#endif
 }
 
 template<> inline unsigned long from_pyobject<unsigned long>(PyObject *o) {
@@ -237,7 +197,6 @@ template<> inline unsigned long from_pyobject<unsigned long>(PyObject *o) {
     return r;
 }
 
-#ifdef HAVE_LONG_LONG
 template<> inline long long from_pyobject<long long>(PyObject *o) {
     long long r = PyLong_AsLongLong(o);
     if(UNLIKELY(PyErr_Occurred())) throw py_error_set();
@@ -249,7 +208,6 @@ template<> inline unsigned long long from_pyobject<unsigned long long>(PyObject 
     if(UNLIKELY(PyErr_Occurred())) throw py_error_set();
     return r;
 }
-#endif
 
 
 template<> inline int from_pyobject<int>(PyObject *o) {
@@ -306,10 +264,8 @@ MEMBER_MACRO(long,T_LONG);
 MEMBER_MACRO(unsigned long,T_ULONG);
 MEMBER_MACRO(float,T_FLOAT);
 MEMBER_MACRO(double,T_DOUBLE);
-#ifdef HAVE_LONG_LONG
 MEMBER_MACRO(long long,T_LONGLONG);
 MEMBER_MACRO(unsigned long long,T_ULONGLONG);
-#endif
 #undef MEMBER_MACRO
 
 
@@ -354,7 +310,7 @@ template<typename T,bool trivial=std::is_trivially_destructible_v<T>> struct des
         reinterpret_cast<T*>(self)->~T();
         Py_TYPE(self)->tp_free(self);
     }
-    
+
     static constexpr void (*value)(PyObject*) = &_function;
 };
 
@@ -382,11 +338,11 @@ template<typename T,typename Base,bool AllowIndirect=false,bool InPlace=(alignof
     template<typename... Args> simple_py_wrapper(Args&&... args) : base(std::forward<Args>(args)...) {
         PyObject_Init(reinterpret_cast<PyObject*>(this),Base::pytype());
     }
-    
+
     T &alloc_base() {
         return base;
     }
-    
+
     T &cast_base() { return base; }
     T &get_base() { return base; }
 };
@@ -404,13 +360,13 @@ template<typename T,typename Base> struct simple_py_wrapper<T,Base,false,false> 
             simd::aligned_free(base);
         }
     }
-    
+
     T &alloc_base() {
         assert(!base);
         base = reinterpret_cast<T*>(simd::aligned_alloc(alignof(T),sizeof(T)));
         return *base;
     }
-    
+
     T &cast_base() { return *base; }
     T &get_base() { return *base; }
 };
@@ -423,19 +379,19 @@ template<typename T,typename Base> struct simple_py_wrapper<T,Base,true,true> : 
             T *ptr;
             PyObject *owner;
         } indirect;
-        
+
         direct_indirect_data() {}
         ~direct_indirect_data() {}
     } base;
-    
+
     PY_MEM_NEW_DELETE
-    
+
     template<typename... Args> simple_py_wrapper(Args&&... args) {
         PyObject_Init(reinterpret_cast<PyObject*>(this),Base::pytype());
         new(&base.direct) T(std::forward<Args>(args)...);
         mode = CONTAINS;
     }
-    
+
     simple_py_wrapper(PyObject *owner,T &base) {
         PyObject_Init(reinterpret_cast<PyObject*>(this),Base::pytype());
         this->base.indirect.ptr = &base;
@@ -443,23 +399,23 @@ template<typename T,typename Base> struct simple_py_wrapper<T,Base,true,true> : 
         Py_INCREF(owner);
         mode = INDIRECT;
     }
-    
+
     ~simple_py_wrapper() {
         if(mode == CONTAINS) base.direct.~T();
         else if(mode == INDIRECT) {
             Py_DECREF(base.indirect.owner);
         }
     }
-    
+
     T &alloc_base() {
         assert(mode == UNINITIALIZED);
         mode = CONTAINS;
         return base.direct;
     }
-    
+
     T &cast_base() {
         if(mode == CONTAINS) return base.direct;
-        
+
         assert(mode == INDIRECT);
         return *base.indirect.ptr;
     }
@@ -470,20 +426,20 @@ template<typename T,typename Base> struct simple_py_wrapper<T,Base,true,false> :
     storage_mode mode;
     T *base;
     PyObject *owner;
-    
+
     PY_MEM_NEW_DELETE
-    
+
     template<typename... Args> simple_py_wrapper(Args&&... args) {
         PyObject_Init(reinterpret_cast<PyObject*>(this),Base::pytype());
         new(&alloc_base()) T(std::forward<Args>(args)...);
         mode = CONTAINS;
     }
-    
+
     simple_py_wrapper(PyObject *owner,T &base) : mode(INDIRECT), base(&base), owner(owner) {
         Py_INCREF(owner);
         PyObject_Init(reinterpret_cast<PyObject*>(this),Base::pytype());
     }
-    
+
     ~simple_py_wrapper() {
         if(mode == CONTAINS) {
             base->~T();
@@ -492,14 +448,14 @@ template<typename T,typename Base> struct simple_py_wrapper<T,Base,true,false> :
             Py_DECREF(owner);
         }
     }
-    
+
     T &alloc_base() {
         assert(!base);
         base = reinterpret_cast<T*>(simd::aligned_alloc(alignof(T),sizeof(T)));
         mode = CONTAINS;
         return *base;
     }
-    
+
     T &cast_base() { return *base; }
     T &get_base() { return *base; }
 };
@@ -511,14 +467,14 @@ template<typename T,typename Base> struct simple_py_wrapper<T,Base,true,false> :
 
 template<typename T> struct parameter {
     typedef T type;
-    
+
     const char *name;
     explicit constexpr parameter(const char *name) : name(name) {}
 };
 
 template<typename T> struct opt_parameter {
     typedef T type;
-    
+
     const char *name;
     const T def_value;
     constexpr opt_parameter(const char *name,T def_value) : name(name), def_value(def_value) {}
@@ -530,22 +486,22 @@ class get_arg {
         const char **names;
         const char *fname;
         Py_ssize_t kcount;
-        
+
         get_arg_base(PyObject *args,PyObject *kwds,Py_ssize_t arg_len,const char **names,const char *fname);
-        
+
         PyObject *operator()(size_t i,bool required);
         void finished();
     } base;
-    
+
     template<typename T> static inline T as_param(const parameter<T> &p,size_t index,get_arg_base &ga) {
         return from_pyobject<T>(ga(index,true));
     }
-    
+
     template<typename T> static inline T as_param(const opt_parameter<T> &p,size_t index,get_arg_base &ga) {
         PyObject *tmp = ga(index,false);
         return tmp ? from_pyobject<T>(tmp) : p.def_value;
     }
-    
+
     template<typename... P,size_t... Indexes> static inline std::tuple<typename P::type...> _get_args(std::index_sequence<Indexes...>,const char *fname,PyObject *args,PyObject *kwds,const P&... params) {
         const char *arg_names[] = {params.name...};
         get_arg_base ga(args,kwds,sizeof...(P),arg_names,fname);
@@ -553,16 +509,16 @@ class get_arg {
         ga.finished();
         return r;
     }
-    
+
 public:
     Py_ssize_t arg_index;
-    
+
     get_arg(PyObject *args,PyObject *kwds,Py_ssize_t arg_len,const char **names=NULL,const char *fname=NULL) : base(args,kwds,arg_len,names,fname), arg_index(0) {}
     template<int N> get_arg(PyObject *args,PyObject *kwds,const char *(&names)[N],const char *fname=NULL) : get_arg(args,kwds,N,names,fname) {}
-    
+
     PyObject *operator()(bool required) { return base(arg_index++,required); }
     void finished() { base.finished(); }
-    
+
     template<typename... P> static std::tuple<typename P::type...> get_args(const char *fname,PyObject *args,PyObject *kwds,const P&... params) {
         return _get_args<P...>(std::make_index_sequence<sizeof...(P)>(),fname,args,kwds,params...);
     }
@@ -595,4 +551,3 @@ inline void add_class(PyObject *module,const char *name,PyTypeObject *type) {
 }
 
 #endif
-

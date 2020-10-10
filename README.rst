@@ -1,12 +1,8 @@
 ==========================================
 NTracer
 ==========================================
-A fast hyper-spacial ray-tracing library
+A hyper-spacial ray-tracing library
 ------------------------------------------
-
-**Important:** this library makes extensive use of features exclusive to C++11.
-At the time of this writing, the only compilers that can build this library are
-GCC >= 4.7 and Clang >= 3.1.
 
 NTracer is a simple ray-tracer that can work with scenes with an arbitrary
 number of dimensions.
@@ -14,32 +10,34 @@ number of dimensions.
 .. figure:: https://rouslan.github.io/NTracer/screenshots/ntracer_6d_thumb.png
     :alt: sceenshot 1
     :target: https://rouslan.github.io/NTracer/screenshots/ntracer_6d.png
-    
+
     A three-dimension slice of a six-dimensional hypercube
 
 .. figure:: https://rouslan.github.io/NTracer/screenshots/ggs120cell_thumb.png
     :alt: screenshot 2
     :target: https://rouslan.github.io/NTracer/screenshots/ggs120cell.png
-    
+
     A three-dimension slice of a `great grand stellated 120-cell
     <http://en.wikipedia.org/wiki/Great_grand_stellated_120-cell>`_
 
 The renderer can use an arbitrary number of threads and by default uses as many
-threads as there are processing cores. For small dimensionalities (by default,
-eight or fewer dimensions), the library uses specialized routines with the
-number of dimensions hard-coded, which offer better performance by avoiding the
-looping and heap allocation that the generic versions require.
+threads as there are CPU cores. For small dimensionalities (by default, eight or
+fewer dimensions), the library uses specialized routines with the number of
+dimensions hard-coded, which offer better performance by avoiding the looping
+and heap allocation that the generic versions require.
 
 The main goal is to aid in the visualization of higher-dimensional space.
 
 There is special support for Pygame, but it is not a requirement. However, the
 included example scripts, hypercube.py and polytope.py, depend on it.
 
-Documentation is available at http://rouslan.github.io/NTracer/doc.
+Documentation is available at https://rouslan.github.io/NTracer/doc.
 
 
 Building and Installing from Source
 ==========================================
+
+Building from source requires a compiler with C++17 support.
 
 Unix-like systems
 ..........................................
@@ -69,9 +67,11 @@ directory (where setup.py is located):
     <Python install directory>\python.exe setup.py build --compiler=mingw32 install
 
 By default, the ``build`` command will also copy any MinGW-w64 DLLs that the
-binaries require into the installation directory. To suppress this behaviour
-(which you may want to do if the MinGW-w64 ``bin`` directory is already in the
-system-wide path), use ``--copy-mingw-deps=false``.
+binaries require into the installation directory (technically it only copies the
+DLLs into the temporary build directory and the ``install`` command does the
+installing). To suppress this behaviour (which you may want to do if the
+MinGW-w64 ``bin`` directory is already in the system-wide path), use
+``--copy-mingw-deps=false``.
 
 Customization
 ..........................................

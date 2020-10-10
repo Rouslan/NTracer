@@ -12,8 +12,22 @@ public:
     /* Prevent python code from modifying the scene. The object is also expected
        to remain alive until unlock is called */
     virtual void lock() = 0;
-    
+
     virtual void unlock() throw() = 0;
+
+protected:
+    ~scene() = default;
+};
+
+struct obj_Scene {
+    CONTAINED_PYTYPE_DEF
+    PyObject_HEAD
+
+    scene &(*_get_base)(obj_Scene*);
+
+    scene &get_base() {
+        return (*_get_base)(this);
+    }
 };
 
 struct color_obj_base {
@@ -36,14 +50,14 @@ struct material {
     static PyTypeObject *_pytype;
     static PyTypeObject *pytype() { return _pytype; }
 #endif
-    
+
     PY_MEM_NEW_DELETE
     PyObject_HEAD
-    
+
     material() {
         PyObject_Init(reinterpret_cast<PyObject*>(this),pytype());
     }
-    
+
     color c, specular;
     float opacity, reflectivity, specular_intensity, specular_exp;
 };

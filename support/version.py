@@ -1,4 +1,3 @@
-# must work in CPython 2.7 and 3.0+
 
 import os.path as path
 import subprocess
@@ -19,14 +18,14 @@ def get_version(base_dir):
     except IOError:
         # if this is a git working tree
         try:
-            version = subprocess.check_output(['git','describe','--long','--dirty'])
+            version = subprocess.run(
+                ['git','describe','--long','--dirty'],
+                check=True,
+                stdout=subprocess.PIPE,
+                encoding='utf-8').stdout
         except Exception:
             warnings.warn('cannot determine package version')
         else:
-            # needed for Python 3
-            if not isinstance(version,str):
-                version = str(version,'utf-8')
-            
             version = version.strip().split('-')
             del version[2] # get rid of the revision hash
             assert version[0][0] == 'v'
@@ -34,5 +33,5 @@ def get_version(base_dir):
             version[0] = '.'.join(version[0:2])
             del version[1]
             version = '-'.join(version)
-            
+
     return version

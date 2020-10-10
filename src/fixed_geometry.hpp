@@ -76,8 +76,8 @@ namespace fixed {
 
 
     template<int N,typename RealItems,typename T,bool=std::is_arithmetic_v<T> || simd::is_v_type<T>> struct item_array {
-        static const int _real_size = simd::padded_size<T>(RealItems::get(N));
-        static const int max_items = _real_size;
+        static constexpr int _real_size = simd::padded_size<T>(RealItems::get(N));
+        static constexpr int max_items = _real_size;
 
         explicit item_array(int d) {
             assert(d == N);
@@ -95,8 +95,6 @@ namespace fixed {
 
         int dimension() const { return N; }
 
-        /* all possible types are represented in this union to allow type
-        punning */
         union {
             T raw[_real_size];
             simd::scalar<T> s[_real_size];
