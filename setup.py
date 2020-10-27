@@ -4,7 +4,7 @@ import os.path
 import re
 import subprocess
 
-from setuptools import setup,Command,Extension
+from setuptools import setup,Extension
 from distutils import sysconfig
 
 # at the time of this writing, there is no setuptools.command.build module
@@ -14,7 +14,6 @@ from setuptools.command.build_ext import build_ext
 from distutils.errors import DistutilsSetupError
 from distutils.dir_util import mkpath
 from distutils import log
-from distutils.dep_util import newer
 from distutils.util import split_quoted, strtobool
 from distutils.spawn import find_executable
 from distutils.file_util import copy_file
@@ -25,6 +24,7 @@ sys.path.insert(0,os.path.join(base_dir,'support'))
 
 import version
 import generate_simd
+import simd_test
 
 
 GCC_OPTIMIZE_COMPILE_ARGS = [
@@ -276,7 +276,7 @@ class CustomBuildExt(build_ext):
 
         for e in self.extensions:
             # these need to be added last
-            e.extra_compile_args += self.cpp_opts
+            e.extra_compile_args = e.extra_compile_args + self.cpp_opts
 
         mkpath(self.build_temp,dry_run=self.dry_run)
         if self.optimize_dimensions:
@@ -288,15 +288,7 @@ class CustomBuildExt(build_ext):
                         with open(f,'w') as out:
                             out.write(TRACER_TEMPLATE.format(d))
 
-        simd_out = os.path.join(self.build_temp,'simd.hpp')
-        simd_in = os.path.join(base_dir,'src','simd.hpp.in')
-        if self.force or newer(simd_in,simd_out):
-            log.info('creating {0} from {1}'.format(simd_out,simd_in))
-            if not self.dry_run:
-                generate_simd.generate(
-                    os.path.join(base_dir,'src','intrinsics.json'),
-                    simd_in,
-                    simd_out)
+        generate_simd.create_simd_hpp(base_dir,self.build_temp,self.force,self.dry_run)
 
         build_ext.build_extensions(self)
 
@@ -360,5 +352,4 @@ setup(name='ntracer',
         'Topic :: Multimedia :: Graphics :: 3D Rendering',
         'Topic :: Scientific/Engineering :: Mathematics'],
     zip_safe=True,
-    entry_points={},
-    cmdclass={'build' : CustomBuild,'build_ext' : CustomBuildExt})
+    cmdclass={'build' : CustomBuild,'build_ext' : CustomBuildExt,'test_simd' : simd_test.test_simd})

@@ -317,7 +317,7 @@ struct renderer {
     scene *sc;
     Py_buffer buffer;
     std::atomic<unsigned int> chunk;
-    volatile enum {NORMAL,CANCEL,QUIT} state;
+    volatile enum state_t {NORMAL,CANCEL,QUIT} state;
 
 protected:
     renderer() : busy_threads(0), job(0), state(NORMAL) {}
@@ -379,6 +379,123 @@ template<> struct _wrapped_type<callback_renderer> {
     typedef obj_CallbackRenderer type;
 };
 
+
+/*struct process_pixel {
+    typedef float item_t;
+    static const int v_score = impl::V_SCORE_THRESHHOLD;
+    static const int max_items = RENDER_CHUNK_SIZE;
+
+    byte *pixels;
+    volatile renderer::state_t *state;
+
+    template<size_t Size> void operator()(size_t n) const {
+        if(UNLIKELY(state != renderer::NORMAL)) return true;
+
+        if constexpr(Size == 1) {
+            color c = r.sc->calculate_color(x,y,r.format.width,r.format.height);
+            int b_offset = 0;
+            long temp[MAX_PIXELSIZE / sizeof(long)] = {0};
+            for(auto &ch : r.format.channels) {
+                union {
+                    float f;
+                    uint32_t i;
+                } val;
+
+                val.f = ch.f_r*c.r() + ch.f_g*c.g() + ch.f_b*c.b() + ch.f_c;
+                if(val.f > 1) val.f = 1;
+                else if(val.f < 0) val.f = 0;
+
+                unsigned long ival;
+
+                if(ch.tfloat) {
+                    assert(ch.bit_size == 32);
+                    static_assert(sizeof(float) == 4,"A float is assumed to be 32 bits");
+
+                    ival = val.i;
+                } else {
+                    assert(ch.bit_size < 32);
+                    ival = std::round(val.f * (0xffffffffu >> (32 - ch.bit_size)));
+                }
+
+                int o = b_offset / (sizeof(long)*8);
+                int rm = b_offset % (sizeof(long)*8);
+                int s = sizeof(long)*8 - rm - ch.bit_size;
+                temp[o] |= s >= 0 ? ival << s : ival >> -s;
+
+                if(rm + ch.bit_size > int(sizeof(long)*8))
+                    temp[o+1] = ival << (sizeof(long)*16 - rm - ch.bit_size);
+
+                b_offset += ch.bit_size;
+            }
+
+            if(r.format.reversed) {
+                for(int i = r.format.bytes_per_pixel-1; i >= 0; --i)
+                    *pixels++ = (temp[i/sizeof(long)] >> ((sizeof(long) - 1 - (i % sizeof(long))) * 8)) & 0xff;
+            } else {
+                for(int i = 0; i < r.format.bytes_per_pixel; ++i)
+                    *pixels++ = (temp[i/sizeof(long)] >> ((sizeof(long) - 1 - (i % sizeof(long))) * 8)) & 0xff;
+            }
+        } else {
+            typedef simd::v_type<float,Size> v_float;
+
+            _color<v_float> c;
+
+            for(unsigned int i=0; i<Size; ++i) {
+                color c1 = r.sc->calculate_color(x,y,r.format.width,r.format.height);
+                c.r()[i] = c.r();
+                c.g()[i] = c.g();
+                c.b()[i] = c.b();
+            }
+
+            int b_offset = 0;
+            long temp[MAX_PIXELSIZE / sizeof(long)] = {0};
+            for(auto &ch : r.format.channels) {
+                v_float f = ch.f_r*c.r() + ch.f_g*c.g() + ch.f_b*c.b() + ch.f_c;
+                f = simd::clamp(f,0.0f,1.0f);
+                union {
+                    float f;
+                    uint32_t i;
+                } val;
+
+                val.f = ch.f_r*c.r() + ch.f_g*c.g() + ch.f_b*c.b() + ch.f_c;
+                if(val.f > 1) val.f = 1;
+                else if(val.f < 0) val.f = 0;
+
+                unsigned long ival;
+
+                if(ch.tfloat) {
+                    assert(ch.bit_size == 32);
+                    static_assert(sizeof(float) == 4,"A float is assumed to be 32 bits");
+
+                    ival = val.i;
+                } else {
+                    assert(ch.bit_size < 32);
+                    ival = std::round(val.f * (0xffffffffu >> (32 - ch.bit_size)));
+                }
+
+                int o = b_offset / (sizeof(long)*8);
+                int rm = b_offset % (sizeof(long)*8);
+                int s = sizeof(long)*8 - rm - ch.bit_size;
+                temp[o] |= s >= 0 ? ival << s : ival >> -s;
+
+                if(rm + ch.bit_size > int(sizeof(long)*8))
+                    temp[o+1] = ival << (sizeof(long)*16 - rm - ch.bit_size);
+
+                b_offset += ch.bit_size;
+            }
+
+            if(r.format.reversed) {
+                for(int i = r.format.bytes_per_pixel-1; i >= 0; --i)
+                    *pixels++ = (temp[i/sizeof(long)] >> ((sizeof(long) - 1 - (i % sizeof(long))) * 8)) & 0xff;
+            } else {
+                for(int i = 0; i < r.format.bytes_per_pixel; ++i)
+                    *pixels++ = (temp[i/sizeof(long)] >> ((sizeof(long) - 1 - (i % sizeof(long))) * 8)) & 0xff;
+            }
+        }
+
+        return false;
+    }
+};*/
 
 void worker_draw(renderer &r) {
     size_t chunks_x = (r.format.width + RENDER_CHUNK_SIZE - 1) / RENDER_CHUNK_SIZE;

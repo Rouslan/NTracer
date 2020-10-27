@@ -1,110 +1,112 @@
 #ifndef light_hpp
 #define light_hpp
 
-struct color {
-    color() {}
-    color(float r,float g,float b) : vals{r,g,b} {}
-    
-    float &r() { return vals[0]; }
-    float r() const { return vals[0]; }
-    float &g() { return vals[1]; }
-    float g() const { return vals[1]; }
-    float &b() { return vals[2]; }
-    float b() const { return vals[2]; }
+template<typename T> struct _color {
+    _color() {}
+    _color(T r,T g,T b) : vals{r,g,b} {}
 
-    color operator*(float c) const {
+    T &r() { return vals[0]; }
+    T r() const { return vals[0]; }
+    T &g() { return vals[1]; }
+    T g() const { return vals[1]; }
+    T &b() { return vals[2]; }
+    T b() const { return vals[2]; }
+
+    _color operator*(T c) const {
         return {r()*c,g()*c,b()*c};
     }
 
-    color operator/(float c) const {
+    _color operator/(T c) const {
         return {r()/c,g()/c,b()/c};
     }
 
-    color &operator*=(float c) {
+    _color &operator*=(T c) {
         r() *= c; g() *= c; b() *= c;
         return *this;
     }
 
-    color &operator/=(float c) {
+    _color &operator/=(T c) {
         r() /= c; g() /= c; b() /= c;
         return *this;
     }
 
-    color &operator+=(float c) {
+    _color &operator+=(T c) {
         r() += c; g() += c; b() += c;
         return *this;
     }
 
-    color &operator-=(float c) {
+    _color &operator-=(T c) {
         r() -= c; g() -= c; b() -= c;
         return *this;
     }
-    
-    color operator-() {
+
+    _color operator-() {
         return {-r(),-g(),-b()};
     }
 
-    color operator*(const color &cb) const {
+    _color operator*(const _color &cb) const {
         return {r()*cb.r(),g()*cb.g(),b()*cb.b()};
     }
 
-    color operator/(const color &cb) const {
+    _color operator/(const _color &cb) const {
         return {r()/cb.r(),g()/cb.g(),b()/cb.b()};
     }
-    
-    color operator+(const color &cb) const {
+
+    _color operator+(const _color &cb) const {
         return {r()+cb.r(),g()+cb.g(),b()+cb.b()};
     }
 
-    color operator-(const color &cb) const {
+    _color operator-(const _color &cb) const {
         return {r()-cb.r(),g()-cb.g(),b()-cb.b()};
     }
 
-    color &operator*=(const color &cb) {
+    _color &operator*=(const _color &cb) {
         r() *= cb.r(); g() *= cb.g(); b() *= cb.b();
         return *this;
     }
 
-    color &operator/=(const color &cb) {
+    _color &operator/=(const _color &cb) {
         r() /= cb.r(); g() /= cb.g(); b() /= cb.b();
         return *this;
     }
-    
-    color &operator+=(const color &cb) {
+
+    _color &operator+=(const _color &cb) {
         r() += cb.r(); g() += cb.g(); b() += cb.b();
         return *this;
     }
 
-    color &operator-=(const color &cb) {
+    _color &operator-=(const _color &cb) {
         r() -= cb.r(); g() -= cb.g(); b() -= cb.b();
         return *this;
     }
-    
-    bool operator==(const color &cb) const {
+
+    bool operator==(const _color &cb) const {
         return r() == cb.r() && g() == cb.g() && b() == cb.b();
     }
-    bool operator!=(const color &cb) const {
+    bool operator!=(const _color &cb) const {
         return r() != cb.r() || g() != cb.g() || b() != cb.b();
     }
 
 
-    float vals[3];
+    T vals[3];
 };
 
-inline color operator*(float c,const color& v) {
+template<typename T> inline _color<T> operator*(T c,const _color<T>& v) {
     return {c*v.r(),c*v.g(),c*v.b()};
 }
 
-inline color operator/(float c,const color& v) {
+template<typename T> inline _color<T> operator/(T c,const _color<T>& v) {
     return {c/v.r(),c/v.g(),c/v.b()};
 }
 
-inline color operator+(float c,const color& v) {
+template<typename T> inline _color<T> operator+(T c,const _color<T>& v) {
     return {c+v.r(),c+v.g(),c+v.b()};
 }
 
-inline color operator-(float c,const color& v) {
+template<typename T> inline _color<T> operator-(T c,const _color<T>& v) {
     return {c-v.r(),c-v.g(),c-v.b()};
 }
+
+using color = _color<float>;
 
 #endif

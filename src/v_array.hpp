@@ -89,7 +89,7 @@ namespace impl {
             return a += b;
         }
         template<typename T> static FORCE_INLINE auto reduce(T x) {
-            return x.reduce_add();
+            return simd::reduce_add(x);
         }
         template<typename T> static FORCE_INLINE constexpr T first() {
             return T::zeros();
@@ -121,7 +121,7 @@ namespace impl {
     }
 #define UNARY_FUNC(NAME,F) struct NAME { \
         template<typename T> static FORCE_INLINE auto op(T a) { \
-            return a.F(); \
+            return F(a); \
         } \
     }
 #define NCMP_FUNC(NAME,F,INT_OP) struct NAME { \
@@ -151,7 +151,7 @@ namespace impl {
     BINARY_OP(op_l_or,||);
     UNARY_OP(op_l_not,!);
     UNARY_OP(op_negate,-);
-    UNARY_FUNC(op_abs,abs);
+    UNARY_FUNC(op_abs,simd::abs);
     BINARY_FUNC(op_l_andn,simd::l_andn);
     BINARY_FUNC(op_l_xor,simd::l_xor);
     BINARY_FUNC(op_l_xnor,simd::l_xnor);
