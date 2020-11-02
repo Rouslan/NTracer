@@ -228,7 +228,8 @@ INTR_OPS = [
     ('andnot',name_mask_and_maskz),
     ('avg',name_mask_and_maskz),
     # bitshuffle, mask_bitshuffle
-    ('mask_blend',name_mask_and_maskz),
+    ('blend',name_masked),
+    ('blendv',name_normal),
     ('broadcast',name_broadcast),
     # broadcastmb, mask_broadcastmb, maskz_braodcastmb
     # broadcastmw, mask_broadcastmw, maskz_braodcastmw
@@ -338,7 +339,7 @@ INTR_OPS = [
     # max_round, mask_max_round, maskz_max_round
     ('min',name_mask_and_maskz),
     # min_round, mask_min_round, maskz_min_round
-    # mask_mov, maskz_mov
+    ('mov',name_mask_and_maskz),
     # move, mask_move, maskz_move
     # movedup, mask_movedup, maskz_movedup
     # movehdup, mask_movehdup, maskz_movehdup

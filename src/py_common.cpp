@@ -28,8 +28,15 @@ get_arg::get_arg_base::get_arg_base(PyObject *args,PyObject *kwds,Py_ssize_t arg
     }
 }
 
-PyObject *get_arg::get_arg_base::operator()(size_t i,bool required) {
+PyObject *get_arg::get_arg_base::operator()(size_t i,get_arg::arg_type type) {
+    assert(type != KEYWORD_ONLY || names);
+    
     if(i < size_t(PyTuple_GET_SIZE(args))) {
+        if(type == KEYWORD_ONLY) {
+            PyErr_Format(PyExc_TypeError,"\"%s\" is a keyword-only argument",names[i]);
+            throw py_error_set();
+        }
+        
         PyObject *r = PyTuple_GET_ITEM(args,i);
         if(UNLIKELY(names && kwds && PyDict_GetItemString(kwds,names[i]))) {
             PyErr_Format(PyExc_TypeError,"got multiple values for keyword argument \"%s\"",names[i]);
@@ -45,7 +52,7 @@ PyObject *get_arg::get_arg_base::operator()(size_t i,bool required) {
         }
     }
 
-    if(UNLIKELY(required)) {
+    if(UNLIKELY(type == REQUIRED)) {
         if(names) PyErr_Format(PyExc_TypeError,"a value for keyword argument \"%s\" is required",names[i]);
         else PyErr_Format(PyExc_TypeError,"a value for positional argument # %zd is required",i);
         throw py_error_set();
@@ -67,11 +74,13 @@ void get_arg::get_arg_base::finished() {
 
             const char *kstr = PyUnicode_AsUTF8(key);
             if(!kstr) throw py_error_set();
-
-            for(const char **name = names; *name; ++name) {
-                if(strcmp(kstr,*name) == 0) goto match;
+            
+            if(names) {
+                for(const char **name = names; *name; ++name) {
+                    if(strcmp(kstr,*name) == 0) goto match;
+                }
             }
-
+                
             PyErr_Format(PyExc_TypeError,"'%U' is an invalid keyword argument for %s%s",
                 key,
                 fname ? fname : "this function",

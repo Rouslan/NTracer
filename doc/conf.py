@@ -93,7 +93,7 @@ add_module_names = False
 pygments_style = 'sphinx'
 
 # A list of ignored prefixes for module index sorting.
-#modindex_common_prefix = []
+modindex_common_prefix = ['ntracer.']
 
 autodoc_member_order = 'groupwise'
 

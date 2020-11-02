@@ -29,7 +29,7 @@ namespace impl {
         using VExpr::max_items;
         using VExpr::temporary;
         using VExpr::_size;
-        using VExpr::_v_size;
+        using VExpr::supports_padding;
         using VExpr::vec;
 
         template<typename... Args> FORCE_INLINE vector_expr_adapter(Args&&... args) : base_t(std::forward<Args>(args)...) {}
@@ -57,7 +57,7 @@ namespace impl {
         item_t length;
 
         size_t _size() const { return _dimension; }
-        size_t _v_size() const { return Store::v_dimension(_dimension); }
+        static constexpr bool supports_padding = true;
 
         template<size_t Size> simd::v_type<item_t,Size> vec(size_t n) const {
             auto r = simd::v_type<item_t,Size>::zeros();
@@ -68,6 +68,7 @@ namespace impl {
         v_axis(int d,int axis,item_t length) : _dimension(d), axis(axis), length(length) {}
     };
 
+    // T::item_t is expected to be an instantiation of simd::v_type
     template<typename T> struct v_interleave1;
     template<typename T,size_t Size> struct _v_item_t<v_interleave1<T>,Size> {
         typedef simd::v_type<typename T::item_t::item_t,Size> type;
@@ -84,16 +85,42 @@ namespace impl {
         v_expr_store<T> a;
         size_t index;
 
-        size_t _size() const { return T::item_t::size; }
-        size_t _v_size() const { return T::item_t::size; }
+        size_t _size() const { return a._size(); }
+        static constexpr bool supports_padding = false;
 
         template<size_t Size> simd::v_type<item_t,Size> vec(size_t n) const {
             simd::v_type<item_t,Size> r;
-            for(size_t i=0; i<Size; ++i) r[i] = a[i][index];
+            for(size_t i=0; i<Size; ++i) r[i] = a[n+i][index];
             return r;
         }
 
         v_interleave1(const T &a,size_t index) : a(a), index(index) {}
+    };
+
+    template<typename T,size_t TSize> struct v_broadcast;
+    template<typename T,size_t TSize,size_t Size> struct _v_item_t<v_broadcast<T,TSize>,Size> {
+        static_assert(Size == 1,"vectorized elements cannot be further vectorized");
+        typedef simd::scalar<simd::v_type<typename T::item_t,TSize> > type;
+    };
+    template<typename T,size_t TSize> struct v_broadcast : vector_expr<v_broadcast<T,TSize> > {
+        friend struct v_expr<v_broadcast>;
+
+        typedef simd::v_type<typename T::item_t,TSize> item_t;
+        static constexpr bool temporary = true;
+        static const int v_score = 0; // the value of this doesn't matter
+
+        v_expr_store<T> a;
+
+        size_t _size() const { return a._size(); }
+        static constexpr bool supports_padding = false;
+
+        template<size_t Size> simd::scalar<item_t> vec(size_t n) const {
+            static_assert(Size == 1,"vectorized elements cannot be further vectorized");
+
+            return simd::scalar<item_t>{item_t::repeat(a.template vec<1>(n)[0])};
+        }
+
+        v_broadcast(const T &a) : a(a) {}
     };
 
     template<typename Store,typename T=typename Store::item_t> struct vector;
@@ -103,8 +130,16 @@ namespace impl {
         typedef T item_t;
 
         explicit vector(int d) : base_t(d) {}
+        vector(const vector&) = default;
+        vector(vector &&b) : base_t(std::move(b)) {}
         template<typename F> vector(int d,F f) : base_t(d,f) {}
         template<typename B,typename Base> FORCE_INLINE vector(const vector_expr<B,Base> &b) : base_t(::v_expr(b)) {}
+
+        vector &operator=(const vector&) = default;
+        vector &operator=(vector &&b) {
+            v_array<Store,T>::operator=(std::move(b));
+            return *this;
+        }
 
         template<typename B,typename Base> FORCE_INLINE vector &operator+=(const vector_expr<B,Base> &b) {
             ::v_expr(*this) += ::v_expr(b);
@@ -142,7 +177,7 @@ namespace impl {
 
     template<typename Store,typename T,typename B> struct v_deinterleave1 {
         typedef typename T::item_t item_t;
-        static const int v_score = T::v_score - 5;
+        static const int v_score = B::v_score - 5;
         static const int max_items = B::max_items;
 
         vector<Store,T> &self;
@@ -150,12 +185,8 @@ namespace impl {
         size_t index;
 
         template<size_t Size> void operator()(size_t n) const {
-            if constexpr(Size == 1) {
-                self[n][index] = b.template vec<Size>(n);
-            } else {
-                auto vals = b.template vec<Size>(n);
-                for(size_t i=0; i<std::min(Size,self.dimension()-1-n); ++i) self[i+n][index] = vals[i];
-            }
+            auto vals = b.template vec<Size>(n);
+            for(size_t i=0; i<Size; ++i) self[i+n][index] = vals[i];
         }
     };
 
@@ -174,6 +205,8 @@ namespace impl {
 
         friend Base &::v_expr<T,Base>(vector_expr &e);
         friend const Base &::v_expr<T,Base>(const vector_expr &e);
+
+        using Base::size;
 
         operator T &() { return *static_cast<T*>(this); }
         operator const T &() const { return *static_cast<const T*>(this); }
@@ -253,19 +286,35 @@ using vector_batch = vector<Store,simd::v_type<typename Store::item_t,Size> >;
 /* This function only accepts actual vectors because using a batch vector
    expression to compute a single vector is wasteful. It is better to call
    interleave1 on each batch vector in the expression. */
-template<typename Store,size_t Size> impl::v_interleave1<impl::vector_expr<vector_batch<Store,Size> > > interleave1(const vector_batch<Store,Size> &a,size_t index) {
+template<typename Store,size_t Size=simd::v_sizes<typename Store::item_t>::value[0]>
+impl::v_interleave1<vector_batch<Store,Size> > interleave1(const vector_batch<Store,Size> &a,size_t index) {
     return {a,index};
 }
 
-template<typename F,typename Store,size_t Size=simd::v_sizes<typename Store::item_t>::value[0]>
+template<typename Store,size_t Size=simd::v_sizes<typename Store::item_t>::value[0],typename F>
 vector_batch<Store,Size> deinterleave(int dimension,F f) {
     vector_batch<Store,Size> r(dimension);
 
-    for(int i=0; i<Size; ++i) {
+    for(size_t i=0; i<Size; ++i) {
         auto b = f(i);
-        assert(dimension == b.size());
-        impl::v_rep(dimension,b.v_size(),impl::v_deinterleave1<Store,typename Store::item_t,decltype(b)>{r,b,i});
+        assert(size_t(dimension) == v_expr(b).size());
+
+        // v_expr(r).padded_size() is always equal to dimension
+        impl::v_rep(dimension,impl::v_deinterleave1<Store,typename vector_batch<Store,Size>::item_t,decltype(b)>{r,b,i});
     }
+
+    return r;
+}
+
+/* Equivalent to deinterleave<Store,Size>(a.dimension(),[](int){ return a; })
+
+   This function only accepts actual vectors so that a supplied vector
+   expression could be vectorized (in the SIMD sense), which otherwise wouldn't
+   happen because this turns each scalar value into a v_type value and
+   v_item_t<v_type<v_type,X>,Y> type where Y > 1, is not a valid type. */
+template<typename Store,size_t Size=simd::v_sizes<typename Store::item_t>::value[0]>
+impl::v_broadcast<vector<Store>,Size> broadcast(const vector<Store> &a) {
+    return a;
 }
 
 
@@ -307,16 +356,16 @@ namespace impl {
             }
         };
         template<typename B,typename Base> FORCE_INLINE matrix_row<Store> &operator=(const vector_expr<B,Base> &b) {
-            v_rep(a.dimension(),a.dimension(),_v_assign<B>{a,row,b});
+            v_rep(a.dimension(),_v_assign<B>{a,row,b});
 
             return *this;
         }
 
         size_t _size() const { return a.dimension(); }
-        size_t _v_size() const { return Store::v_dimension(a.dimension()); }
+        static constexpr bool supports_padding = true;
 
         typename Store::item_t &operator[](size_t n) const {
-            assert(n >= 0 && n < a.dimension());
+            assert(n < size_t(a.dimension()));
             return a.get(row,n);
         }
 
@@ -333,7 +382,7 @@ namespace impl {
             }
         }
 
-        operator typename Store::item_t*() const { return a.store.items.raw + row * a.dimension(); }
+        operator typename Store::item_t*() const { return a.data() + row * a.dimension(); }
 
         matrix_row(matrix<Store> &a,size_t row) : a(a), row(row) {}
     };
@@ -353,10 +402,10 @@ namespace impl {
         const_matrix_row<Store> &operator=(const const_matrix_row<Store>&) = delete;
 
         size_t _size() const { return a.dimension(); }
-        size_t _v_size() const { return Store::v_dimension(a.dimension()); }
+        static constexpr bool supports_padding = true;
 
         typename Store::item_t operator[](size_t n) const {
-            assert(n >= 0 && n < a.dimension());
+            assert(n < size_t(a.dimension()));
             return a.get(row,n);
         }
 
@@ -373,7 +422,7 @@ namespace impl {
             }
         }
 
-        operator const typename Store::item_t*() const { return a.store.items.raw + row * a.dimension(); }
+        operator const typename Store::item_t*() const { return a.data() + row * a.dimension(); }
 
         const_matrix_row(const matrix<Store> &a,size_t row) : a(a), row(row) {}
     };
@@ -410,7 +459,7 @@ namespace impl {
         }
 
         size_t _size() const { return a.dimension(); }
-        size_t _v_size() const { return Store::v_dimension(a.dimension()); }
+        static constexpr bool supports_padding = true;
 
         typename Store::item_t &operator[](size_t n) const {
             assert(n >= 0 && n < a.dimension());
@@ -441,7 +490,7 @@ namespace impl {
         const_matrix_column<Store> &operator=(const const_matrix_column<Store>&) = delete;
 
         size_t _size() const { return a.dimension(); }
-        size_t _v_size() const { return Store::v_dimension(a.dimension()); }
+        static constexpr bool supports_padding = true;
 
         typename Store::item_t operator[](size_t n) const {
             assert(n >= 0 && n < a.dimension());
@@ -460,11 +509,24 @@ namespace impl {
     struct matrix_item_count {
         static constexpr int get(int d) { return d*d; }
     };
+
+    template<typename Store,size_t Size> struct _v_item_t<matrix<Store>,Size> {
+        typedef simd::v_type<typename Store::item_t,Size> type;
+    };
 }
 
-template<class Store> struct matrix {
+template<class Store> struct matrix : private impl::v_expr<matrix<Store>> {
+    friend struct impl::v_expr<matrix>;
+
     typedef typename Store::item_t item_t;
     static const int max_row_col_items = Store::template type<impl::matrix_item_count>::max_items;
+
+    static const int v_score = impl::V_SCORE_THRESHHOLD;
+    static constexpr bool temporary = false;
+    static const int max_items = Store::template type<impl::matrix_item_count>::max_items;
+
+    size_t _size() const { return store.dimension()*store.dimension(); }
+    static constexpr bool supports_padding = true;
 
     explicit matrix(int d) : store(d) {}
 
@@ -476,6 +538,14 @@ template<class Store> struct matrix {
 
     template<typename F> FORCE_INLINE void v_rep(F f) const {
         impl::v_rep(Store::v_dimension(dimension()),f);
+    }
+
+    template<size_t Size> FORCE_INLINE simd::v_type<item_t,Size> &vec(size_t n) {
+        return store.template vec<Size>(n);
+    }
+
+    template<size_t Size> FORCE_INLINE simd::v_type<item_t,Size> vec(size_t n) const {
+        return store.template vec<Size>(n);
     }
 
     void multiply(matrix<Store> &RESTRICT r,const matrix<Store> &b) const {
@@ -701,6 +771,14 @@ template<class Store> struct matrix {
         return determinant_(tmp);
     }
 
+    bool operator==(const matrix<Store> &b) const {
+        return (static_cast<const impl::v_expr<matrix>&>(*this) == static_cast<const impl::v_expr<matrix>&>(b)).all();
+    }
+
+    bool operator!=(const matrix<Store> &b) const {
+        return (static_cast<const impl::v_expr<matrix>&>(*this) != static_cast<const impl::v_expr<matrix>&>(b)).any();
+    }
+
     /* Calculates the determinant by using itself to store the intermediate
        calculations. This avoids allocating space for another matrix but loses
        the original contents of this matrix. */
@@ -780,7 +858,7 @@ template<typename Store> void cross_(vector<Store> &r,smaller<matrix<Store> > &t
     int f = r.dimension() % 2 ? 1 : -1;
 
     for(int i=0; i<r.dimension(); ++i) {
-        assert(r.dimension() == vs[i].dimension());
+        assert(i+1 == r.dimension() || r.dimension() == vs[i].dimension());
 
         for(int j=0; j<r.dimension()-1; ++j) {
             for(int k=0; k<i; ++k) tmp[k][j] = vs[j][k];

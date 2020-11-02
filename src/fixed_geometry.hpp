@@ -1,6 +1,7 @@
 #ifndef fixed_geometry_hpp
 #define fixed_geometry_hpp
 
+#include <type_traits>
 
 #include "geometry.hpp"
 
@@ -41,7 +42,7 @@ namespace fixed {
 
     private:
         template<typename F> void subinit(F f,size_t i) {
-            new(&(*this)[i]) T(f(i));
+            new(begin() + i) T(f(i));
 
             if(i < Size-1) {
                 try {
@@ -75,7 +76,7 @@ namespace fixed {
     };
 
 
-    template<int N,typename RealItems,typename T,bool=std::is_arithmetic_v<T> || simd::is_v_type<T>> struct item_array {
+    template<int N,typename RealItems,typename T> struct item_array {
         static constexpr int _real_size = simd::padded_size<T>(RealItems::get(N));
         static constexpr int max_items = _real_size;
 
@@ -125,27 +126,11 @@ namespace fixed {
         }
     };
 
-    template<int N,typename RealItems,typename T> struct item_array<N,RealItems,T,false> {
-        static const int _real_size = RealItems::get(N) + simd::padded_size<T>(N) - N;
-        static const int max_items = _real_size;
-
-        explicit item_array(int d) {
-            assert(d == N);
-            item_array_init(items.raw,RealItems::get(N),_real_size);
-        }
-
-        int dimension() const { return N; }
-
-        struct {
-            T raw[_real_size];
-        } items;
-    };
-
     template<int N,typename T> struct item_store {
         typedef T item_t;
 
-        static int v_dimension(int d) {
-            return simd::padded_size<T>(d);
+        template<typename U=T> static int v_dimension(int d) {
+            return simd::padded_size<U>(d);
         }
 
         static const int required_d = N;

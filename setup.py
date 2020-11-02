@@ -18,6 +18,23 @@ from distutils.util import split_quoted, strtobool
 from distutils.spawn import find_executable
 from distutils.file_util import copy_file
 
+try:
+    from distutils.cygwinccompiler import Mingw32CCompiler
+except ImportError:
+    pass
+else:
+    # Mingw32CCompiler will link with the MSVC runtime library, which is not
+    # just unnecessary, but will cause the libraries to fail to run
+
+    Mingw32CCompiler_init_old = Mingw32CCompiler.__init__
+
+    def __init__(self,*args,**kwds):
+        Mingw32CCompiler_init_old(self,*args,**kwds)
+        self.dll_libraries = []
+
+    Mingw32CCompiler.__init__ = __init__
+
+
 
 base_dir = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0,os.path.join(base_dir,'support'))
@@ -42,6 +59,7 @@ GCC_OPTIMIZE_COMPILE_ARGS = [
     '-fdelete-dead-exceptions']
 GCC_EXTRA_COMPILE_ARGS = [
     '-std=c++17',
+    '-fabi-version=0',
     '-fvisibility=hidden',
     '-fno-rtti',
     '-Wno-format',
@@ -234,22 +252,30 @@ class CustomBuildExt(build_ext):
             if c == 'unix':
                 cc = os.path.basename(self.compiler.compiler_so[0])
                 if 'clang' in cc:
-                    args = CLANG_EXTRA_COMPILE_ARGS + CLANG_OPTIMIZE_COMPILE_ARGS
+                    args,oargs = CLANG_EXTRA_COMPILE_ARGS,CLANG_OPTIMIZE_COMPILE_ARGS
                     default_cc = os.path.basename(sysconfig.get_config_var('CC'))
                     if 'gcc' in default_cc or 'g++' in default_cc:
                         self.compiler.compiler_so = [
                             arg for arg in self.compiler.compiler_so if arg not in GCC_TO_CLANG_FILTER]
                 elif 'gcc' in cc or 'g++' in cc:
-                    args = GCC_EXTRA_COMPILE_ARGS + GCC_OPTIMIZE_COMPILE_ARGS
+                    args,oargs = GCC_EXTRA_COMPILE_ARGS,GCC_OPTIMIZE_COMPILE_ARGS
                 else:
                     return False
             else:
-                args = GCC_EXTRA_COMPILE_ARGS + GCC_OPTIMIZE_COMPILE_ARGS
+                args,oargs = GCC_EXTRA_COMPILE_ARGS,GCC_OPTIMIZE_COMPILE_ARGS
 
+            py_debug = sysconfig.get_config_var('Py_DEBUG') == 1
             for e in self.extensions:
-                e.extra_compile_args = args
+                e.extra_compile_args = args + oargs
                 if not self.debug:
+                    e.extra_compile_args = args + oargs
                     e.extra_link_args = ['-s']
+
+                    # this is normally defined automatically, but not when
+                    # using Mingw32 under windows
+                    e.define_macros.append(('NDEBUG',1))
+                elif py_debug:
+                    e.extra_compile_args = args
             return True
 
         return False

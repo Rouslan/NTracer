@@ -364,54 +364,6 @@ namespace simd {
     #endif
     }
 
-    struct s_mask {
-        using raw_m_type = bool;
-        static constexpr size_t bit_granularity = 1;
-
-        raw_m_type data;
-
-        s_mask() = default;
-        explicit s_mask(raw_m_type val) : data{val} {}
-
-        FORCE_INLINE unsigned int to_bits() const {
-            return data ? 1 : 0;
-        }
-
-        FORCE_INLINE bool any() const { return data; }
-        FORCE_INLINE bool all() const { return data; }
-    };
-
-    template<typename T> struct scalar {
-        using mask = s_mask;
-        using item_t = T;
-
-        static constexpr size_t size = 1;
-
-        T data;
-
-        scalar() = default;
-        explicit scalar(T val) : data{val} {}
-
-        static FORCE_INLINE scalar zeros() { return scalar{0}; }
-        static FORCE_INLINE scalar repeat(T x) { return scalar{x}; }
-
-        static FORCE_INLINE scalar load(const T *vals) { return scalar{*vals}; }
-        static FORCE_INLINE scalar loadu(const T *vals) { return scalar{*vals}; }
-
-        FORCE_INLINE void store(T *dest) const { *dest = data; }
-        FORCE_INLINE void storeu(T *dest) const { *dest = data; }
-
-        T &operator[](size_t i) {
-            assert(i==0);
-            return data;
-        }
-
-        T operator[](size_t i) const {
-            assert(i==0);
-            return data;
-        }
-    };
-
     FORCE_INLINE bool l_andn(bool a,bool b) { return !a && b; }
     FORCE_INLINE bool l_xor(bool a,bool b) { return a != b; }
     FORCE_INLINE bool l_xnor(bool a,bool b) { return a == b; }
@@ -434,6 +386,75 @@ namespace simd {
     template<typename T> FORCE_INLINE bool cmp_nle(T a,T b) {
         return !(a.data <= b.data);
     }
+    template<typename T> FORCE_INLINE T mask_blend(bool m,T a,T b) {
+        return m ? a : b;
+    }
+    template<typename T> FORCE_INLINE T &mask_set(T &a,bool m,T b) {
+        if(m) a = b;
+        return a;
+    }
+
+    namespace detail {
+        template<typename T> struct _zeros {
+            FORCE_INLINE static T go() { return T(0); }
+        };
+    }
+    template<typename T> FORCE_INLINE T zeros() { return detail::_zeros<T>::go(); }
+
+    template<typename T> FORCE_INLINE T zfilter(bool m,T x) {
+        return m ? x : zeros<T>();
+    }
+
+    struct s_mask {
+        using raw_m_type = bool;
+        static constexpr size_t bit_granularity = 1;
+
+        raw_m_type data;
+
+        s_mask() = default;
+        explicit s_mask(raw_m_type val) : data{val} {}
+
+        FORCE_INLINE unsigned int to_bits() const {
+            return data ? 1 : 0;
+        }
+
+        FORCE_INLINE bool any() const { return data; }
+        FORCE_INLINE bool all() const { return data; }
+
+        static FORCE_INLINE s_mask zeros() { return s_mask{false}; }
+    };
+
+    template<typename T> struct scalar {
+        using mask = s_mask;
+        using item_t = T;
+
+        static constexpr size_t size = 1;
+        static constexpr bool has_vec_reduce_add = false;
+
+        T data;
+
+        scalar() = default;
+        explicit scalar(T val) : data{val} {}
+
+        static FORCE_INLINE scalar zeros() { return scalar{simd::zeros<T>()}; }
+        static FORCE_INLINE scalar repeat(T x) { return scalar{x}; }
+
+        static FORCE_INLINE scalar load(const T *vals) { return scalar{*vals}; }
+        static FORCE_INLINE scalar loadu(const T *vals) { return scalar{*vals}; }
+
+        FORCE_INLINE void store(T *dest) const { *dest = data; }
+        FORCE_INLINE void storeu(T *dest) const { *dest = data; }
+
+        T &operator[](size_t i) {
+            assert(i==0);
+            return data;
+        }
+
+        T operator[](size_t i) const {
+            assert(i==0);
+            return data;
+        }
+    };
 
     FORCE_INLINE s_mask operator&&(s_mask a,s_mask b) {
         return s_mask{a.data && b.data};
@@ -459,6 +480,16 @@ namespace simd {
         return s_mask{l_xnor(a.data,b.data)};
     }
 
+    template<typename T> FORCE_INLINE std::enable_if_t<!std::is_same_v<T,typename T::item_t>,scalar<T>> operator*(scalar<T> a,scalar<typename T::item_t> b) {
+        return scalar(a.data * b.data);
+    }
+    template<typename T> FORCE_INLINE std::enable_if_t<!std::is_same_v<T,typename T::item_t>,scalar<T>> operator*(scalar<typename T::item_t> a,scalar<T> b) {
+        return scalar(a.data * b.data);
+    }
+    template<typename T> FORCE_INLINE std::enable_if_t<!std::is_same_v<T,typename T::item_t>,scalar<T>&> operator *=(scalar<T> &a,scalar<typename T::item_t> b) {
+        a.data *= b.data;
+        return a;
+    }
     template<typename T> FORCE_INLINE scalar<T> operator*(scalar<T> a,T b) {
         return scalar<T>(a.data * b);
     }
@@ -470,6 +501,16 @@ namespace simd {
         return a;
     }
 
+    template<typename T> FORCE_INLINE std::enable_if_t<!std::is_same_v<T,typename T::item_t>,scalar<T>> operator/(scalar<T> a,scalar<typename T::item_t> b) {
+        return scalar(a.data / b.data);
+    }
+    template<typename T> FORCE_INLINE std::enable_if_t<!std::is_same_v<T,typename T::item_t>,scalar<T>> operator/(scalar<typename T::item_t> a,scalar<T> b) {
+        return scalar(a.data / b.data);
+    }
+    template<typename T> FORCE_INLINE std::enable_if_t<!std::is_same_v<T,typename T::item_t>,scalar<T>&> operator /=(scalar<T> &a,scalar<typename T::item_t> b) {
+        a.data /= b.data;
+        return a;
+    }
     template<typename T> FORCE_INLINE scalar<T> operator/(scalar<T> a,T b) {
         return scalar<T>(a.data / b);
     }
@@ -578,7 +619,23 @@ namespace simd {
         return (a == scalar<T>::zeros()).all();
     }
 
+    template<typename T> FORCE_INLINE scalar<T> mask_blend(s_mask m,scalar<T> a,scalar<T> b) {
+        return scalar<T>{mask_blend(m.data,a.data,b.data)};
+    }
+
+    template<typename T> FORCE_INLINE scalar<T> &mask_set(scalar<T> &a,s_mask m,scalar<T> b) {
+        mask_set(a.data,m.data,b.data);
+        return a;
+    }
+
+    template<typename T> FORCE_INLINE scalar<T> zfilter(s_mask m,scalar<T> x) {
+        return scalar<T>{zfilter(m.data,x.data)};
+    }
+
     namespace detail {
+        template<typename T> struct _zeros<scalar<T>> {
+            static FORCE_INLINE scalar<T> go() { return scalar<T>{zeros<T>()}; }
+        };
         template<typename T> struct _is_v_type : std::false_type {};
         template<typename T,size_t Size> struct _v_type {};
 
@@ -619,6 +676,14 @@ namespace simd {
 
         $v_mask() = default;
         explicit FORCE_INLINE $v_mask(raw_m_type val) : data{val} {}
+
+        static FORCE_INLINE $v_mask zeros() {
+//$ if have_avx512_mask(type,size)
+            return $v_mask(0);
+//$ else
+            return $v_mask{${setzero(raw_type(type,size))}()};
+//$ endif
+        }
 
         FORCE_INLINE mask_bit_t to_bits() const {
 //$ if have_avx512_mask(type,size)
@@ -709,6 +774,14 @@ namespace simd {
             using type = $v_type;
         };
         template<> struct _is_v_type<$v_type> : std::true_type {};
+
+        template<> struct _zeros<$v_type> {
+            static FORCE_INLINE $v_type go() { return $v_type::zeros(); }
+        };
+
+        template<> struct _zeros<$v_mask> {
+            static FORCE_INLINE $v_mask go() { return $v_mask::zeros(); }
+        };
     }
 
     FORCE_INLINE $v_mask operator&&($v_mask a,$v_mask b) {
@@ -1121,6 +1194,35 @@ namespace simd {
     FORCE_INLINE bool testz($v_type a) {
         return (a == $v_type::zeros()).all();
     }*/
+
+    FORCE_INLINE $v_type mask_blend($v_mask m,$v_type a,$v_type b) {
+//$ if have_avx512_mask(type,size)
+        return $v_type{${mask_blend(type,size)}(m.data,a.data.p,b.data.p)};
+//$ elif supported(blendv,type,size)
+        return $v_type{${blendv(type,size)}(a.data.p,b.data.p,m.data)};
+//$ else
+        return $v_type{${or_(raw_type(type,size))}(
+            ${and_(raw_type(type,size))}(m.data,a.data.p),
+            ${andnot(raw_type(type,size))}(m.data,b.data.p))};
+//$ endif
+    }
+
+    FORCE_INLINE $v_type &mask_set($v_type &a,$v_mask m,$v_type b) {
+//$ if have_avx512_mask(type,size)
+        a.data = ${mask_mov(type,size)}(a.data.p,m.data,b.data.p);
+//$ else
+        a = mask_blend(m,a,b);
+//$ endif
+        return a;
+    }
+
+    FORCE_INLINE $v_type zfilter($v_mask m,$v_type x) {
+//$ if have_avx512_mask(type,size)
+        return $v_type{${maskz_mov(type,size)}(m.data,x.data.p)};
+//$ else
+        return $v_type{${and_(raw_type(type,size))}(m.data,x.data.p)};
+//$ endif
+    }
 //$ endif
 //$ endfor
 
@@ -1237,6 +1339,7 @@ be slow enough to outweigh the benifit of using v_type<int64_t,2> */
     }
 
     inline void *aligned_alloc(size_t align,size_t size) {
+        assert(align % sizeof(void*) == 0);
         void *dest;
 #if defined(USE_POSIX)
         if(posix_memalign(&dest,align,size)) throw std::bad_alloc();

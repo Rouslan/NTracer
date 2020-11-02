@@ -19,7 +19,7 @@ protected:
     ~scene() = default;
 };
 
-struct obj_Scene {
+struct obj_Scene : virtual py::pyobj_subclass {
     CONTAINED_PYTYPE_DEF
     PyObject_HEAD
 
@@ -30,7 +30,7 @@ struct obj_Scene {
     }
 };
 
-struct color_obj_base {
+struct color_obj_base : py::pyobj_subclass {
 #ifdef RENDER_MODULE
     CONTAINED_PYTYPE_DEF
 #else
@@ -43,7 +43,7 @@ template<> struct _wrapped_type<color> {
     typedef simple_py_wrapper<color,color_obj_base> type;
 };
 
-struct material {
+struct material : py::pyobj_subclass {
 #ifdef RENDER_MODULE
     CONTAINED_PYTYPE_DEF
 #else
@@ -55,7 +55,7 @@ struct material {
     PyObject_HEAD
 
     material() {
-        PyObject_Init(reinterpret_cast<PyObject*>(this),pytype());
+        PyObject_Init(py::ref(this),pytype());
     }
 
     color c, specular;

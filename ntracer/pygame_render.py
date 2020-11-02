@@ -46,7 +46,7 @@ def channels_from_surface(surface):
     return channels
 
 
-# "Bases" is added manually instead of using :show-inheritance: because the it
+# "Bases" is added manually instead of using :show-inheritance: because it
 # doesn't link the base to its documentation for some reason
 class PygameRenderer(ntracer.render.CallbackRenderer):
     """Bases: :py:class:`.render.CallbackRenderer`

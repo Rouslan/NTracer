@@ -125,17 +125,21 @@ class NTracer(object):
             'KDLeaf',
             'KDBranch',
             'Primitive',
+            'PrimitiveBatch',
             'PrimitivePrototype',
             'Solid',
             'SolidPrototype',
             'Triangle',
+            'TriangleBatch',
             'TrianglePrototype',
+            'TriangleBatchPrototype',
             'PointLight',
             'GlobalLight',
             'dot',
             'cross',
             'build_kdtree',
-            'build_composite_scene']:
+            'build_composite_scene',
+            'BATCH_SIZE']:
             setattr(obj,n,getattr(mod,n))
         
         if not force_generic:

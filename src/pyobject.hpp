@@ -12,15 +12,38 @@
 
 
 namespace py {
+    /* We can't use C++ inheritance with PyObject so this is provided to
+       indicate which classes' pointers can be safely cast to PyObject* */
+    struct pyobj_subclass {};
+
+    struct pyobj_ptr {
+        PyObject *ptr;
+        pyobj_ptr() {}
+        pyobj_ptr(PyObject *ptr) : ptr(ptr) {}
+        pyobj_ptr(pyobj_subclass *ptr) : ptr(reinterpret_cast<PyObject*>(ptr)) {}
+
+        operator PyObject*() const { return ptr; }
+        operator bool() const { return ptr != nullptr; }
+    };
+
+    inline PyObject *ref(pyobj_ptr o) { return o; }
+
 
     // Exception-safe alternative to Py_BEGIN_ALLOW_THREADS and Py_END_ALLOW_THREADS
     class allow_threads {
 #ifdef WITH_THREAD
         PyThreadState *save;
     public:
-        allow_threads() { save = PyEval_SaveThread(); }
+        allow_threads() : save(PyEval_SaveThread()) {}
         ~allow_threads() { PyEval_RestoreThread(save); }
 #endif
+    };
+
+    class acquire_gil {
+        PyGILState_STATE gilstate;
+    public:
+        acquire_gil() : gilstate(PyGILState_Ensure()) {}
+        ~acquire_gil() { PyGILState_Release(gilstate); }
     };
 
     inline PyObject *check_obj(PyObject *o) {
@@ -28,43 +51,43 @@ namespace py {
         return o;
     }
 
-    inline PyObject *incref(PyObject *o) {
+    inline PyObject *incref(pyobj_ptr o) {
         assert(o);
-        Py_INCREF(o);
+        Py_INCREF(o.ptr);
         return o;
     }
 
-    inline PyObject *xincref(PyObject *o) {
-        Py_XINCREF(o);
+    inline PyObject *xincref(pyobj_ptr o) {
+        Py_XINCREF(o.ptr);
         return o;
     }
 
     /* wrapping it in a function prevents evaluating an expression more than
        once due to macro expansion */
-    inline void decref(PyObject *o) {
-        Py_DECREF(o);
+    inline void decref(pyobj_ptr o) {
+        Py_DECREF(o.ptr);
     }
 
     /* wrapping it in a function prevents evaluating an expression more than
        once due to macro expansion */
-    inline void xdecref(PyObject *o) {
-        Py_XDECREF(o);
+    inline void xdecref(pyobj_ptr o) {
+        Py_XDECREF(o.ptr);
     }
 
     struct borrowed_ref {
         PyObject *_ptr;
-        explicit borrowed_ref(PyObject *ptr) : _ptr(ptr) {}
+        explicit borrowed_ref(pyobj_ptr ptr) : _ptr(ptr) {}
     };
 
     struct new_ref {
         PyObject *_ptr;
-        explicit new_ref(PyObject *ptr) : _ptr(ptr) {}
+        explicit new_ref(pyobj_ptr ptr) : _ptr(ptr) {}
     };
 
     // alias for classes to use, that have new_ref function
     typedef new_ref _new_ref;
 
-    inline new_ref check_new_ref(PyObject *o) {
+    inline new_ref check_new_ref(pyobj_ptr o) {
         return new_ref(check_obj(o));
     }
 
@@ -124,7 +147,10 @@ namespace py {
         }
 
         ~_object_base() {
-            Py_DECREF(_ptr);
+            /* XDECREF is used instead of DECREF so that objects that were
+               allocated but not fully initialized can contain _object_base
+               instances and still be safely destroyed */
+            Py_XDECREF(_ptr);
         }
 
         void swap(_object_base &b) {
@@ -289,8 +315,21 @@ namespace py {
     inline void del(const object_item_proxy &item) {
         if(UNLIKELY(PyObject_DelItem(item._ptr,item.key) == -1)) throw py_error_set();
     }
+}
 
+inline PyObject *to_pyobject(py::new_ref r) {
+    return r._ptr;
+}
 
+inline PyObject *to_pyobject(py::borrowed_ref r) {
+    return py::incref(r._ptr);
+}
+
+inline PyObject *to_pyobject(const py::object &x) {
+    return x.new_ref();
+}
+
+namespace py {
     template<typename T> class nullable {
         PyObject *_ptr;
 
@@ -327,6 +366,10 @@ namespace py {
             Py_INCREF(b.ref());
             reset(b.ref());
             return *this;
+        }
+
+        ~nullable() {
+            Py_XDECREF(_ptr);
         }
 
         operator bool() const { return _ptr != nullptr; }
@@ -437,14 +480,12 @@ namespace py {
         explicit tuple(const _object_base &b) : _object_base(object(py::borrowed_ref(reinterpret_cast<PyObject*>(&PyTuple_Type)))(b)) {
             assert(PyTuple_Check(_ptr));
         }
-        tuple(std::initializer_list<object> ol) : tuple(ol.size()) {
-            auto li = std::begin(ol);
-            auto ti = &PyTuple_GET_ITEM(_ptr,0);
-
-            for(; li != std::end(ol); ++li, ++ti) {
-                *ti = li->new_ref();
+        template<typename T> tuple(T start,T end) : tuple(std::distance(start,end)) {
+            for(auto ti = &PyTuple_GET_ITEM(_ptr,0); start != end; ++start, ++ti) {
+                *ti = to_pyobject(*start);
             }
         }
+        tuple(std::initializer_list<object> ol) : tuple(std::begin(ol),std::end(ol)) {}
 
         tuple &operator=(const tuple &b) {
             reset(b._ptr);
@@ -800,6 +841,15 @@ namespace py {
             _obj = b._obj;
         }
 
+        pyptr &operator=(new_ref r) {
+            _obj = r;
+            return *this;
+        }
+        pyptr &operator=(borrowed_ref r) {
+            _obj = r;
+            return *this;
+        }
+
         T &operator*() const { return *get(); }
         T *operator->() const { return get(); }
 
@@ -962,7 +1012,7 @@ namespace py {
         };
 
         template<typename Item,const char* FullName,bool GC,bool ReadOnly> struct array_adapter_set_item {
-            static int _value(PyObject *self,Py_ssize_t index,PyObject *value) {
+            FIX_STACK_ALIGN static int _value(PyObject *self,Py_ssize_t index,PyObject *value) {
                 try {
                     reinterpret_cast<obj_array_adapter<Item,FullName,GC,ReadOnly>*>(self)->data.sequence_setitem(index,from_pyobject<Item>(value));
                 } PY_EXCEPT_HANDLERS(-1)
@@ -977,7 +1027,7 @@ namespace py {
     }
 
     template<typename Item,const char* FullName,bool GC,bool ReadOnly>
-    struct obj_array_adapter : impl::array_adapter_alloc<Item,FullName,GC,ReadOnly> {
+    struct obj_array_adapter : impl::array_adapter_alloc<Item,FullName,GC,ReadOnly>, pyobj_subclass {
         static PySequenceMethods seq_methods;
         CONTAINED_PYTYPE_DEF
         PyObject_HEAD
@@ -994,9 +1044,10 @@ namespace py {
         .sq_length = [](PyObject *self) {
             return reinterpret_cast<obj_array_adapter<Item,FullName,GC,ReadOnly>*>(self)->data.length();
         },
-        .sq_item = [](PyObject *self,Py_ssize_t index) -> PyObject* {
+        .sq_item = [](PyObject *self,Py_ssize_t index) FIX_STACK_ALIGN -> PyObject* {
             try {
-                return to_pyobject(reinterpret_cast<obj_array_adapter<Item,FullName,GC,ReadOnly>*>(self)->data.sequence_getitem(index));
+                return to_pyobject(reinterpret_cast<obj_array_adapter<Item,FullName,GC,ReadOnly>*>(self)
+                    ->data.sequence_getitem(index));
             } PY_EXCEPT_HANDLERS(nullptr)
         },
         .sq_ass_item = impl::array_adapter_set_item<Item,FullName,GC,ReadOnly>::value};
@@ -1091,14 +1142,6 @@ template<> inline py::bytes from_pyobject<py::bytes>(PyObject *o) {
         THROW_PYERR_STRING(TypeError,"object is not an instance of bytes");
 
     return py::borrowed_ref(o);
-}
-
-inline PyObject *to_pyobject(py::new_ref r) {
-    return r._ptr;
-}
-
-inline PyObject *to_pyobject(py::borrowed_ref r) {
-    return py::incref(r._ptr);
 }
 
 template<typename T> inline PyObject *to_pyobject(const py::pyptr<T> &x) {

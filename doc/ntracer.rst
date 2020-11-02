@@ -479,17 +479,18 @@ can't add a tuple and a :py:class:`Vector` together).
 
         :param primitive: The object to test intersection with. It must be an
             instance of :py:class:`PrimitivePrototype`, not
-            :py:class:`Primitive`.
+            :py:class:`Primitive`/:py:class:`PrimitiveBatch`.
             
     .. py:method:: intersects_flat(primitive,skip) -> boolean
     
         Returns True if the box intersects the given simplex, ignoring one axis.
         
         This method is identical to :py:meth:`intersects` except it only accepts
-        instances of :py:class:`TrianglePrototype` and it disregards the axis
-        ``skip``. This is equivalent to testing against a simplex that has been
-        extruded infinitely far in the positive and negative directions along
-        that axis. The simplex **must** be flat along that axis (i.e.
+        instances of :py:class:`TrianglePrototype` and
+        :py:class:`TriangleBatchPrototype` and it disregards the axis ``skip``.
+        This is equivalent to testing against a simplex that has been extruded
+        infinitely far in the positive and negative directions along that axis.
+        The simplex or batch of simplexes **must** be flat along that axis (i.e.
         :code:`primitive.boundary.start[skip] == primitive.boundary.end[skip]`
         must be true) for the return value to be correct.
         
@@ -498,8 +499,9 @@ can't add a tuple and a :py:class:`Vector` together).
         bounding box that the hyperplane divides.
         
         :param primitive: A simplex to test intersection with. It must be an
-            instance of :py:class:`TrianglePrototype`, not
-            :py:class:`Triangle`.
+            instance of :py:class:`TrianglePrototype` or
+            :py:class:`TriangleBatchPrototype`, not
+            :py:class:`Triangle`/:py:class:`TriangleBatch`.
         :param number skip: The axis to disregard when testing.
 
     .. py:method:: left(axis,split) -> AABB
@@ -965,6 +967,15 @@ can't add a tuple and a :py:class:`Vector` together).
     A k-d tree branch node.
 
     One of ``left`` and ``right`` may be ``None``, but not both.
+    
+    .. note:: In order to minimize the amount of space that k-d tree nodes take
+        up in memory (and therefore maximize the speed at which they can be
+        traversed), the nodes are not stored internally as Python objects nor
+        contain references to their Python representations. Accessing
+        :py:attr:`left` or :py:attr:`right` will cause a new Python object to be
+        created each time, to encapsulate the child node, therefore e.g. given
+        node ``n``: the satement ":code:`n.left is n.left`" will evaluate to
+        ``False``.
 
     :param integer axis: The axis that the split hyper-plane is perpendicular
         to.
@@ -1005,9 +1016,16 @@ can't add a tuple and a :py:class:`Vector` together).
 
     Instances of this class are read-only.
 
-    :param iterable primitives: A sequence of :py:class:`Primitive` objects.
+    :param iterable primitives: An iterable of :py:class:`Primitive` objects. If
+        :py:const:`BATCH_SIZE` is greater than ``1``, the iterable can also
+        yield instances of :py:class:`PrimitiveBatch`.
 
     .. py:method:: __getitem__(index)
+    
+        Return the ``index``'th primitive or primitive batch.
+        
+        Note that the order the primitives/batches are stored in will not
+        necessarily match the order given to the constructor.
 
         :code:`self.__getitem__(i)` <==> :code:`self[i]`
 
@@ -1018,6 +1036,8 @@ can't add a tuple and a :py:class:`Vector` together).
     .. py:attribute:: dimension
 
         The dimension of the primitives.
+        
+        All the primitives are required to have the same dimension.
 
 
 .. py:class:: KDNode
@@ -1026,49 +1046,52 @@ can't add a tuple and a :py:class:`Vector` together).
 
     This class cannot be instantiated directly in Python code.
 
-    .. py:method:: intersects(origin,direction[,t_near,t_far,source]) -> list
+    .. py:method:: intersects(origin,direction[,t_near,t_far,source,batch_index]) -> list
 
         Tests whether a given ray intersects.
 
-        The return value is a list containing one tuple for every intersection
-        that occured. Multiple intersections can occur when the ray passes
-        through primitives that have an opacity of less than one. Each tuple
-        will contain the distance between ``origin`` and the intersection, the
-        point of intersection, the normal of the surface intersected and the
-        intersected primitive itself. If an opaque primitive is intersected, it
-        will always be the last element and have the greatest distance, but
-        every other element will be in an arbitrary order and may contain
-        duplicates (this can happen when a primitive crosses a split pane). If
-        no intersection occurs, the return value will be an empty list.
+        The return value is a list containing an instance of
+        :py:class:`RayIntersection` for every intersection that occured.
+        Multiple intersections can occur when the ray passes through primitives
+        that have an opacity of less than one. If an opaque primitive is
+        intersected, it will always be the last element and have the greatest
+        distance, but every other element will be in an arbitrary order and may
+        contain duplicates (this can happen when a primitive crosses a split
+        pane). If no intersection occurs, the return value will be an empty
+        list.
 
         :param vector origin: The origin of the ray.
         :param vector direction: The direction of the ray.
         :param number t_near:
         :param number t_far:
-        :param source: A node that will not be considered for intersection.
-        :type source: :py:class:`KDNode`
+        :param source: A primitive that will not be considered for intersection.
+        :param integer batch_index: The index of the primitive inside the
+            primitive batch to ignore intersection with. If ``source`` is not an
+            instance of :py:class:`PrimitiveBatch`, this value is ignored.
+        :type source: :py:class:`Primitive` or :py:class:`PrimitiveBatch`
     
-    .. py:method:: occludes(origin,direction[,distance,t_near,t_far,source]) -> tuple
+    .. py:method:: occludes(origin,direction[,distance,t_near,t_far,source,batch_index]) -> tuple
 
         Test if :code:`origin + direction*distance` is occluded by any
         primitives.
         
         If an opaque object exists at any point along ``distance``, the return
         value is :code:`(True,None)`. Otherwise the return value is a tuple
-        containing ``False`` and an array that for every non-opaque primitive
-        found along ``distance``, contains a tuple with the distance between
-        ``origin`` and the intersection, the point of intersection, the normal
-        of the surface intersected and the intersected primitive itself. The
-        elements will be in an arbitrary order and may contain duplicates (this
-        can happen when a primitive crosses a split pane).
+        containing ``False`` and a list containing an instance of
+        :py:class:`RayIntersection` for every non-opaque primitive found along
+        ``distance``. The elements will be in an arbitrary order and may contain
+        duplicates (this can happen when a primitive crosses a split pane).
 
         :param vector origin: The origin of the ray.
         :param vector direction: The direction of the ray.
         :param number distance: How far out to check for intersections.
         :param number t_near:
         :param number t_far:
-        :param source: A node that will not be considered for intersection.
-        :type source: :py:class:`KDNode`
+        :param source: A primitive that will not be considered for intersection.
+        :param integer batch_index: The index of the primitive inside the
+            primitive batch to ignore intersection with. If ``source`` is not an
+            instance of :py:class:`PrimitiveBatch`, this value is ignored.
+        :type source: :py:class:`Primitive` or :py:class:`PrimitiveBatch`
 
 
 .. py:class:: Matrix(dimension,values)
@@ -1267,10 +1290,9 @@ can't add a tuple and a :py:class:`Vector` together).
 
         Tests whether a given ray intersects.
 
-        If the ray intersects with the object, a tuple is returned with the
-        distance between ``origin`` and the intersection, the point of
-        intersection and the normal vector of the surface at the intersection.
-        Otherwise, the return value is ``None``.
+        If the ray intersects with the object, an instance of
+        :py:class:`RayIntersection` is returned with the details of the
+        intersection. Otherwise, the return value is ``None``.
 
         :param origin: The origin of the ray.
         :param direction: The direction of the ray.
@@ -1280,23 +1302,85 @@ can't add a tuple and a :py:class:`Vector` together).
         The material of the primitive.
 
 
+.. py:class:: PrimitiveBatch
+
+    A batch of primitives with data rearranged for faster computation.
+
+    .. py:method:: intersects(origin,direction,index) -> tuple or None
+
+        Tests whether a given ray intersects.
+
+        If the ray intersects with the object, an instance of
+        :py:class:`RayIntersection` is returned with the details of the
+        intersection. Otherwise, the return value is ``None``.
+
+        :param origin: The origin of the ray.
+        :param direction: The direction of the ray.
+        :param integer index: The index specifying which primitive in the batch
+            should not be considered for intersection, or ``-1`` if all
+            primitives should be considered.
+        
+    .. py:attribute:: material
+    
+        A read-only sequence containing the materials of the primitives.
+
+
 .. py:class:: PrimitivePrototype
 
     A primitive with extra data needed for quick spacial partitioning.
 
     This class cannot be instantiated directly in Python code.
 
-    .. py:method:: primitive -> Primitive
-
-        The corresponding :py:class:`Primitive`.
-
     .. py:attribute:: boundary
 
         The :py:class:`AABB` of the primitive.
     
-    .. py:attribute:: material
+    .. py:attribute:: primitive
+
+        The corresponding :py:class:`Primitive` or :py:class:`PrimitiveBatch`.
+
+
+.. py:class:: RayIntersection(dist,origin,normal,primitive[,batch_index=-1])
+
+    The details of an intersection between a ray and a primitive.
     
-        The material of the primitive.
+    Instances of this class are read-only.
+    
+    :param number dist: The distance between the origin of the ray and the point
+        of intersection.
+    :param vector origin: The point where the ray intersected the primitive.
+    :param vector normal: The normal of the surface of the primitive at the
+        point of intersection.
+    :param primitive: The :py:class:`Primitive` or :py:class:`PrimitiveBatch`
+        that the ray intersected.
+    :param integer batch_index: The index indicating which primitive in the
+        batch was intersected or ``-1`` if the primitive is not an instance of
+        :py:class:`PrimitiveBatch`.
+    
+    .. py:attribute:: dist
+    
+        The distance between the origin of the ray and the point of
+        intersection.
+    
+    .. py:attribute:: origin
+    
+        The point where the ray intersected the primitive.
+    
+    .. py:attribute:: normal
+    
+        The normal of the surface of the primitive at the point of intersection.
+    
+    .. py:attribute:: primitive
+    
+        The :py:class:`Primitive` or :py:class:`PrimitiveBatch` that the ray
+        intersected.
+    
+    .. py:attribute:: batch_index
+    
+        The index indicating which primitive in the batch was intersected.
+        
+        If :py:attr:`primitive` is not an instance of :py:class:`PrimitiveBatch`
+        then this will have a value of ``-1``.
 
 
 .. py:class:: Solid(type,position,orientation,material)
@@ -1362,6 +1446,10 @@ can't add a tuple and a :py:class:`Vector` together).
     .. py:attribute:: inv_orientation
 
         The inverse of :py:attr:`orientation`
+    
+    .. py:attribute:: material
+    
+        The material of the primitive.
 
     .. py:attribute:: orientation
 
@@ -1434,9 +1522,91 @@ can't add a tuple and a :py:class:`Vector` together).
         point that's kept.
 
 
+.. py:class:: TriangleBatch(triangles)
+
+    Bases: :py:class:`PrimitiveBatch`
+    
+    A batch of simplexes with data rearranged for faster computation.
+
+    Instances of this class are read-only.
+    
+    :param triangles: An iterable yielding exactly :py:const:`BATCH_SIZE`
+        instances of :py:class:`Triangle`
+
+    .. py:method:: __getitem__(index)
+    
+        Extract the ``index``'th simplex.
+
+        :code:`self.__getitem__(i)` <==> :code:`self[i]`
+
+    .. py:method:: __len__()
+    
+        Return the number of simplexes in the batch.
+        
+        This is always equal :py:const:`BATCH_SIZE`.
+
+        :code:`self.__len__()` <==> :code:`len(self)`
+
+
+.. py:class:: TriangleBatchPointData
+
+    A read-only sequence of :py:class:`TriangleBatchPointDatum` instances.
+    
+    Instances of this class are read-only. This class cannot be instantiated
+    directly in Python code.
+
+    .. py:method:: __getitem__(index)
+
+        :code:`self.__getitem__(i)` <==> :code:`self[i]`
+
+    .. py:method:: __len__()
+
+        :code:`self.__len__()` <==> :code:`len(self)`
+
+
+.. py:class:: TriangleBatchPointDatum
+
+    Instances of this class are read-only. This class cannot be instantiated
+    directly in Python code.
+
+    .. py:attribute:: edge_normal
+
+    .. py:attribute:: point
+
+        Vertices of a batch of simplexes.
+
+
+.. py:class:: TriangleBatchPrototype(t_prototypes)
+
+    Bases: :py:class:`PrimitivePrototype`
+
+    A batch of simplexes with extra data needed for quick spacial partitioning.
+
+    This is the batch equivalent to :py:class:`TrianglePrototype`
+
+    Instances of this class are read-only.
+
+    :param t_prototypes: An iterable yielding exactly :py:const:`BATCH_SIZE`
+        instances of :py:class:`TrianglePrototype`.
+
+    .. py:attribute:: dimension
+
+        The dimension of the simplexes.
+        
+        This is a single value since the simplexes must all have the same
+        dimension.
+
+    .. py:attribute:: face_normal
+
+    .. py:attribute:: point_data
+
+
 .. py:class:: TrianglePointData
 
     A read-only sequence of :py:class:`TrianglePointDatum` instances.
+    
+    Instances of this class are read-only. This class cannot be instantiated
+    directly in Python code.
 
     .. py:method:: __getitem__(index)
 
@@ -1448,6 +1618,9 @@ can't add a tuple and a :py:class:`Vector` together).
 
 
 .. py:class:: TrianglePointDatum
+
+    Instances of this class are read-only. This class cannot be instantiated
+    directly in Python code.
 
     .. py:attribute:: edge_normal
 
@@ -1604,10 +1777,40 @@ can't add a tuple and a :py:class:`Vector` together).
         The dimension of the vector.
 
 
+.. py:class:: VectorBatch
+
+    A batch of vectors with data rearranged for faster computation.
+    
+    Instances of this class are read-only. This class cannot be instantiated
+    directly in Python code.
+
+    .. py:method:: __getitem__(index)
+    
+        Extract the ``index``'th vector from the batch.
+
+        :code:`self.__getitem__(i)` <==> :code:`self[i]`
+
+    .. py:method:: __len__()
+
+        Return the number of vectors in the batch.
+        
+        This should not be confused with the length of the vectors themselves.
+
+        This is always equal to :py:const:`BATCH_SIZE`.
+
+        :code:`self.__len__()` <==> :code:`len(self)`
+
+
 .. py:function:: build_composite_scene(primitives[,extra_threads=-1]) -> \
     CompositeScene
 
     Create a scene from a sequence of :py:class:`PrimitivePrototype` instances.
+    
+    If :py:const:`BATCH_SIZE` is greater than ``1``, instances of
+    :py:class:`TrianglePrototype` will be automatically merged into instances
+    of :py:class:`TriangleBatchPrototype`. If :py:const:`BATCH_SIZE` is equal to
+    ``1``, then ``primitives`` cannot contain any instances of
+    :py:class:`TriangleBatchPrototype`.
     
     By default, this will use all available processing cores to build the scene,
     but this can be controlled by passing a non-negative integer to
@@ -1631,6 +1834,12 @@ can't add a tuple and a :py:class:`Vector` together).
     tuple's values can be passed directly to :py:class:`CompositeScene` (which
     is exactly what :py:func:`build_composite_scene` does).
     
+    If :py:const:`BATCH_SIZE` is greater than ``1``, instances of
+    :py:class:`TrianglePrototype` will be automatically merged into instances
+    of :py:class:`TriangleBatchPrototype`. If :py:const:`BATCH_SIZE` is equal to
+    ``1``, then ``primitives`` cannot contain any instances of
+    :py:class:`TriangleBatchPrototype`.
+    
     By default, this will use all available processing cores to build the tree,
     but this can be controlled by passing a non-negative integer to
     ``extra_threads`` (a value of zero would make it run single-threaded). Note
@@ -1653,6 +1862,36 @@ can't add a tuple and a :py:class:`Vector` together).
 .. py:function:: dot(a,b) -> float
 
     Compute the dot product of two vectors.
+
+
+.. py:data:: BATCH_SIZE
+
+    The number of objects that batch objects group.
+    
+    On hardware that has SIMD registers, certain operations can be performed
+    more efficiently if data from multiple objects is rearranged so that every
+    numeric value is followed the equivalent value in the next object, up to the
+    number of values that a SIMD register can hold, thus the existence of
+    "batch" objects. This constant refers to the number of non-batch objects
+    that a batch object is equivalent to, as well as the number of
+    floating-point values that the largest SIMD register can hold. Note that
+    even if run on a machine that has larger registers, the ray tracer will only
+    be able to take advantage of the largest registers of the instruction set
+    that this package was compiled for (when compiling from source, the latest
+    instruction set that the current machine supports, is chosen by default).
+    
+    The source code of this package supports SSE and AVX. If this package is
+    compiled for an instruction set that supports neither of these technologies,
+    ``BATCH_SIZE`` will be equal to ``1``. In such a case, :py:class:`KDLeaf`
+    wont even support instances of :py:class:`PrimitiveBatch` (passing instances
+    of :py:class:`PrimitiveBatch` to its constructor will cause and exception to
+    be raised) so that the ray tracer can be streamlined. The batch classes will
+    still exist, however, for the sake of testing compatibility.
+    
+    Most users will not have to worry about the value of ``BATCH_SIZE`` or batch
+    objects since :py:func:`build_composite_scene` (and :py:func:`build_kdtree`)
+    will automatically combine instances of :py:class:`TrianglePrototype` into
+    :py:class:`TriangleBatchPrototype` when beneficial.
 
 
 

@@ -2,6 +2,7 @@
 #define var_geometry_hpp
 
 #include <algorithm>
+#include <new>
 
 #include "geometry.hpp"
 
@@ -66,7 +67,9 @@ namespace var {
         typedef simd::v_type<T,Width/sizeof(T)> *type;
     };
 
-    template<typename T,bool=std::is_arithmetic_v<T> || simd::is_v_type<T>> struct item_array_repr {
+    template<typename RealItems,typename T> struct item_array {
+        static const int max_items = std::numeric_limits<int>::max();
+
         union {
             T *raw;
             simd::scalar<T> *s;
@@ -93,16 +96,6 @@ namespace var {
         template<size_t Size> FORCE_INLINE auto vec(size_t n) const {
             return _vec<Size>(*this,n);
         }
-    };
-
-    template<typename T> struct item_array_repr<T,false> {
-        struct {
-            T *raw;
-        } items;
-    };
-
-    template<typename RealItems,typename T> struct item_array : item_array_repr<T> {
-        static const int max_items = std::numeric_limits<int>::max();
 
         explicit item_array(int d) : size(d) {
             allocate();
@@ -110,11 +103,11 @@ namespace var {
 
         item_array(const item_array &b) : size(b.size) {
             allocate();
-            memcpy(this->items.raw,b.items.raw,RealItems::get(size) * sizeof(T));
+            memcpy(items.raw,b.items.raw,RealItems::get(size) * sizeof(T));
         }
 
         item_array(item_array &&b) : size(b.size) {
-            this->items.raw = b.items.raw;
+            items.raw = b.items.raw;
             b.items.raw = nullptr;
         }
 
@@ -126,7 +119,7 @@ namespace var {
             deallocate();
             size = b.size;
             allocate();
-            memcpy(this->items.raw,b.items.raw,RealItems::get(size) * sizeof(T));
+            memcpy(items.raw,b.items.raw,RealItems::get(size) * sizeof(T));
 
             return *this;
         }
@@ -134,7 +127,7 @@ namespace var {
         item_array &operator=(item_array &&b) noexcept {
             deallocate();
             size = b.size;
-            this->items.raw = b.items.raw;
+            items.raw = b.items.raw;
             b.items.raw = nullptr;
             return *this;
         }
@@ -151,19 +144,20 @@ namespace var {
     private:
         void allocate() {
             assert(size > 0);
+            const size_t min_align = simd::largest_fit<T>(size) * sizeof(T);
 
-            if(simd::v_sizes<T>::value[0] == 1) {
-                if(!(this->items.raw = reinterpret_cast<T*>(malloc(RealItems::get(size) * sizeof(T))))) throw std::bad_alloc();
+            if(min_align <= __STDCPP_DEFAULT_NEW_ALIGNMENT__) {
+                items.raw = reinterpret_cast<T*>(::operator new(RealItems::get(size) * sizeof(T)));
             } else {
-                this->items.raw = reinterpret_cast<T*>(simd::aligned_alloc(
-                    simd::largest_fit<T>(size) * sizeof(T),
-                    RealItems::get(size) * sizeof(T)));
+                items.raw = reinterpret_cast<T*>(::operator new(RealItems::get(size) * sizeof(T),std::align_val_t{min_align}));
             }
         }
 
         void deallocate() {
-            if(simd::v_sizes<T>::value[0] == 1) free(this->items.raw);
-            else simd::aligned_free(this->items.raw);
+            const size_t min_align = simd::largest_fit<T>(size) * sizeof(T);
+
+            if(min_align <= __STDCPP_DEFAULT_NEW_ALIGNMENT__) ::operator delete(items.raw);
+            else ::operator delete(items.raw,std::align_val_t{min_align});
         }
 
         int size;
@@ -172,7 +166,7 @@ namespace var {
     template<typename T> struct item_store {
         typedef T item_t;
 
-        static int v_dimension(int d) {
+        template<typename U=T> static int v_dimension(int d) {
             return d;
         }
 

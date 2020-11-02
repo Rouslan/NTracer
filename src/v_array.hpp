@@ -34,36 +34,36 @@ namespace impl {
 
     template<typename F> using v_sizes = simd::v_sizes<s_item_t<F>>;
 
-    template<typename F,size_t SI> FORCE_INLINE void _v_rep(size_t n,size_t pad_n,size_t i,F f) {
+    template<typename F,size_t SI> void _v_rep(size_t n,size_t i,F f) {
         constexpr int size = simd::v_sizes<typename F::item_t>::value[SI];
         if constexpr(F::v_score >= V_SCORE_THRESHHOLD && size > 1) {
             if constexpr(F::max_items >= size) {
                 static const size_t size = simd::v_sizes<typename F::item_t>::value[SI];
-                for(; i<(pad_n - (size - 1)); i+= size) f.template operator()<size>(i);
+                for(; long(i)<(long(n) - (long(size) - 1)); i+= size) f.template operator()<size>(i);
             }
 
-            _v_rep<F,SI+1>(n,pad_n,i,f);
+            _v_rep<F,SI+1>(n,i,f);
         } else {
             for(; i<n; ++i) f.template operator()<1>(i);
         }
     }
 
-    template<typename F> FORCE_INLINE void v_rep(size_t n,size_t pad_n,F f) {
+    template<typename F> FORCE_INLINE void v_rep(size_t n,F f) {
         assert(n != VSIZE_MAX);
-        _v_rep<F,0>(n,pad_n,0,f);
+        _v_rep<F,0>(n,0,f);
     }
 
 
-    template<typename F,size_t SI> FORCE_INLINE bool _v_rep_until(size_t n,size_t pad_n,size_t i,F f) {
+    template<typename F,size_t SI> bool _v_rep_until(size_t n,size_t i,F f) {
         constexpr int size = simd::v_sizes<typename F::item_t>::value[SI];
         if constexpr(F::v_score >= V_SCORE_THRESHHOLD && size > 1) {
             if constexpr(F::max_items >= size) {
-                for(; i<(pad_n - (size - 1)); i+= size) {
+                for(; long(i)<(long(n) - (long(size) - 1)); i+= size) {
                     if(f.template operator()<size>(i)) return true;
                 }
             }
 
-            return _v_rep_until<F,SI+1>(n,pad_n,i,f);
+            return _v_rep_until<F,SI+1>(n,i,f);
         } else {
             for(; i<n; ++i) {
                 if(f.template operator()<1>(i)) return true;
@@ -72,9 +72,9 @@ namespace impl {
         }
     }
 
-    template<typename F> FORCE_INLINE bool v_rep_until(size_t n,size_t pad_n,F f) {
+    template<typename F> FORCE_INLINE bool v_rep_until(size_t n,F f) {
         assert(n != VSIZE_MAX);
-        return _v_rep_until<F,0>(n,pad_n,0,f);
+        return _v_rep_until<F,0>(n,0,f);
     }
 
 
@@ -124,12 +124,6 @@ namespace impl {
             return F(a); \
         } \
     }
-#define NCMP_FUNC(NAME,F,INT_OP) struct NAME { \
-        template<typename A> static FORCE_INLINE auto op(A a,A b) { \
-            if constexpr(std::is_floating_point_v<typename A::item_t>) return F(a,b); \
-            else return a INT_OP b; \
-        } \
-    }
 
     BINARY_EQ_OP(op_subtract,-);
     BINARY_EQ_OP(op_multiply,*);
@@ -143,10 +137,10 @@ namespace impl {
     BINARY_OP(op_ge,>=);
     BINARY_OP(op_lt,<);
     BINARY_OP(op_le,<=);
-    NCMP_FUNC(op_ngt,simd::cmp_ngt,<=);
-    NCMP_FUNC(op_nge,simd::cmp_nge,<);
-    NCMP_FUNC(op_nlt,simd::cmp_nlt,>=);
-    NCMP_FUNC(op_nle,simd::cmp_nle,>);
+    BINARY_FUNC(op_ngt,simd::cmp_ngt);
+    BINARY_FUNC(op_nge,simd::cmp_nge);
+    BINARY_FUNC(op_nlt,simd::cmp_nlt);
+    BINARY_FUNC(op_nle,simd::cmp_nle);
     BINARY_OP(op_l_and,&&);
     BINARY_OP(op_l_or,||);
     UNARY_OP(op_l_not,!);
@@ -161,7 +155,6 @@ namespace impl {
 #undef BINARY_FUNC
 #undef UNARY_OP
 #undef UNARY_FUNC
-#undef NCMP_FUNC
 
     struct op_max {
         template<typename T> static FORCE_INLINE T op(T a,T b) {
@@ -217,7 +210,7 @@ namespace impl {
         std::tuple<v_expr_store<T>...> values;
 
         size_t _size() const { return std::get<0>(values)._size(); }
-        size_t _v_size() const { return std::get<0>(values)._v_size(); }
+        static constexpr bool supports_padding = (true && ... && T::supports_padding);
 
         template<size_t Size> FORCE_INLINE v_item_t<v_op_expr,Size> vec(size_t n) const {
             return std::apply(
@@ -241,7 +234,7 @@ namespace impl {
         F f;
 
         size_t _size() const { return a._size(); }
-        size_t _v_size() const { return a._v_size(); }
+        static constexpr bool supports_padding = T::supports_padding;
 
         template<size_t Size> FORCE_INLINE v_item_t<v_apply,Size> vec(size_t n) const {
             return a.template vec<Size>(n).apply(f);
@@ -263,7 +256,7 @@ namespace impl {
         T value;
 
         size_t _size() const { return size_; }
-        size_t _v_size() const { return VSIZE_MAX; }
+        static constexpr bool supports_padding = true;
 
         template<size_t Size> FORCE_INLINE simd::v_type<T,Size> vec(size_t n) const {
             return simd::v_type<T,Size>::repeat(value);
@@ -286,6 +279,9 @@ namespace impl {
 
         explicit v_array(int s) : store(s) {}
 
+        v_array(const v_array&) = default;
+        v_array(v_array &&b) : store(std::move(b.store)) {}
+
         template<typename F> v_array(int s,F f) : store(s) {
             fill_with(f);
         }
@@ -294,10 +290,28 @@ namespace impl {
             fill_with(b);
         }
 
+        v_array &operator=(const v_array&) = default;
+        v_array &operator=(v_array &&b) {
+            store = std::move(b.store);
+            return *this;
+        }
+
         template<typename B> FORCE_INLINE v_array &operator=(const v_expr<B> &b) {
-            assert(_size() == b.size());
             fill_with(b);
             return *this;
+        }
+
+        template<typename B> size_t padded_size_with(const v_expr<B> &b) const {
+            assert(_size() == b.size());
+            if constexpr(B::supports_padding) {
+                return Store::template v_dimension<T>(_size());
+            } else {
+                return _size();
+            }
+        }
+
+        size_t padded_size() const {
+            return Store::template v_dimension<T>(_size());
         }
 
         template<typename Op,typename B> struct _v_compound {
@@ -313,50 +327,43 @@ namespace impl {
             }
         };
         template<typename B> v_array &operator+=(const v_expr<B> &b) {
-            assert(b.v_size() >= _v_size());
-            v_rep(_size(),_v_size(),_v_compound<op_add,B>{*this,b});
+            v_rep(padded_size_with(b),_v_compound<op_add,B>{*this,b});
             return *this;
         }
         template<typename B> v_array &operator-=(const v_expr<B> &b) {
-            assert(b.v_size() >= _v_size());
-            v_rep(_size(),_v_size(),_v_compound<op_subtract,B>{*this,b});
+            v_rep(padded_size_with(b),_v_compound<op_subtract,B>{*this,b});
             return *this;
         }
         template<typename B> v_array &operator*=(const v_expr<B> &b) {
-            assert(b.v_size() >= _v_size());
-            v_rep(_size(),_v_size(),_v_compound<op_multiply,B>{*this,b});
+            v_rep(padded_size_with(b),_v_compound<op_multiply,B>{*this,b});
             return *this;
         }
         v_array &operator*=(T b) {
-            v_rep(_size(),_v_size(),_v_compound<op_multiply,v_repeat<T>>{*this,v_repeat<T>{_size(),b}});
+            v_rep(padded_size(),_v_compound<op_multiply,v_repeat<T>>{*this,v_repeat<T>{_size(),b}});
             return *this;
         }
         template<typename B> v_array &operator/=(const v_expr<B> &b) {
-            assert(b.v_size() >= _v_size());
-            v_rep(_size(),_v_size(),_v_compound<op_divide,B>{*this,b});
+            v_rep(padded_size_with(b),_v_compound<op_divide,B>{*this,b});
             return *this;
         }
         v_array &operator/=(T b) {
 #ifdef MULT_RECIPROCAL_INSTEAD_OF_DIV
             return operator*=(1/b);
 #else
-            v_rep(_size(),_v_size(),_v_compound<op_divide,v_repeat<T>>{*this,v_repeat<T>{_size(),b}});
+            v_rep(padded_size(),_v_compound<op_divide,v_repeat<T>>{*this,v_repeat<T>{_size(),b}});
             return *this;
 #endif
         }
         template<typename B> v_array &operator&=(const v_expr<B> &b) {
-            assert(b.v_size() >= _v_size());
-            v_rep(_size(),_v_size(),_v_compound<op_and,B>{*this,b});
+            v_rep(padded_size_with(b),_v_compound<op_and,B>{*this,b});
             return *this;
         }
         template<typename B> v_array &operator|=(const v_expr<B> &b) {
-            assert(b.v_size() >= _v_size());
-            v_rep(_size(),_v_size(),_v_compound<op_or,B>{*this,b});
+            v_rep(padded_size_with(b),_v_compound<op_or,B>{*this,b});
             return *this;
         }
         template<typename B> v_array &operator^=(const v_expr<B> &b) {
-            assert(b.v_size() >= _v_size());
-            v_rep(_size(),_v_size(),_v_compound<op_xor,B>{*this,b});
+            v_rep(padded_size_with(b),_v_compound<op_xor,B>{*this,b});
             return *this;
         }
 
@@ -365,7 +372,7 @@ namespace impl {
         }
 
         size_t _size() const { return store.dimension(); }
-        size_t _v_size() const { return Store::v_dimension(_size()); }
+        static constexpr bool supports_padding = true;
 
         void fill_with(T v) {
             for(size_t i=0; i<_size(); ++i) (*this)[i] = v;
@@ -384,16 +391,21 @@ namespace impl {
             }
         };
         template<typename B> void fill_with(const v_expr<B> &b) {
-            assert(b.v_size() >= _v_size());
-            v_rep(_size(),_v_size(),_v_assign<B>{*this,b});
+            v_rep(padded_size_with(b),_v_assign<B>{*this,b});
         }
 
         template<typename F,typename=decltype(std::declval<F>()(std::declval<size_t>()))> void fill_with(F f) {
             for(size_t i=0; i<_size(); ++i) (*this)[i] = f(i);
         }
 
-        T &operator[](size_t n) { return store.items.raw[n]; }
-        T operator[](size_t n) const { return store.items.raw[n]; }
+        T &operator[](size_t n) {
+            assert(n < padded_size());
+            return store.items.raw[n];
+        }
+        T operator[](size_t n) const {
+            assert(n < padded_size());
+            return store.items.raw[n];
+        }
 
         T *data() { return store.items.raw; }
         const T *data() const { return store.items.raw; }
@@ -449,8 +461,9 @@ namespace impl {
         }
 
         auto r = Op::template first<v_item_t<T,v_sizes<T>::value[0]>>();
-        // v_size is not used because we don't want to include the pad value
-        v_rep(a.size(),a.size(),v_reduce<Op,T>{r,r_small,a});
+        /* padded_size is not used because we don't want to include the pad
+           values */
+        v_rep(a.size(),v_reduce<Op,T>{r,r_small,a});
         return Op::op(Op::reduce(r),r_small[0]);
     }
 
@@ -561,7 +574,7 @@ namespace impl {
         }
     };
     template<typename T> inline bool v_bool_expr<T>::any() const {
-        return v_rep_until(size(),size(),impl::_v_any<T>{*this});
+        return v_rep_until(size(),impl::_v_any<T>{*this});
     }
 
     template<typename T> struct _v_not_all {
@@ -576,7 +589,7 @@ namespace impl {
         }
     };
     template<typename T> inline bool v_bool_expr<T>::all() const {
-        return !v_rep_until(size(),size(),impl::_v_not_all<T>{*this});
+        return !v_rep_until(size(),impl::_v_not_all<T>{*this});
     }
 
 
@@ -585,7 +598,6 @@ namespace impl {
         operator const T &() const { return *static_cast<const T*>(this); }
 
         size_t size() const { return static_cast<const T*>(this)->_size(); }
-        size_t v_size() const { return static_cast<const T*>(this)->_v_size(); }
 
         template<typename B> v_op_expr<op_add,T,B> operator+(const v_expr<B> &b) const {
             assert(size() == b.size());
