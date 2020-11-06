@@ -398,15 +398,6 @@ namespace impl {
             for(size_t i=0; i<_size(); ++i) (*this)[i] = f(i);
         }
 
-        T &operator[](size_t n) {
-            assert(n < padded_size());
-            return store.items.raw[n];
-        }
-        T operator[](size_t n) const {
-            assert(n < padded_size());
-            return store.items.raw[n];
-        }
-
         T *data() { return store.items.raw; }
         const T *data() const { return store.items.raw; }
 
@@ -676,6 +667,15 @@ namespace impl {
         template<typename B> v_comparison<op_le,T,B> operator<=(const v_expr<B> &b) const {
             assert(size() == b.size());
             return {*this,b};
+        }
+
+        s_item_t<T> &operator[](size_t n) {
+            assert(n < size());
+            return static_cast<T*>(this)->template vec<1>(n)[0];
+        }
+        s_item_t<T> operator[](size_t n) const {
+            assert(n < size());
+            return static_cast<const T*>(this)->template vec<1>(n)[0];
         }
 
         template<typename F> v_apply<T,F> apply(F f) const {

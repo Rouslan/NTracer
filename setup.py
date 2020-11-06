@@ -54,8 +54,6 @@ GCC_OPTIMIZE_COMPILE_ARGS = [
     '-fno-enforce-eh-specs',
     '-fnothrow-opt',
     '-march=native',
-    '--param','large-function-growth=500',
-    '--param','inline-unit-growth=1000',
     '-fdelete-dead-exceptions']
 GCC_EXTRA_COMPILE_ARGS = [
     '-std=c++17',
@@ -264,7 +262,7 @@ class CustomBuildExt(build_ext):
             else:
                 args,oargs = GCC_EXTRA_COMPILE_ARGS,GCC_OPTIMIZE_COMPILE_ARGS
 
-            py_debug = sysconfig.get_config_var('Py_DEBUG') == 1
+            py_debug = False#sysconfig.get_config_var('Py_DEBUG') == 1
             for e in self.extensions:
                 e.extra_compile_args = args + oargs
                 if not self.debug:
@@ -276,6 +274,9 @@ class CustomBuildExt(build_ext):
                     e.define_macros.append(('NDEBUG',1))
                 elif py_debug:
                     e.extra_compile_args = args
+                else:
+                    e.extra_compile_args = args + oargs
+                    e.define_macros.append(('NDEBUG',1))
             return True
 
         return False

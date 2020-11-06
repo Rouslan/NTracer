@@ -38,7 +38,7 @@ typedef simd::v_type<real> v_real;
 const int KD_DEFAULT_MAX_DEPTH = v_real::size > 1 ? 25 : 18;
 
 // only split nodes if there are more than this many primitives
-const int KD_DEFAULT_SPLIT_THRESHOLD = v_real::size > 1 ? 5 : 2;
+const int KD_DEFAULT_SPLIT_THRESHOLD = 2;
 
 
 template<typename Store> class ray {
@@ -62,26 +62,32 @@ template<typename Store> class box_scene : public scene {
 public:
     size_t locked;
     real fov;
+    real fovI;
+    real half_w,half_h;
 
     camera<Store> cam;
 
     box_scene(int d) : locked(0), fov(0.8), cam(d) {}
 
-    color calculate_color(int x,int y,int w,int h) const {
-        real fovI = (2 * std::tan(fov/2)) / w;
+    void set_view_size(int w,int h) {
+        half_w = w/real(2);
+        half_h = h/real(2);
+        fovI = (2 * std::tan(fov/2)) / w;
+    }
 
+    color calculate_color(int x,int y) const {
         ray<Store> view = ray<Store>(
             cam.origin,
-            (cam.forward() + cam.right() * (fovI * (x - w/2)) - cam.up() * (fovI * (y - h/2))).unit());
+            (cam.forward() + cam.right() * (fovI * (x - half_w)) - cam.up() * (fovI * (y - half_h))).unit());
         ray<Store> normal(dimension());
         if(hypercube_intersects<Store>(view,normal)) {
             real sine = dot(view.direction,normal.direction);
-            return (sine <= 0 ? -sine : real(0)) * color(1.0f,0.5f,0.5f);
+            return (sine <= 0 ? -sine : real(0)) * color(1,0.5,0.5);
         }
 
         real intensity = dot(view.direction,vector<Store>::axis(dimension(),0));
         return intensity > 0 ? color(intensity,intensity,intensity) :
-            color(0.0f,-intensity,-intensity);
+            color(0,-intensity,-intensity);
     }
 
     int dimension() const { return cam.dimension(); }
@@ -704,9 +710,6 @@ template<typename Store> struct kd_node {
        manually */
     node_type type;
 
-    bool intersects(const ray<Store> &target,intersection_target<Store> skip,ray_intersection<Store> &o_hit,ray_intersections<Store> &hits,real t_near,real t_far) const;
-    bool occludes(const ray<Store> &target,real ldistance,intersection_target<Store> skip,ray_intersections<Store> &hits,real t_near,real t_far) const;
-
 protected:
     kd_node(node_type type) : type(type) {}
     ~kd_node() = default;
@@ -730,88 +733,6 @@ template<typename Store> struct kd_branch : kd_node<Store> {
 
     kd_branch(int axis,real split,kd_node_unique_ptr<Store> &&left,kd_node_unique_ptr<Store> &&right) :
         kd_node<Store>(BRANCH), axis(axis), split(split), left(std::move(left)), right(std::move(right)) {}
-
-    bool intersects(const ray<Store> &target,intersection_target<Store> skip,ray_intersection<Store> &o_hit,ray_intersections<Store> &t_hits,real t_near,real t_far) const {
-        assert(target.dimension() == o_hit.normal.dimension());
-
-        if(target.direction[axis]) {
-            if(target.origin[axis] == split) {
-                auto node = (target.direction[axis] > 0 ? right : left).get();
-                return node && node->intersects(target,skip,o_hit,t_hits,t_near,t_far);
-            }
-
-            real t = (split - target.origin[axis]) / target.direction[axis];
-
-            auto n_near = left.get();
-            auto n_far = right.get();
-            if(target.origin[axis] > split) {
-                n_near = right.get();
-                n_far = left.get();
-            }
-
-            if(t < 0 || t > t_far) return n_near && n_near->intersects(target,skip,o_hit,t_hits,t_near,t_far);
-            if(t < t_near) return n_far && n_far->intersects(target,skip,o_hit,t_hits,t_near,t_far);
-
-            if(n_near) {
-                size_t h_start = t_hits.size();
-                bool hit = n_near->intersects(target,skip,o_hit,t_hits,t_near,t);
-                if((hit && o_hit.dist <= t) || !n_far) return hit;
-
-                if(hit) {
-                    /* If dist is greater than t, the intersection was in a
-                       farther division (a primitive can span multiple
-                       divisions) and a closer primitive may exist, but if the
-                       intersection is with a primitive that is embedded in the
-                       split plane, dist can also be greater than t due to an
-                       error from limited precision, so we can't assume the
-                       primitive is also in t_far. */
-
-                    ray_intersection<Store> new_hit(target.dimension());
-                    if(n_far->intersects(target,skip,new_hit,t_hits,t,t_far) && new_hit.dist < o_hit.dist) o_hit = new_hit;
-                    trim_intersections(t_hits,o_hit.dist,h_start);
-                    return true;
-                }
-            }
-
-            assert(n_far);
-            return n_far->intersects(target,skip,o_hit,t_hits,t,t_far);
-        }
-
-        auto node = (target.origin[axis] >= split ? right : left).get();
-        return node && node->intersects(target,skip,o_hit,t_hits,t_near,t_far);
-    }
-
-    bool occludes(const ray<Store> &target,real ldistance,intersection_target<Store> skip,ray_intersections<Store> &hits,real t_near,real t_far) const {
-        if(target.direction[axis]) {
-            if(target.origin[axis] == split) {
-                auto node = (target.direction[axis] > 0 ? right : left).get();
-                return node && node->occludes(target,ldistance,skip,hits,t_near,t_far);
-            }
-
-            real t = (split - target.origin[axis]) / target.direction[axis];
-
-            auto n_near = left.get();
-            auto n_far = right.get();
-            if(target.origin[axis] > split) {
-                n_near = right.get();
-                n_far = left.get();
-            }
-
-            if(t < 0 || t > t_far) return n_near && n_near->occludes(target,ldistance,skip,hits,t_near,t_far);
-            if(t < t_near) return n_far && n_far->occludes(target,ldistance,skip,hits,t_near,t_far);
-
-            if(n_near) {
-                if(n_near->occludes(target,ldistance,skip,hits,t_near,t)) return true;
-                if(!n_far) return false;
-            }
-
-            assert(n_far);
-            return t < ldistance && n_far->occludes(target,ldistance,skip,hits,t,t_far);
-        }
-
-        auto node = (target.origin[axis] >= split ? right : left).get();
-        return node && node->occludes(target,ldistance,skip,hits,t_near,t_far);
-    }
 };
 
 template<typename Store,bool Batched=(v_real::size>1)> struct kd_leaf : kd_node<Store>, flexible_struct<kd_leaf<Store,Batched>,py::pyptr<primitive<Store> > > {
@@ -1088,24 +1009,127 @@ private:
     }
 };
 
-template<typename Store> bool kd_node<Store>::intersects(const ray<Store> &target,intersection_target<Store> skip,ray_intersection<Store> &o_hit,ray_intersections<Store> &t_hits,real t_near,real t_far) const {
-    if(type == LEAF) {
-        bool r = static_cast<const kd_leaf<Store>*>(this)->intersects(target,skip,o_hit,t_hits);
-        assert(!r || o_hit.target.p);
-        return r;
-    }
+template<typename Store> bool _intersects(const kd_node<Store> *node,const ray<Store> &target,const vector<Store> &invdir,intersection_target<Store> skip,ray_intersection<Store> &o_hit,ray_intersections<Store> &t_hits,real t_near,real t_far) {
+    while(node) {
+        if(node->type == LEAF) {
+            bool r = static_cast<const kd_leaf<Store>*>(node)->intersects(target,skip,o_hit,t_hits);
+            assert(!r || o_hit.target.p);
+            return r;
+        }
 
-    assert(type == BRANCH);
-    bool r = static_cast<const kd_branch<Store>*>(this)->intersects(target,skip,o_hit,t_hits,t_near,t_far);
-    assert(!r || o_hit.target.p);
-    return r;
+        assert(node->type == BRANCH);
+        assert(target.dimension() == o_hit.normal.dimension());
+        auto bnode = static_cast<const kd_branch<Store>*>(node);
+
+        if(target.direction[bnode->axis]) {
+            if(target.origin[bnode->axis] == bnode->split) {
+                node = (target.direction[bnode->axis] > 0 ? bnode->right : bnode->left).get();
+                continue;
+            }
+
+            real t = (bnode->split - target.origin[bnode->axis]) * invdir[bnode->axis];
+
+            auto n_near = target.origin[bnode->axis] > bnode->split ? bnode->right.get() : bnode->left.get();
+            auto n_far = target.origin[bnode->axis] > bnode->split ? bnode->left.get() : bnode->right.get();
+
+            if(t < 0 || t > t_far) {
+                node = n_near;
+                continue;
+            }
+            if(t < t_near) {
+                node = n_far;
+                continue;
+            }
+
+            if(n_near) {
+                size_t h_start = t_hits.size();
+                bool hit = _intersects(n_near,target,invdir,skip,o_hit,t_hits,t_near,t);
+                if((hit && o_hit.dist <= t) || !n_far) return hit;
+
+                if(hit) {
+                    /* If dist is greater than t, the intersection was in a
+                       farther division (a primitive can span multiple
+                       divisions) and a closer primitive may exist, but if the
+                       intersection is with a primitive that is embedded in the
+                       split plane, dist can also be greater than t due to an
+                       error from limited precision, so we can't assume the
+                       primitive is also in t_far. */
+
+                    ray_intersection<Store> new_hit(target.dimension());
+                    if(_intersects(n_far,target,invdir,skip,new_hit,t_hits,t,t_far) && new_hit.dist < o_hit.dist) o_hit = new_hit;
+                    trim_intersections(t_hits,o_hit.dist,h_start);
+                    return true;
+                }
+            }
+
+            assert(n_far);
+            node = n_far;
+            t_near = t;
+            continue;
+        }
+
+        node = (target.origin[bnode->axis] >= bnode->split ? bnode->right : bnode->left).get();
+    }
+    return false;
 }
 
-template<typename Store> bool kd_node<Store>::occludes(const ray<Store> &target,real ldistance,intersection_target<Store> skip,ray_intersections<Store> &hits,real t_near,real t_far) const {
-    if(type == LEAF) return static_cast<const kd_leaf<Store>*>(this)->occludes(target,ldistance,skip,hits);
+template<typename Store> inline bool intersects(const kd_node<Store> *node,const ray<Store> &target,intersection_target<Store> skip,ray_intersection<Store> &o_hit,ray_intersections<Store> &t_hits,real t_near,real t_far) {
+    return _intersects<Store>(node,target,1/target.direction,skip,o_hit,t_hits,t_near,t_far);
+}
 
-    assert(type == BRANCH);
-    return static_cast<const kd_branch<Store>*>(this)->occludes(target,ldistance,skip,hits,t_near,t_far);
+template<typename Store> bool _occludes(const kd_node<Store> *node,const ray<Store> &target,const vector<Store> &invdir,real ldistance,intersection_target<Store> skip,ray_intersections<Store> &hits,real t_near,real t_far) {
+    while(node) {
+        if(node->type == LEAF) return static_cast<const kd_leaf<Store>*>(node)->occludes(target,ldistance,skip,hits);
+
+        assert(node->type == BRANCH);
+        auto bnode = static_cast<const kd_branch<Store>*>(node);
+        if(target.direction[bnode->axis]) {
+            if(target.origin[bnode->axis] == bnode->split) {
+                node = (target.direction[bnode->axis] > 0 ? bnode->right : bnode->left).get();
+                continue;
+            }
+
+            real t = (bnode->split - target.origin[bnode->axis]) * invdir[bnode->axis];
+
+            auto n_near = bnode->left.get();
+            auto n_far = bnode->right.get();
+            if(target.origin[bnode->axis] > bnode->split) {
+                n_near = bnode->right.get();
+                n_far = bnode->left.get();
+            }
+
+            if(t < 0 || t > t_far) {
+                node = n_near;
+                continue;
+            }
+            if(t < t_near) {
+                node = n_far;
+                continue;
+            }
+
+            if(n_near) {
+                if(!n_far) {
+                    t_far = t;
+                    node = n_near;
+                    continue;
+                }
+                if(_occludes(n_near,target,invdir,ldistance,skip,hits,t_near,t)) return true;
+            }
+
+            assert(n_far);
+            if(t < ldistance) return false;
+            t_near = t;
+            node = n_far;
+            continue;
+        }
+
+        node = (target.origin[bnode->axis] >= bnode->split ? bnode->right : bnode->left).get();
+    }
+    return false;
+}
+
+template<typename Store> inline bool occludes(const kd_node<Store> *node,const ray<Store> &target,real ldistance,intersection_target<Store> skip,ray_intersections<Store> &hits,real t_near,real t_far) {
+    return _occludes<Store>(node,target,1/target.direction,ldistance,skip,hits,t_near,t_far);
 }
 
 template<typename Store> inline void kd_node_deleter<Store>::operator()(kd_node<Store> *ptr) const {
@@ -1384,7 +1408,7 @@ template<typename Store> bool aabb<Store>::intersects(const triangle_batch_proto
 
     v_real po = dot(broadcast<Store,v_real::size>(origin),tp.pt()->face_normal);
 
-    v_real b_max = (v_expr(end - start)/2 * v_expr(tp.pt()->face_normal)).abs().reduce_add();
+    v_real b_max = (v_expr(end - start)*0.5 * v_expr(tp.pt()->face_normal)).abs().reduce_add();
     v_real b_min = po - b_max;
     b_max += po;
 
@@ -1548,6 +1572,8 @@ template<typename Store> struct composite_scene final : scene {
     bool shadows;
     bool camera_light;
     real fov;
+    real fovI;
+    real half_w,half_h;
     int max_reflect_depth;
     int bg_gradient_axis;
     color ambient, bg1, bg2, bg3;
@@ -1572,10 +1598,16 @@ template<typename Store> struct composite_scene final : scene {
           boundary(boundary),
           root(data) {}
 
+    void set_view_size(int w,int h) {
+        half_w = w/real(2);
+        half_h = h/real(2);
+        fovI = (2 * std::tan(fov/2)) / w;
+    }
+
     bool light_reaches(const ray<Store> &target,real ldistance,intersection_target<Store> skip,color &filtered) const {
         ray_intersections<Store> transparent_hits;
 
-        if(root->occludes(target,ldistance,skip,transparent_hits,0,std::numeric_limits<real>::max())) return false;
+        if(occludes(root.get(),target,ldistance,skip,transparent_hits,0,std::numeric_limits<real>::max())) return false;
 
         if(transparent_hits) {
             transparent_hits.sort_and_unique();
@@ -1664,7 +1696,7 @@ template<typename Store> struct composite_scene final : scene {
         color r;
 
         real dist = aabb_distance(target);
-        if(dist >= 0 && root->intersects(target,source,hit,transparent_hits,dist,std::numeric_limits<real>::max())) {
+        if(dist >= 0 && intersects(root.get(),target,source,hit,transparent_hits,dist,std::numeric_limits<real>::max())) {
             r = base_color(target,hit.normal,hit.target,depth);
         } else {
             real intensity = target.direction[bg_gradient_axis];
@@ -1686,12 +1718,10 @@ template<typename Store> struct composite_scene final : scene {
         return r;
     }
 
-    color calculate_color(int x,int y,int w,int h) const {
-        real fovI = (2 * std::tan(fov/2)) / w;
-
+    color calculate_color(int x,int y) const {
         return ray_color({
             cam.origin,
-            (cam.forward() + cam.right() * (fovI * (x - w/2)) - cam.up() * (fovI * (y - h/2))).unit()});
+            (cam.forward() + cam.right() * (fovI * (x - half_w)) - cam.up() * (fovI * (y - half_h))).unit()});
     }
 
     real aabb_distance(const ray<Store> &target) const {
@@ -2183,9 +2213,9 @@ template<typename Store> struct group_primitives<Store,false> {
     group_primitives(proto_array<Store> &primitives,int axis) {
         int dimension = primitives[0]->dimension();
 
-        /*std::sort(ITR_RANGE(primitives),[=](const primitive_prototype<Store> *a,const primitive_prototype<Store> *b){
+        std::sort(ITR_RANGE(primitives),[=](const primitive_prototype<Store> *a,const primitive_prototype<Store> *b){
             return a->boundary.center()[axis] < b->boundary.center()[axis];
-        });*/
+        });
 
         std::vector<batch_candidate<Store> > batch;
         batch.reserve(v_real::size);

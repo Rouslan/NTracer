@@ -31,6 +31,7 @@ namespace impl {
         using VExpr::_size;
         using VExpr::supports_padding;
         using VExpr::vec;
+        using VExpr::operator[];
 
         template<typename... Args> FORCE_INLINE vector_expr_adapter(Args&&... args) : base_t(std::forward<Args>(args)...) {}
     };
@@ -161,7 +162,6 @@ namespace impl {
         int dimension() const { return this->size(); }
 
         using base_t::fill_with;
-        using base_t::operator[];
         using base_t::data;
 
         void normalize() { operator/=(this->absolute()); }

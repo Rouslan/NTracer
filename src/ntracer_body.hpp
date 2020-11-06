@@ -1354,7 +1354,7 @@ FIX_STACK_ALIGN PyObject *kdnode_intersects(obj_KDNode *self,PyObject *args,PyOb
             py::allow_threads _;
             ray<module_store> target{origin,direction};
 
-            did_hit = self->_data->intersects(target,skip,o_hit,t_hits,t_near,t_far);
+            did_hit = intersects(self->_data,target,skip,o_hit,t_hits,t_near,t_far);
         }
 
         size_t r_size = t_hits.size();
@@ -1398,7 +1398,7 @@ FIX_STACK_ALIGN PyObject *kdnode_occludes(obj_KDNode *self,PyObject *args,PyObje
             py::allow_threads _;
             ray<module_store> target{origin,direction};
 
-            occ = self->_data->occludes(target,distance,skip,hits,t_near,t_far);
+            occ = occludes(self->_data,target,distance,skip,hits,t_near,t_far);
         }
 
         py::object b;

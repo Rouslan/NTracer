@@ -480,44 +480,38 @@ namespace simd {
         return s_mask{l_xnor(a.data,b.data)};
     }
 
-    template<typename T> FORCE_INLINE std::enable_if_t<!std::is_same_v<T,typename T::item_t>,scalar<T>> operator*(scalar<T> a,scalar<typename T::item_t> b) {
-        return scalar(a.data * b.data);
+    template<typename T,typename U> FORCE_INLINE auto operator*(scalar<T> a,scalar<U> b) {
+        return scalar<decltype(a.data*b.data)>(a.data * b.data);
     }
-    template<typename T> FORCE_INLINE std::enable_if_t<!std::is_same_v<T,typename T::item_t>,scalar<T>> operator*(scalar<typename T::item_t> a,scalar<T> b) {
-        return scalar(a.data * b.data);
-    }
-    template<typename T> FORCE_INLINE std::enable_if_t<!std::is_same_v<T,typename T::item_t>,scalar<T>&> operator *=(scalar<T> &a,scalar<typename T::item_t> b) {
+    template<typename T,typename U> FORCE_INLINE scalar<T> &operator*=(scalar<T> &a,scalar<U> b) {
         a.data *= b.data;
         return a;
     }
-    template<typename T> FORCE_INLINE scalar<T> operator*(scalar<T> a,T b) {
+    template<typename T,typename U> FORCE_INLINE std::enable_if_t<std::is_same_v<T,U>,scalar<T>> operator*(scalar<T> a,U b) {
         return scalar<T>(a.data * b);
     }
-    template<typename T> FORCE_INLINE scalar<T> operator*(T a,scalar<T> b) {
+    template<typename T,typename U> FORCE_INLINE std::enable_if_t<std::is_same_v<T,U>,scalar<T>> operator*(U a,scalar<T> b) {
         return scalar<T>(a * b.data);
     }
-    template<typename T> FORCE_INLINE scalar<T>& operator*=(scalar<T> &a,T b) {
+    template<typename T,typename U> FORCE_INLINE std::enable_if_t<std::is_same_v<T,U>,scalar<T>&> operator*=(scalar<T> &a,U b) {
         return a.data *= b;
         return a;
     }
 
-    template<typename T> FORCE_INLINE std::enable_if_t<!std::is_same_v<T,typename T::item_t>,scalar<T>> operator/(scalar<T> a,scalar<typename T::item_t> b) {
-        return scalar(a.data / b.data);
+    template<typename T,typename U> FORCE_INLINE auto operator/(scalar<T> a,scalar<U> b) {
+        return scalar<decltype(a.data*b.data)>(a.data / b.data);
     }
-    template<typename T> FORCE_INLINE std::enable_if_t<!std::is_same_v<T,typename T::item_t>,scalar<T>> operator/(scalar<typename T::item_t> a,scalar<T> b) {
-        return scalar(a.data / b.data);
-    }
-    template<typename T> FORCE_INLINE std::enable_if_t<!std::is_same_v<T,typename T::item_t>,scalar<T>&> operator /=(scalar<T> &a,scalar<typename T::item_t> b) {
+    template<typename T,typename U> FORCE_INLINE scalar<T> &operator/=(scalar<T> &a,scalar<U> b) {
         a.data /= b.data;
         return a;
     }
-    template<typename T> FORCE_INLINE scalar<T> operator/(scalar<T> a,T b) {
+    template<typename T,typename U> FORCE_INLINE std::enable_if_t<std::is_same_v<T,U>,scalar<T>> operator/(scalar<T> a,U b) {
         return scalar<T>(a.data / b);
     }
-    template<typename T> FORCE_INLINE scalar<T> operator/(T a,scalar<T> b) {
+    template<typename T,typename U> FORCE_INLINE std::enable_if_t<std::is_same_v<T,U>,scalar<T>> operator/(U a,scalar<T> b) {
         return scalar<T>(a / b.data);
     }
-    template<typename T> FORCE_INLINE scalar<T>& operator/=(scalar<T> &a,T b) {
+    template<typename T,typename U> FORCE_INLINE std::enable_if_t<std::is_same_v<T,U>,scalar<T>&> operator/=(scalar<T> &a,U b) {
         return a.data /= b;
         return a;
     }

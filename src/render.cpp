@@ -515,7 +515,7 @@ void worker_draw(renderer &r) {
             for(size_t x = start_x; x < std::min(start_x+RENDER_CHUNK_SIZE,r.format.width); ++x) {
                 if(UNLIKELY(r.state != renderer::NORMAL)) return;
 
-                color c = r.sc->calculate_color(x,y,r.format.width,r.format.height);
+                color c = r.sc->calculate_color(x,y);
                 int b_offset = 0;
                 long temp[MAX_PIXELSIZE / sizeof(long)] = {0};
                 for(auto &ch : r.format.channels) {
@@ -655,7 +655,7 @@ FIX_STACK_ALIGN PyObject *obj_Scene_calculate_color(obj_Scene *self,PyObject *ar
     try {
         auto &sc = self->get_base();
 
-        auto vals = get_arg::get_args("Scene.calculate_color",args,kwds,
+        auto [x,y,width,height] = get_arg::get_args("Scene.calculate_color",args,kwds,
             param<int>("x"),
             param<int>("y"),
             param<int>("width"),
@@ -671,7 +671,8 @@ FIX_STACK_ALIGN PyObject *obj_Scene_calculate_color(obj_Scene *self,PyObject *ar
 
         {
             py::allow_threads __;
-            r = sc.calculate_color(std::get<0>(vals),std::get<1>(vals),std::get<2>(vals),std::get<3>(vals));
+            sc.set_view_size(width,height);
+            r = sc.calculate_color(x,y);
         }
 
         return to_pyobject(r);
@@ -740,6 +741,8 @@ FIX_STACK_ALIGN PyObject *obj_CallbackRenderer_begin_render(obj_CallbackRenderer
             if(r.busy_threads) throw already_running_error();
 
             assert(r.state == renderer::NORMAL);
+
+            sc.set_view_size(format.width,format.height);
 
             r.format = format;
             r.buffer = view;
@@ -937,6 +940,8 @@ FIX_STACK_ALIGN PyObject *obj_BlockingRenderer_render(obj_BlockingRenderer *self
                 std::lock_guard<std::mutex> lock(r.mut);
 
                 if(r.busy_threads) throw already_running_error();
+
+                sc.set_view_size(fmt.width,fmt.height);
 
                 r.format = fmt;
                 r.buffer = buff.data;

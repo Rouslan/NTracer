@@ -6,8 +6,10 @@
 
 class scene {
 public:
+    virtual void set_view_size(int w,int h) = 0;
+
     // must be thread-safe
-    virtual color calculate_color(int x,int y,int w,int h) const = 0;
+    virtual color calculate_color(int x,int y) const = 0;
 
     /* Prevent python code from modifying the scene. The object is also expected
        to remain alive until unlock is called */
