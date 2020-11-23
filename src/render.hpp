@@ -91,7 +91,7 @@ struct tracerx_constructors {
 };
 
 struct package_common {
-    void (*read_color)(color&,PyObject*,const char*);
+    void (*read_color)(color&,PyObject*,PyObject*);
     PyObject *(*vector_reduce)(int,const float*);
     PyObject *(*matrix_reduce)(int,const float*);
     PyObject *(*triangle_reduce)(int,const float* const*,material*);
@@ -102,7 +102,7 @@ struct package_common {
 #ifndef RENDER_MODULE
 extern package_common package_common_data;
 
-inline void read_color(color &to,PyObject *from,const char *field=nullptr) {
+inline void read_color(color &to,PyObject *from,PyObject *field=nullptr) {
     (*package_common_data.read_color)(to,from,field);
 }
 #endif

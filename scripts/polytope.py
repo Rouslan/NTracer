@@ -1,6 +1,4 @@
-#!/usr/bin/python
-
-from __future__ import unicode_literals,print_function
+#!python
 
 import math
 import fractions

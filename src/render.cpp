@@ -16,6 +16,9 @@
 #define RENDER_MODULE
 #include "render.hpp"
 
+// this file is generated
+#include "render_strings.hpp"
+
 
 #define FULL_MODULE_STR "ntracer.render"
 
@@ -67,6 +70,7 @@ struct instance_data_t {
     PyObject *matrix_unpickle;
     PyObject *triangle_unpickle;
     PyObject *solid_unpickle;
+    interned_strings istrings;
 };
 
 inline instance_data_t *get_instance_data(PyObject *mod) {
@@ -110,12 +114,13 @@ PyTypeObject channel_obj_base::_pytype = {
     .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE,
     .tp_members = obj_Channel_members,
     .tp_new = [](PyTypeObject *type,PyObject *args,PyObject *kwds) -> PyObject* {
+        auto idata = get_instance_data();
         try {
             auto ptr = py::check_obj(type->tp_alloc(type,0));
             try {
                 auto &val = reinterpret_cast<wrapped_type<channel>*>(ptr)->alloc_base();
 
-                const char *names[] = {"bit_size","f_r","f_g","f_b","f_c","tfloat",nullptr};
+                PyObject *names[] = {P(bit_size),P(f_r),P(f_g),P(f_b),P(f_c),P(tfloat),nullptr};
                 get_arg ga(args,kwds,names,"Channel.__new__");
                 int bit_size = from_pyobject<int>(ga(true));
                 val.f_r = from_pyobject<float>(ga(true));
@@ -238,13 +243,14 @@ PyTypeObject image_format_obj_base::_pytype = {
     .tp_members = obj_ImageFormat_members,
     .tp_getset = obj_ImageFormat_getset,
     .tp_new = [](PyTypeObject *type,PyObject *args,PyObject *kwds) -> PyObject* {
+        auto idata = get_instance_data();
         try {
             auto ptr = py::check_obj(type->tp_alloc(type,0));
             try {
                 auto &val = reinterpret_cast<wrapped_type<image_format>*>(ptr)->alloc_base();
                 new(&val) image_format();
 
-                const char *names[] = {"width","height","channels","pitch","reversed",nullptr};
+                PyObject *names[] = {P(width),P(height),P(channels),P(pitch),P(reversed),nullptr};
                 get_arg ga(args,kwds,names,"ImageFormat.__new__");
                 val.width = from_pyobject<size_t>(ga(true));
                 val.height = from_pyobject<size_t>(ga(true));
@@ -596,13 +602,16 @@ FIX_STACK_ALIGN void callback_worker(obj_CallbackRenderer *self) {
 
                 PyBuffer_Release(&r.buffer);
 
+                // r.callback may be changed after calling it
+                PyObject *callback = r.callback;
+
                 if(LIKELY(r.state == renderer::NORMAL)) {
                     // notify the main thread
 
                     // in case the callback calls start_render/abort_render
                     lock.unlock();
                     try {
-                        py::object(py::borrowed_ref(r.callback))(self);
+                        py::object(py::borrowed_ref(callback))(self);
                     } catch(py_error_set&) {
                         PyErr_Print();
                     } catch(std::exception &e) {
@@ -616,7 +625,7 @@ FIX_STACK_ALIGN void callback_worker(obj_CallbackRenderer *self) {
                     r.barrier.notify_all();
                 }
 
-                Py_DECREF(r.callback);
+                Py_DECREF(callback);
                 Py_DECREF(self);
             }
 
@@ -651,15 +660,16 @@ callback_renderer::~callback_renderer() {
 }
 
 
-FIX_STACK_ALIGN PyObject *obj_Scene_calculate_color(obj_Scene *self,PyObject *args,PyObject *kwds) {
+FIX_STACK_ALIGN PyObject *obj_Scene_calculate_color(obj_Scene *self,NTRACER_COMPAT_FASTCALL_KEYWORD_PARAMS) {
+    auto idata = get_instance_data();
     try {
         auto &sc = self->get_base();
 
-        auto [x,y,width,height] = get_arg::get_args("Scene.calculate_color",args,kwds,
-            param<int>("x"),
-            param<int>("y"),
-            param<int>("width"),
-            param<int>("height"));
+        auto [x,y,width,height] = get_arg::get_args("Scene.calculate_color",NTRACER_COMPAT_FASTCALL_KEYWORD_ARGS,
+            param<int>(P(x)),
+            param<int>(P(y)),
+            param<int>(P(width)),
+            param<int>(P(height)));
 
         color r;
 
@@ -680,7 +690,7 @@ FIX_STACK_ALIGN PyObject *obj_Scene_calculate_color(obj_Scene *self,PyObject *ar
 }
 
 PyMethodDef obj_Scene_methods[] = {
-    {"calculate_color",reinterpret_cast<PyCFunction>(&obj_Scene_calculate_color),METH_VARARGS|METH_KEYWORDS,NULL},
+    {"calculate_color",reinterpret_cast<PyCFunction>(&obj_Scene_calculate_color),NTRACER_COMPAT_METH_FASTCALL|METH_KEYWORDS,NULL},
     {NULL}
 };
 
@@ -715,10 +725,11 @@ void get_writable_buffer(PyObject *obj,Py_buffer &buff) {
 }
 
 FIX_STACK_ALIGN PyObject *obj_CallbackRenderer_begin_render(obj_CallbackRenderer *self,PyObject *args,PyObject *kwds) {
+    auto idata = get_instance_data();
     try {
         callback_renderer &r = self->get_base();
 
-        const char *names[] = {"dest","format","scene","callback",nullptr};
+        PyObject *names[] = {P(dest),P(format),P(scene),P(callback),nullptr};
         get_arg ga(args,kwds,names,"CallbackRenderer.begin_render");
         auto dest = ga(true);
         auto &format = get_base<image_format>(ga(true));
@@ -793,6 +804,8 @@ PyMethodDef obj_CallbackRenderer_methods[] = {
 };
 
 FIX_STACK_ALIGN int obj_CallbackRenderer_init(obj_CallbackRenderer *self,PyObject *args,PyObject *kwds) {
+    auto idata = get_instance_data();
+
     switch(self->mode) {
     case CONTAINS:
         self->base.~callback_renderer();
@@ -804,7 +817,7 @@ FIX_STACK_ALIGN int obj_CallbackRenderer_init(obj_CallbackRenderer *self,PyObjec
     }
 
     try {
-        const char *names[] = {"threads",nullptr};
+        PyObject *names[] = {P(threads),nullptr};
         get_arg ga(args,kwds,names,"CallbackRenderer.__init__");
         PyObject *temp = ga(false);
         unsigned int threads = temp ? from_pyobject<unsigned int>(temp) : 0;
@@ -913,10 +926,11 @@ blocking_renderer::~blocking_renderer() {
 }
 
 FIX_STACK_ALIGN PyObject *obj_BlockingRenderer_render(obj_BlockingRenderer *self,PyObject *args,PyObject *kwds) {
+    auto idata = get_instance_data();
     try {
         auto &r = self->get_base();
 
-        const char *names[] = {"dest","format","scene",nullptr};
+        PyObject *names[] = {P(dest),P(format),P(scene),nullptr};
         get_arg ga(args,kwds,names,"BlockingRenderer.render");
         auto dest = ga(true);
         auto &fmt = get_base<image_format>(ga(true));
@@ -990,6 +1004,7 @@ PyMethodDef obj_BlockingRenderer_methods[] = {
 };
 
 FIX_STACK_ALIGN int obj_BlockingRenderer_init(obj_BlockingRenderer *self,PyObject *args,PyObject *kwds) {
+    auto idata = get_instance_data();
     switch(self->mode) {
     case CONTAINS:
         self->base.~blocking_renderer();
@@ -1001,7 +1016,7 @@ FIX_STACK_ALIGN int obj_BlockingRenderer_init(obj_BlockingRenderer *self,PyObjec
     }
 
     try {
-        const char *names[] = {"threads",nullptr};
+        PyObject *names[] = {P(threads),nullptr};
         get_arg ga(args,kwds,names,"BlockingRenderer.__init__");
         PyObject *temp = ga(false);
         int threads = temp ? from_pyobject<int>(temp) : -1;
@@ -1168,17 +1183,15 @@ PyMethodDef obj_Color_methods[] = {
 };
 
 FIX_STACK_ALIGN PyObject *obj_Color_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
+    auto idata = get_instance_data();
     try {
-        auto vals = get_arg::get_args("Color.__new__",args,kwds,
-            param<float>("r"),
-            param<float>("g"),
-            param<float>("b"));
+        auto [r,g,b] = get_arg::get_args("Color.__new__",args,kwds,
+            param<float>(P(r)),
+            param<float>(P(g)),
+            param<float>(P(b)));
 
         auto ptr = py::check_obj(type->tp_alloc(type,0));
-        new(&reinterpret_cast<wrapped_type<color>*>(ptr)->alloc_base()) color(
-            std::get<0>(vals),
-            std::get<1>(vals),
-            std::get<2>(vals));
+        new(&reinterpret_cast<wrapped_type<color>*>(ptr)->alloc_base()) color(r,g,b);
 
         return ptr;
     } PY_EXCEPT_HANDLERS(nullptr)
@@ -1233,10 +1246,10 @@ PyObject *obj_Material_repr(material *self) {
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
-void read_color(color &to,PyObject *from,const char *field) {
+void read_color(color &to,PyObject *from,PyObject *field) {
     if(PyTuple_Check(from)) {
         if(PyTuple_GET_SIZE(from) != 3) {
-            if(field) PyErr_Format(PyExc_ValueError,"\"%s\" must have exactly 3 values",field);
+            if(field) PyErr_Format(PyExc_ValueError,"\"%U\" must have exactly 3 values",field);
             else PyErr_SetString(PyExc_ValueError,"object must have exactly 3 values");
             throw py_error_set();
         }
@@ -1289,8 +1302,15 @@ PyMethodDef obj_Material_methods[] = {
 };
 
 FIX_STACK_ALIGN PyObject *obj_Material_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
+    auto idata = get_instance_data();
     try {
-        const char *names[] = {"color","opacity","reflectivity","specular_intensity","specular_exp","specular_color",nullptr};
+        PyObject *names[] = {
+            P(color),
+            P(opacity),
+            P(reflectivity),
+            P(specular_intensity),
+            P(specular_exp),
+            P(specular_color),nullptr};
         get_arg ga(args,kwds,names,"Material.__new__");
         auto obj_c = ga(true);
         float o = 1;
@@ -1311,8 +1331,8 @@ FIX_STACK_ALIGN PyObject *obj_Material_new(PyTypeObject *type,PyObject *args,PyO
         auto ptr = py::check_obj(type->tp_alloc(type,0));
         auto base = reinterpret_cast<material*>(ptr);
 
-        read_color(base->c,obj_c,"color");
-        if(obj_s) read_color(base->specular,obj_s,"specular_color");
+        read_color(base->c,obj_c,P(color));
+        if(obj_s) read_color(base->specular,obj_s,P(specular_color));
         else base->specular = color(1,1,1);
 
         base->opacity = o;
@@ -1368,6 +1388,18 @@ PyTypeObject material::_pytype = {
     .tp_members = obj_Material_members,
     .tp_getset = obj_Material_getset,
     .tp_new = &obj_Material_new};
+
+
+PyTypeObject locked_error_type = {
+    PyVarObject_HEAD_INIT(nullptr,0)
+    .tp_name = FULL_MODULE_STR ".LockedError",
+    .tp_str = [](PyObject *self) -> PyObject* {
+        if(PyTuple_GET_SIZE(reinterpret_cast<PyBaseExceptionObject*>(self)->args) == 0) {
+            return PyUnicode_FromString("scene is locked");
+        }
+        return reinterpret_cast<PyTypeObject*>(PyExc_RuntimeError)->tp_str(self);
+    },
+    .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE};
 
 
 // like tracerx_cache_item except owns reference to mod
@@ -1510,6 +1542,130 @@ void decode_float_ieee754(const char *str,int length,float *data) {
 #endif
 }
 
+namespace impl {
+    /* a bug in GCC 9 prevents us from using function attributes on lambda
+    functions */
+    FIX_STACK_ALIGN PyObject *_color_unpickle(PyObject *mod,PyObject *arg) {
+        try {
+            auto str = from_pyobject<py::bytes>(arg);
+            if(str.size() != 3 * sizeof(float)) {
+                PyErr_SetString(PyExc_ValueError,"color data is malformed");
+                return static_cast<PyObject*>(nullptr);
+            }
+
+            color c;
+            decode_float_ieee754(str.data(),3,c.vals);
+            return to_pyobject(c);
+        } PY_EXCEPT_HANDLERS(static_cast<PyObject*>(nullptr))
+    }
+    FIX_STACK_ALIGN PyObject *_material_unpickle(PyObject *mod,PyObject *arg) {
+        try {
+            auto str = from_pyobject<py::bytes>(arg);
+            if(str.size() != 10 * sizeof(float)) {
+                PyErr_SetString(PyExc_ValueError,"material data is malformed");
+                return static_cast<PyObject*>(nullptr);
+            }
+
+            float vals[10];
+            decode_float_ieee754(str.data(),10,vals);
+            auto m = new material();
+            m->c.r() = vals[0];
+            m->c.g() = vals[1];
+            m->c.b() = vals[2];
+            m->specular.r() = vals[3];
+            m->specular.g() = vals[4];
+            m->specular.b() = vals[5];
+            m->opacity = vals[6];
+            m->reflectivity = vals[7];
+            m->specular_intensity = vals[8];
+            m->specular_exp = vals[9];
+            return py::ref(m);
+        } PY_EXCEPT_HANDLERS(nullptr)
+    }
+    FIX_STACK_ALIGN PyObject *_vector_unpickle(PyObject *mod,PyObject *arg) {
+        try {
+            auto args = from_pyobject<py::tuple>(arg);
+            if(args.size() != 2) THROW_PYERR_STRING(TypeError,"_vector_unpickle takes exactly 2 arguments");
+
+            int dim = get_dimension(args[0].ref());
+            auto str = from_pyobject<py::bytes>(args[1]);
+            if(str.size() != dim * Py_ssize_t(sizeof(float))) {
+                PyErr_SetString(PyExc_ValueError,"vector data is malformed");
+                return nullptr;
+            }
+
+            auto item = get_tracerx_cache_item(mod,dim);
+            auto objdata = item.ctrs->vector(dim);
+            decode_float_ieee754(str.data(),dim,objdata.data);
+            return objdata.obj.new_ref();
+        } PY_EXCEPT_HANDLERS(nullptr)
+    }
+    FIX_STACK_ALIGN PyObject *_matrix_unpickle(PyObject *mod,PyObject *arg) {
+        try {
+            auto args = from_pyobject<py::tuple>(arg);
+            if(args.size() != 2) THROW_PYERR_STRING(TypeError,"_matrix_unpickle takes exactly 2 arguments");
+
+            int dim = get_dimension(args[0].ref());
+            auto str = from_pyobject<py::bytes>(args[1]);
+            if(str.size() != dim * dim * Py_ssize_t(sizeof(float))) {
+                PyErr_SetString(PyExc_ValueError,"matrix data is malformed");
+                return nullptr;
+            }
+
+            auto item = get_tracerx_cache_item(mod,dim);
+            auto objdata = item.ctrs->matrix(dim);
+            decode_float_ieee754(str.data(),dim*dim,objdata.data);
+            return objdata.obj.new_ref();
+        } PY_EXCEPT_HANDLERS(nullptr)
+    }
+    FIX_STACK_ALIGN PyObject *_triangle_unpickle(PyObject *mod,PyObject *arg) {
+        try {
+            auto args = from_pyobject<py::tuple>(arg);
+            if(args.size() != 3) THROW_PYERR_STRING(TypeError,"_triangle_unpickle takes exactly 3 arguments");
+
+            int dim = get_dimension(args[0].ref());
+            auto str = from_pyobject<py::bytes>(args[1]);
+            if(str.size() != dim * (dim+1) * Py_ssize_t(sizeof(float))) {
+                PyErr_SetString(PyExc_ValueError,"triangle data is malformed");
+                return nullptr;
+            }
+            auto mat = checked_py_cast<material>(args[2].ref());
+
+            auto item = get_tracerx_cache_item(mod,dim);
+            auto objdata = item.ctrs->triangle(dim,mat);
+            for(int i=0; i<dim+1; ++i) decode_float_ieee754(str.data() + sizeof(float)*dim*i,dim,objdata.data[i]);
+            item.ctrs->triangle_extra(objdata.obj.ref());
+
+            return objdata.obj.new_ref();
+        } PY_EXCEPT_HANDLERS(nullptr)
+    }
+    FIX_STACK_ALIGN PyObject *_solid_unpickle(PyObject *mod,PyObject *arg) {
+        try {
+            auto args = from_pyobject<py::tuple>(arg);
+            if(args.size() != 3) THROW_PYERR_STRING(TypeError,"_solid_unpickle takes exactly 3 arguments");
+
+            int dim = get_dimension(args[0].ref());
+            auto str = from_pyobject<py::bytes>(args[1]);
+            if(str.size() != dim * (dim + 1) * Py_ssize_t(sizeof(float)) + 1) {
+                PyErr_SetString(PyExc_ValueError,"solid data is malformed");
+                return nullptr;
+            }
+            if(str.data()[0] != 1 && str.data()[1] != 2) {
+                PyErr_SetString(PyExc_ValueError,"solid data is corrupt");
+                return nullptr;
+            }
+            auto mat = checked_py_cast<material>(args[2].ref());
+
+            auto item = get_tracerx_cache_item(mod,dim);
+            auto objdata = item.ctrs->solid(dim,str.data()[0],mat);
+            decode_float_ieee754(str.data() + 1,dim*dim,objdata.orientation);
+            decode_float_ieee754(str.data() + dim*dim*sizeof(float) + 1,dim,objdata.position);
+            item.ctrs->solid_extra(objdata.obj.ref());
+
+            return objdata.obj.new_ref();
+        } PY_EXCEPT_HANDLERS(nullptr)
+    }
+}
 
 PyMethodDef func_table[] = {
     {"get_optimized_tracern",[](PyObject *mod,PyObject *arg) -> PyObject* {
@@ -1517,126 +1673,12 @@ PyMethodDef func_table[] = {
                 return get_tracerx_cache_item(mod,get_dimension(arg)).mod.new_ref();
             } PY_EXCEPT_HANDLERS(nullptr)
         },METH_O,NULL},
-    {"_color_unpickle",[](PyObject *mod,PyObject *arg) FIX_STACK_ALIGN -> PyObject* {
-            try {
-                auto str = from_pyobject<py::bytes>(arg);
-                if(str.size() != 3 * sizeof(float)) {
-                    PyErr_SetString(PyExc_ValueError,"color data is malformed");
-                    return nullptr;
-                }
-
-                color c;
-                decode_float_ieee754(str.data(),3,c.vals);
-                return to_pyobject(c);
-            } PY_EXCEPT_HANDLERS(nullptr)
-        },METH_O,NULL},
-    {"_material_unpickle",[](PyObject *mod,PyObject *arg) FIX_STACK_ALIGN -> PyObject* {
-            try {
-                auto str = from_pyobject<py::bytes>(arg);
-                if(str.size() != 10 * sizeof(float)) {
-                    PyErr_SetString(PyExc_ValueError,"material data is malformed");
-                    return nullptr;
-                }
-
-                float vals[10];
-                decode_float_ieee754(str.data(),10,vals);
-                auto m = new material();
-                m->c.r() = vals[0];
-                m->c.g() = vals[1];
-                m->c.b() = vals[2];
-                m->specular.r() = vals[3];
-                m->specular.g() = vals[4];
-                m->specular.b() = vals[5];
-                m->opacity = vals[6];
-                m->reflectivity = vals[7];
-                m->specular_intensity = vals[8];
-                m->specular_exp = vals[9];
-                return reinterpret_cast<PyObject*>(m);
-            } PY_EXCEPT_HANDLERS(nullptr)
-        },METH_O,NULL},
-    {"_vector_unpickle",[](PyObject *mod,PyObject *arg) FIX_STACK_ALIGN -> PyObject* {
-            try {
-                auto args = from_pyobject<py::tuple>(arg);
-                if(args.size() != 2) THROW_PYERR_STRING(TypeError,"_vector_unpickle takes exactly 2 arguments");
-
-                int dim = get_dimension(args[0].ref());
-                auto str = from_pyobject<py::bytes>(args[1]);
-                if(str.size() != dim * Py_ssize_t(sizeof(float))) {
-                    PyErr_SetString(PyExc_ValueError,"vector data is malformed");
-                    return nullptr;
-                }
-
-                auto item = get_tracerx_cache_item(mod,dim);
-                auto objdata = item.ctrs->vector(dim);
-                decode_float_ieee754(str.data(),dim,objdata.data);
-                return objdata.obj.new_ref();
-            } PY_EXCEPT_HANDLERS(nullptr)
-        },METH_VARARGS,NULL},
-    {"_matrix_unpickle",[](PyObject *mod,PyObject *arg) FIX_STACK_ALIGN -> PyObject* {
-            try {
-                auto args = from_pyobject<py::tuple>(arg);
-                if(args.size() != 2) THROW_PYERR_STRING(TypeError,"_matrix_unpickle takes exactly 2 arguments");
-
-                int dim = get_dimension(args[0].ref());
-                auto str = from_pyobject<py::bytes>(args[1]);
-                if(str.size() != dim * dim * Py_ssize_t(sizeof(float))) {
-                    PyErr_SetString(PyExc_ValueError,"matrix data is malformed");
-                    return nullptr;
-                }
-
-                auto item = get_tracerx_cache_item(mod,dim);
-                auto objdata = item.ctrs->matrix(dim);
-                decode_float_ieee754(str.data(),dim*dim,objdata.data);
-                return objdata.obj.new_ref();
-            } PY_EXCEPT_HANDLERS(nullptr)
-        },METH_VARARGS,NULL},
-    {"_triangle_unpickle",[](PyObject *mod,PyObject *arg) FIX_STACK_ALIGN -> PyObject* {
-            try {
-                auto args = from_pyobject<py::tuple>(arg);
-                if(args.size() != 3) THROW_PYERR_STRING(TypeError,"_triangle_unpickle takes exactly 3 arguments");
-
-                int dim = get_dimension(args[0].ref());
-                auto str = from_pyobject<py::bytes>(args[1]);
-                if(str.size() != dim * (dim+1) * Py_ssize_t(sizeof(float))) {
-                    PyErr_SetString(PyExc_ValueError,"triangle data is malformed");
-                    return nullptr;
-                }
-                auto mat = checked_py_cast<material>(args[2].ref());
-
-                auto item = get_tracerx_cache_item(mod,dim);
-                auto objdata = item.ctrs->triangle(dim,mat);
-                for(int i=0; i<dim+1; ++i) decode_float_ieee754(str.data() + sizeof(float)*dim*i,dim,objdata.data[i]);
-                item.ctrs->triangle_extra(objdata.obj.ref());
-
-                return objdata.obj.new_ref();
-            } PY_EXCEPT_HANDLERS(nullptr)
-        },METH_VARARGS,NULL},
-    {"_solid_unpickle",[](PyObject *mod,PyObject *arg) FIX_STACK_ALIGN -> PyObject* {
-            try {
-                auto args = from_pyobject<py::tuple>(arg);
-                if(args.size() != 3) THROW_PYERR_STRING(TypeError,"_solid_unpickle takes exactly 3 arguments");
-
-                int dim = get_dimension(args[0].ref());
-                auto str = from_pyobject<py::bytes>(args[1]);
-                if(str.size() != dim * (dim + 1) * Py_ssize_t(sizeof(float)) + 1) {
-                    PyErr_SetString(PyExc_ValueError,"solid data is malformed");
-                    return nullptr;
-                }
-                if(str.data()[0] != 1 && str.data()[1] != 2) {
-                    PyErr_SetString(PyExc_ValueError,"solid data is corrupt");
-                    return nullptr;
-                }
-                auto mat = checked_py_cast<material>(args[2].ref());
-
-                auto item = get_tracerx_cache_item(mod,dim);
-                auto objdata = item.ctrs->solid(dim,str.data()[0],mat);
-                decode_float_ieee754(str.data() + 1,dim*dim,objdata.orientation);
-                decode_float_ieee754(str.data() + dim*dim*sizeof(float) + 1,dim,objdata.position);
-                item.ctrs->solid_extra(objdata.obj.ref());
-
-                return objdata.obj.new_ref();
-            } PY_EXCEPT_HANDLERS(nullptr)
-        },METH_VARARGS,NULL},
+    {"_color_unpickle",&impl::_color_unpickle,METH_O,NULL},
+    {"_material_unpickle",&impl::_material_unpickle,METH_O,NULL},
+    {"_vector_unpickle",&impl::_vector_unpickle,METH_VARARGS,NULL},
+    {"_matrix_unpickle",&impl::_matrix_unpickle,METH_VARARGS,NULL},
+    {"_triangle_unpickle",&impl::_triangle_unpickle,METH_VARARGS,NULL},
+    {"_solid_unpickle",&impl::_solid_unpickle,METH_VARARGS,NULL},
     {NULL}
 };
 
@@ -1716,7 +1758,8 @@ PyTypeObject *classes[] = {
     obj_CallbackRenderer::pytype(),
     obj_BlockingRenderer::pytype(),
     wrapped_type<color>::pytype(),
-    material::pytype()};
+    material::pytype(),
+    &locked_error_type};
 
 
 extern "C" FIX_STACK_ALIGN SHARED(PyObject) * PyInit_render(void) {
@@ -1726,6 +1769,7 @@ extern "C" FIX_STACK_ALIGN SHARED(PyObject) * PyInit_render(void) {
 
     obj_CallbackRenderer::pytype()->tp_new = PyType_GenericNew;
     obj_BlockingRenderer::pytype()->tp_new = PyType_GenericNew;
+    locked_error_type.tp_base = reinterpret_cast<PyTypeObject*>(PyExc_RuntimeError);
 
     for(auto cls : classes) {
         if(UNLIKELY(PyType_Ready(cls) < 0)) return nullptr;
@@ -1765,6 +1809,8 @@ extern "C" FIX_STACK_ALIGN SHARED(PyObject) * PyInit_render(void) {
     auto cap = PyCapsule_New(const_cast<package_common*>(&package_common_data),"render._PACKAGE_COMMON",nullptr);
     if(!cap) return nullptr;
     PyModule_AddObject(m,"_PACKAGE_COMMON",cap);
+
+    if(!get_instance_data(m)->istrings.init()) return nullptr;
 
     return m;
 }

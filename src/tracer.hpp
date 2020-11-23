@@ -196,7 +196,6 @@ template<typename Store> struct solid : solid_obj_common, primitive<Store> {
     matrix<Store> orientation;
     matrix<Store> inv_orientation;
     vector<Store> position;
-    py::pyptr<material> m;
 
     solid(solid_type type,const matrix<Store> &o,const matrix<Store> &io,const vector<Store> &p,material *m)
         : primitive<Store>(m,pytype()), type(type), orientation(o), inv_orientation(io), position(p), m(py::borrowed_ref(reinterpret_cast<PyObject*>(m))) {
@@ -206,7 +205,7 @@ template<typename Store> struct solid : solid_obj_common, primitive<Store> {
     solid(solid_type type,const matrix<Store> &o,const vector<Store> &p,material *m) : solid(type,o,o.inverse(),p,m) {}
 
     solid(int dimension,solid_type type,material *m)
-        : primitive<Store>(m,pytype()), type(type), orientation(dimension), inv_orientation(dimension), position(dimension), m(py::borrowed_ref(reinterpret_cast<PyObject*>(m))) {}
+        : primitive<Store>(m,pytype()), type(type), orientation(dimension), inv_orientation(dimension), position(dimension) {}
 
     real intersects(const ray<Store> &target,ray<Store> &normal) const {
         ray<Store> transformed(inv_orientation * target.origin - position,inv_orientation * target.direction);

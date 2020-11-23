@@ -41,7 +41,7 @@ ntracer Package
 
         If the renderer is already running on another thread, an exception is
         thrown instead. Upon starting, the scene will be locked for writing.
-        
+
         The return value will be ``True`` unless the renderer quit before
         finishing because of a call to :py:meth:`signal_abort`, in which case
         the return value will be ``False``.
@@ -68,7 +68,7 @@ ntracer Package
 
         Signal for the renderer to quit and wait until all drawing has stopped
         and the scene has been unlocked.
-        
+
         The callback function passed to :py:meth:`begin_render` will not be
         called if the renderer doesn't finish drawing.
 
@@ -93,18 +93,18 @@ ntracer Package
 .. py:class:: Channel(bit_size,f_r,f_g,f_b[,f_c=0,tfloat=False])
 
     A representation of a color channel.
-    
+
     This is used by :py:class:`ImageFormat` to specify how pixels are stored.
-    
+
     All colors are computed internally using three 32-bit floating point
     numbers, representing red, green and blue. An instance of ``Channel``
     specifies how to convert a color to a component of the destination format.
     For a given color "c", the output will be :code:`f_r*c.r + f_g*c.g + f_b*c.b
     + f_c` and is clamped between 0 and 1. If ``tfloat`` is false, the value is
     multiplied by 2\ :sup:`bit_size`\ −1 and converted to an integer.
-    
+
     Instances of this class are read-only.
-    
+
     :param integer bit_size: The number of bits the channel takes up. If
         ``tfloat`` is false, it can be between 1 and 31. If ``tfloat`` is true
         it must be 32.
@@ -114,29 +114,29 @@ ntracer Package
     :param number f_c: A constant to add.
     :param boolean tfloat: Whether the channel is stored as an integer or
         floating point number.
-    
+
     .. py:attribute:: bit_size
-    
+
         The number of bits the channel takes up.
-    
+
     .. py:attribute:: f_r
-    
+
         The red factor.
-    
+
     .. py:attribute:: f_g
-    
+
         The green factor.
-    
+
     .. py:attribute:: f_b
-    
+
         The blue factor.
-    
+
     .. py:attribute:: f_c
-    
+
         A constant to add.
-    
+
     .. py:attribute:: tfloat
-    
+
         Whether the channel is stored as an integer or floating point number.
 
 
@@ -173,26 +173,26 @@ ntracer Package
     :param number r: Red component
     :param number g: Green component
     :param number b: Blue component
-    
+
     .. py:method:: __add__(b)
-    
+
         Element-wise addition of two colors.
 
         :code:`self.__add__(y)` <==> :code:`self+y`
-        
+
     .. py:method:: __div__(b)
-    
+
         Divide each element by a number or do element-wise division of two
         colors.
-    
+
         :code:`self.__div__(y)` <==> :code:`self/y`
 
     .. py:method:: __eq__(b)
 
         :code:`self.__eq__(y)` <==> :code:`self==y`
-    
+
     .. py:method:: __getitem__(index)
-    
+
         Equivalent to :code:`[self.r,self.g,self.b].__getitem__`.
 
         :code:`self.__getitem__(i)` <==> :code:`self[i]`
@@ -215,7 +215,7 @@ ntracer Package
         :code:`self.__ne__(y)` <==> :code:`self!=y`
 
     .. py:method:: __neg__()
-    
+
         Negate each element.
 
         :code:`self.__neg__()` <==> :code:`-self`
@@ -229,9 +229,9 @@ ntracer Package
         This is the same as :py:meth:`__mul__`.
 
         :code:`self.__rmul__(y)` <==> :code:`y*self`
-    
+
     .. py:method:: __sub__(b)
-    
+
         Element-wise subtraction of two colors.
 
         :code:`self.__sub__(y)` <==> :code:`self-y`
@@ -244,7 +244,7 @@ ntracer Package
 
         :param f: A function or callable object that takes one number and
             returns a number.
-    
+
     .. py:attribute:: r
 
         Red component
@@ -261,7 +261,7 @@ ntracer Package
 .. py:class:: ImageFormat(width,height,channels[,pitch=0,reversed=False])
 
     The dimensions and pixel format of an image.
-    
+
     The pixel format is specified by one or more instances of
     :py:class:`Channel`. Each channel describes how to convert a red-green-blue
     triplet into the associated pixel component and has a bit size. When drawing
@@ -269,11 +269,11 @@ ntracer Package
     leaving any gaps. However, each pixel will start on a new byte. If the last
     byte is not completely covered by the channels, the remaining bits will be
     set to zero.
-    
+
     The size of a pixel may not exceed 16 bytes (128 bits).
-    
+
     Some examples of pixel formats and their associated channel sequences:
-    
+
     +----------------------------+---------------------------------------------+
     |24-bit RGB                  |:code:`[Channel(8,1,0,0),                    |
     |                            |Channel(8,0,1,0),                            |
@@ -302,9 +302,9 @@ ntracer Package
     +----------------------------+---------------------------------------------+
     |16-bit brightness only      |:code:`[Channel(16,0.299,0.587,0.114)]`      |
     +----------------------------+---------------------------------------------+
-    
+
     .. |YCrCb| replace:: YC\ :sub:`R`\ C\ :sub:`B`
-    
+
     :param integer width: The width of the image in pixels.
     :param integer height: The height of the image in pixels.
     :param channels: An iterable containing one or more instances of
@@ -315,43 +315,48 @@ ntracer Package
     :param boolean reversed: If true, the bytes of each pixel will be written in
         reverse order. This is needed if storing pixels as little-endian words
         and the channels don't fit neatly into bytes.
-    
+
     .. py:method:: set_channels(new_channels)
-    
+
         Replace the contents of :py:attr:`channels`.
-    
+
         :param channels: An iterable containing one or more instances of
             :py:class:`Channel`, describing the bit layout of a pixel.
-    
+
     .. py:attribute:: width
-    
+
         The width of the image in pixels.
-        
+
     .. py:attribute:: height
-    
+
         The height of the image in pixels.
-        
+
     .. py:attribute:: channels
-    
+
         An read-only list-like object containing one or more instances of
         :py:class:`Channel`, describing the bit layout of a pixel.
-        
+
     .. py:attribute:: pitch
-    
+
         The number of bytes per row.
-    
+
     .. py:attribute:: reversed
-    
+
         If true, the bytes of each pixel will be written in reverse order (like
         a little-endian word).
-        
+
     .. py:attribute:: bytes_per_pixel
-    
+
         The byte size of one pixel.
-        
+
         This is the sum of the bit sizes of the channels, rounded up.
-        
+
         This attribute is read-only.
+
+
+.. py:class:: LockedError(*args)
+
+    The exception thrown when attempting to modify a locked scene.
 
 
 .. py:class:: Material(color[,opacity=1,reflectivity=0,specular_intensity=1,specular_exp=8,specular_color=(1,1,1)])
@@ -412,18 +417,18 @@ ntracer Package
 
     Although not exposed to Python code, the scene class has a concept of
     locking. While a renderer is drawing a scene, the scene is locked. While
-    locked, a scene cannot be modified. Attempting to do so will raise an
-    exception.
+    locked, a scene cannot be modified. Attempting to do so will raise a
+    :py:class:`LockedError` exception.
 
     This cannot be instantiated in Python code, not even as a base class.
-    
+
     .. py:method:: calculate_color(x,y,width,height) -> Color
-    
+
         Get the pixel color at a particular coordinate.
-        
+
         Coordinate ``0,0`` is the top left pixel and ``width-1,height-1`` is the
         bottom right.
-        
+
         :param integer x: The horizontal coordinate component.
         :param integer y: The vertical coordinate component.
         :param integer width: The pixel width of the image.
@@ -434,7 +439,7 @@ ntracer Package
 
     Return a specialized (read: faster) tracer\ *{dimension}* version if it
     exists, otherwise return :py:mod:`.tracern`.
-    
+
     The results are cached, so calling this function multiple times with the
     same parameter is fast. The cache does not increase the reference count and
     unloaded modules automatically remove themselves from the cache.
@@ -480,11 +485,11 @@ can't add a tuple and a :py:class:`Vector` together).
         :param primitive: The object to test intersection with. It must be an
             instance of :py:class:`PrimitivePrototype`, not
             :py:class:`Primitive`/:py:class:`PrimitiveBatch`.
-            
+
     .. py:method:: intersects_flat(primitive,skip) -> boolean
-    
+
         Returns True if the box intersects the given simplex, ignoring one axis.
-        
+
         This method is identical to :py:meth:`intersects` except it only accepts
         instances of :py:class:`TrianglePrototype` and
         :py:class:`TriangleBatchPrototype` and it disregards the axis ``skip``.
@@ -493,11 +498,11 @@ can't add a tuple and a :py:class:`Vector` together).
         The simplex or batch of simplexes **must** be flat along that axis (i.e.
         :code:`primitive.boundary.start[skip] == primitive.boundary.end[skip]`
         must be true) for the return value to be correct.
-        
+
         This method is needed when a simplex is completely embedded in a split
         hyperplane and thus would fail the normal intersection test with any
         bounding box that the hyperplane divides.
-        
+
         :param primitive: A simplex to test intersection with. It must be an
             instance of :py:class:`TrianglePrototype` or
             :py:class:`TriangleBatchPrototype`, not
@@ -558,17 +563,23 @@ can't add a tuple and a :py:class:`Vector` together).
 
         Set the scene's camera to a copy of the provided value.
 
-        If the scene has been locked by a renderer, this function will raise an
-        exception instead.
+        If the scene has been locked by a renderer, this function will raise a
+        :py:class:`.render.LockedError` exception instead.
 
     .. py:method:: set_fov(fov)
 
         Set the field of vision.
 
-        If the scene has been locked by a renderer, this function will raise an
-        exception instead.
+        If the scene has been locked by a renderer, this function will raise a
+        :py:class:`.render.LockedError` exception instead.
 
         :param fov: The new field of vision in radians.
+
+    .. py:atrribute:: dimension
+
+        The dimension of the scene.
+
+        This attribute is read-only.
 
     .. py:attribute:: fov
 
@@ -615,14 +626,14 @@ can't add a tuple and a :py:class:`Vector` together).
     .. py:method:: translate(offset)
 
         Move the camera using the local coordinate space.
-        
+
         Given camera ``c``, this is equivalent to :code:`for i in
         range(c.dimension): c.origin += c.axes[i] * offset[i]`.
 
         :param vector offset:
-        
+
     .. py:method:: transform(m)
-    
+
         Rotate the camera using matrix ``m``.
 
     .. py:attribute:: axes
@@ -662,7 +673,7 @@ can't add a tuple and a :py:class:`Vector` together).
     Bases: :py:class:`.render.Scene`
 
     A scene that displays the contents of a k-d tree.
-    
+
     You normally don't need to create this object directly, but instead call
     :py:func:`build_composite_scene`.
 
@@ -671,42 +682,42 @@ can't add a tuple and a :py:class:`Vector` together).
     :param data: The root node of a k-d tree.
     :type boundary: :py:class:`AABB`
     :type data: :py:class:`KDNode`
-    
+
     .. py:method:: add_light(light)
-    
+
         Add a light to the scene.
-        
+
         The light will be added to :py:attr:`global_lights` or
         :py:attr:`point_lights` according to its type.
-    
-        If the scene has been locked by a renderer, this method will raise an
-        exception instead.
-        
+
+        If the scene has been locked by a renderer, this method will raise a
+        :py:class:`.render.LockedError` exception instead.
+
         :param light: An instance of :py:class:`GlobalLight` or
             :py:class:`PointLight`.
 
     .. py:method:: get_camera() -> Camera
 
         Return a copy of the scene's camera.
-    
+
     .. py:method:: set_ambient_color(color)
-    
+
         Set the value of :py:attr:`ambient_color`
-        
-        If the scene has been locked by a renderer, this method will raise an
-        exception instead.
+
+        If the scene has been locked by a renderer, this method will raise a
+        :py:class:`.render.LockedError` exception instead.
 
         :param color: An instance of :py:class:`.render.Color` or a tuple with
             three numbers.
-    
+
     .. py:method:: set_background(c1[,c2=c1,c3=c1,axis=1])
-    
+
         Set the values of :py:attr:`bg1`, :py:attr:`bg2`, :py:attr:`bg3` and
         :py:attr:`bg_gradient_axis`.
-        
-        If the scene has been locked by a renderer, this method will raise an
-        exception instead.
-        
+
+        If the scene has been locked by a renderer, this method will raise a
+        :py:class:`.render.LockedError` exception instead.
+
         :param color c1: The new value for :py:attr:`bg1`.
         :param color c2: The new value for :py:attr:`bg2`.
         :param color c3: The new value for :py:attr:`bg3`.
@@ -717,17 +728,17 @@ can't add a tuple and a :py:class:`Vector` together).
 
         Set the scene's camera to a copy of the provided value.
 
-        If the scene has been locked by a renderer, this method will raise an
-        exception instead.
+        If the scene has been locked by a renderer, this method will raise a
+        :py:class:`.render.LockedError` exception instead.
 
         :param camera: An instance of :py:class:`Camera`.
-    
+
     .. py:method:: set_camera_light(camera_light)
-    
+
         Set the value of :py:attr:`camera_light`
-        
-        If the scene has been locked by a renderer, this method will raise an
-        exception instead.
+
+        If the scene has been locked by a renderer, this method will raise a
+        :py:class:`.render.LockedError` exception instead.
 
         :param boolean camera_light: The new value.
 
@@ -735,98 +746,104 @@ can't add a tuple and a :py:class:`Vector` together).
 
         Set the field of vision.
 
-        If the scene has been locked by a renderer, this method will raise an
-        exception instead.
+        If the scene has been locked by a renderer, this method will raise a
+        :py:class:`.render.LockedError` exception instead.
 
         :param number fov: The new field of vision in radians.
-        
+
     .. py:method:: set_max_reflect_depth(depth)
 
         Set the value of :py:attr:`max_reflect_depth`.
 
-        If the scene has been locked by a renderer, this method will raise an
-        exception instead.
+        If the scene has been locked by a renderer, this method will raise a
+        :py:class:`.render.LockedError` exception instead.
 
         :param integer depth: The new value.
-    
+
     .. py:method:: set_shadows(shadows)
-    
+
         Set the value of :py:attr:`shadows`
-        
-        If the scene has been locked by a renderer, this method will raise an
-        exception instead.
+
+        If the scene has been locked by a renderer, this method will raise a
+        :py:class:`.render.LockedError` exception instead.
 
         :param boolean shadows: The new value.
-        
+
     .. py:attribute:: ambient_color
-    
+
         The color of the ambient light.
-        
+
         This light reaches all geometry unconditionally.
-        
+
         The default value is ``Color(0,0,0)``.
-        
+
         This attribute is read-only. To modify the value, use
         :py:meth:`set_ambient_color`.
-    
+
     .. py:attribute:: bg_gradient_axis
-    
+
         The index of the axis along which the three color gradient of the
         background will run.
-        
+
         The default value is 1, corresponding to the y-axis.
-        
+
         This attribute is read-only. To modify the value, use
         :py:meth:`set_background`.
-    
+
     .. py:attribute:: bg1
-    
+
         The first color of the three color gradient of the background.
-        
+
         The default value is ``Color(1,1,1)``.
-        
+
         This attribute is read-only. To modify the value, use
         :py:meth:`set_background`.
-    
+
     .. py:attribute:: bg2
-    
+
         The middle color of the three color gradient of the background.
-        
+
         The default value is ``Color(0,0,0)``.
-        
+
         This attribute is read-only. To modify the value, use
         :py:meth:`set_background`.
-    
+
     .. py:attribute:: bg3
-    
+
         The last color of the three color gradient of the background.
-        
+
         The default value is ``Color(0,1,1)``.
-        
+
         This attribute is read-only. To modify the value, use
         :py:meth:`set_background`.
-    
+
     .. py:attribute:: boundary
-    
+
         The :py:class:`AABB` that encloses all the primitives of the
         scene.
-        
+
         This attribute is read-only.
-        
+
     .. py:attribute:: camera_light
-    
+
         A boolean specifying whether surfaces will be lit if they face the
         camera.
-        
+
         This is equivalent to having an instance of :py:class:`GlobalLight` with
         :py:attr:`GlobalLight.color` set to ``Color(1,1,1)`` and
         :py:attr:`GlobalLight.direction` set to the direction that the camera is
         facing, except this light never casts shadows.
-        
+
         The default value is ``True``.
-        
+
         This attribute is read-only. To modify the value, use
         :py:meth:`set_camera_light`.
+
+    .. py:atrribute:: dimension
+
+        The dimension of the scene.
+
+        This attribute is read-only.
 
     .. py:attribute:: fov
 
@@ -834,11 +851,11 @@ can't add a tuple and a :py:class:`Vector` together).
 
         This attribute is read-only. To modify the value, use
         :py:meth:`set_fov`.
-    
+
     .. py:attribute:: global_lights
-    
+
         A list-like object containing intances of :py:class:`GlobalLight`.
-        
+
         See :py:class:`GlobalLightList` for details.
 
     .. py:attribute:: locked
@@ -846,41 +863,41 @@ can't add a tuple and a :py:class:`Vector` together).
         A boolean specifying whether or not the scene is locked.
 
         This attribute is read-only.
-    
+
     .. py:attribute:: max_reflect_depth
 
         The maximum number of times a ray is allowed to bounce.
-        
+
         The default value is 4.
-        
+
         Recursive reflections require shooting rays multiple times per pixel,
         thus lower values can improve performance at the cost of image quality.
         A value of 0 disables reflections altogether.
 
         This attribute is read-only. To modify the value, use
         :py:meth:`set_max_reflect_depth`.
-    
+
     .. py:attribute:: point_lights
-    
+
         A list-like object containing instances of :py:class:`PointLight`.
-        
+
         See :py:class:`PointLightList` for details.
-        
+
     .. py:attribute:: root
-    
+
         The root node of a k-d tree.
-        
+
         This attribute is read-only.
-    
+
     .. py:attribute:: shadows
-    
+
         A boolean specifying whether objects will cast shadows.
-        
+
         Note: this only applies to lights explicitly added, not the default
         camera light (see :py:attr:`camera_light`).
-        
+
         The default value is ``False``.
-        
+
         This attribute is read-only. To modify the value, use
         :py:meth:`set_shadows`.
 
@@ -903,25 +920,25 @@ can't add a tuple and a :py:class:`Vector` together).
 .. py:class:: GlobalLight(direction,color)
 
     A light whose source is infinitely far from the scene's origin.
-    
+
     This is an approximation of a distant light source such as the sun.
-    
+
     :param vector direction: The direction that the light's rays travel (i.e.
         the light will be located at :math:`-\text{direction} \times \infty`).
     :param color: The light's color. This can be an instance of
         :py:class:`.render.Color` or a tuple with three numbers.
-    
+
     .. py:attribute:: color
-    
+
         The light's color.
-    
+
     .. py:attribute:: dimension
-    
+
         The dimension of :py:attr:`direction`.
-    
+
     .. py:attribute:: direction
-    
-        The direction that the light's rays travel (i.e. the light source will 
+
+        The direction that the light's rays travel (i.e. the light source will
         be located at :math:`-\text{direction} \times \infty`).
 
 
@@ -946,7 +963,7 @@ can't add a tuple and a :py:class:`Vector` together).
     .. py:method:: __len__()
 
         :code:`self.__len__()` <==> :code:`len(self)`
-    
+
     .. py:method:: __setitem__(index,value)
 
         :code:`self.__setitem__(i,v)` <==> :code:`self[i]=v`
@@ -967,7 +984,7 @@ can't add a tuple and a :py:class:`Vector` together).
     A k-d tree branch node.
 
     One of ``left`` and ``right`` may be ``None``, but not both.
-    
+
     .. note:: In order to minimize the amount of space that k-d tree nodes take
         up in memory (and therefore maximize the speed at which they can be
         traversed), the nodes are not stored internally as Python objects nor
@@ -1021,9 +1038,9 @@ can't add a tuple and a :py:class:`Vector` together).
         yield instances of :py:class:`PrimitiveBatch`.
 
     .. py:method:: __getitem__(index)
-    
+
         Return the ``index``'th primitive or primitive batch.
-        
+
         Note that the order the primitives/batches are stored in will not
         necessarily match the order given to the constructor.
 
@@ -1036,7 +1053,7 @@ can't add a tuple and a :py:class:`Vector` together).
     .. py:attribute:: dimension
 
         The dimension of the primitives.
-        
+
         All the primitives are required to have the same dimension.
 
 
@@ -1069,12 +1086,12 @@ can't add a tuple and a :py:class:`Vector` together).
             primitive batch to ignore intersection with. If ``source`` is not an
             instance of :py:class:`PrimitiveBatch`, this value is ignored.
         :type source: :py:class:`Primitive` or :py:class:`PrimitiveBatch`
-    
+
     .. py:method:: occludes(origin,direction[,distance,t_near,t_far,source,batch_index]) -> tuple
 
         Test if :code:`origin + direction*distance` is occluded by any
         primitives.
-        
+
         If an opaque object exists at any point along ``distance``, the return
         value is :code:`(True,None)`. Otherwise the return value is a tuple
         containing ``False`` and a list containing an instance of
@@ -1107,7 +1124,7 @@ can't add a tuple and a :py:class:`Vector` together).
     .. py:method:: __getitem__(index)
 
         :code:`self.__getitem__(i)` <==> :code:`self[i]`
-        
+
         The elements of ``Matrix`` are its rows.
 
     .. py:method:: __len__()
@@ -1141,14 +1158,14 @@ can't add a tuple and a :py:class:`Vector` together).
         Create an identity matrix.
 
         :param dimension: The dimension of the new matrix.
-        
+
     .. py:staticmethod:: reflection(axis) -> Matrix
-    
+
         Create a reflection matrix.
-        
+
         The refection is by a hyperplane perpendicular to ``axis`` that passes
         through the origin.
-        
+
         :param vector axis: The axis to reflect along.
 
     .. py:staticmethod:: rotation(a,b,theta) -> Matrix
@@ -1245,17 +1262,17 @@ can't add a tuple and a :py:class:`Vector` together).
 .. py:class:: PointLightList
 
     An array of :py:class:`PointLight` objects.
-    
+
     An instance of this class is tied to a specific :py:class:`CompositeScene`
     instance. Any attempt to modify an instance of this class while the scene is
     locked will cause an exception to be raised.
-    
+
     Since the order of lights is not important, when deleting an element,
     instead of shifting all subsequent elements back, the gap is filled with the
     last element (unless the last element is the one being deleted).
-    
+
     This class cannot be instantiated directly in Python code.
-    
+
     .. py:method:: __getitem__(index)
 
         :code:`self.__getitem__(i)` <==> :code:`self[i]`
@@ -1263,17 +1280,17 @@ can't add a tuple and a :py:class:`Vector` together).
     .. py:method:: __len__()
 
         :code:`self.__len__()` <==> :code:`len(self)`
-    
+
     .. py:method:: __setitem__(index,value)
 
         :code:`self.__setitem__(i,v)` <==> :code:`self[i]=v`
-    
+
     .. py:method:: append(light)
-    
+
         Add a light.
-        
+
     .. py:method:: extend(lights)
-    
+
         Add lights from an iterable object.
 
 
@@ -1296,9 +1313,9 @@ can't add a tuple and a :py:class:`Vector` together).
 
         :param origin: The origin of the ray.
         :param direction: The direction of the ray.
-        
+
     .. py:attribute:: material
-    
+
         The material of the primitive.
 
 
@@ -1319,9 +1336,9 @@ can't add a tuple and a :py:class:`Vector` together).
         :param integer index: The index specifying which primitive in the batch
             should not be considered for intersection, or ``-1`` if all
             primitives should be considered.
-        
+
     .. py:attribute:: material
-    
+
         A read-only sequence containing the materials of the primitives.
 
 
@@ -1334,7 +1351,7 @@ can't add a tuple and a :py:class:`Vector` together).
     .. py:attribute:: boundary
 
         The :py:class:`AABB` of the primitive.
-    
+
     .. py:attribute:: primitive
 
         The corresponding :py:class:`Primitive` or :py:class:`PrimitiveBatch`.
@@ -1343,9 +1360,9 @@ can't add a tuple and a :py:class:`Vector` together).
 .. py:class:: RayIntersection(dist,origin,normal,primitive[,batch_index=-1])
 
     The details of an intersection between a ray and a primitive.
-    
+
     Instances of this class are read-only.
-    
+
     :param number dist: The distance between the origin of the ray and the point
         of intersection.
     :param vector origin: The point where the ray intersected the primitive.
@@ -1356,29 +1373,29 @@ can't add a tuple and a :py:class:`Vector` together).
     :param integer batch_index: The index indicating which primitive in the
         batch was intersected or ``-1`` if the primitive is not an instance of
         :py:class:`PrimitiveBatch`.
-    
+
     .. py:attribute:: dist
-    
+
         The distance between the origin of the ray and the point of
         intersection.
-    
+
     .. py:attribute:: origin
-    
+
         The point where the ray intersected the primitive.
-    
+
     .. py:attribute:: normal
-    
+
         The normal of the surface of the primitive at the point of intersection.
-    
+
     .. py:attribute:: primitive
-    
+
         The :py:class:`Primitive` or :py:class:`PrimitiveBatch` that the ray
         intersected.
-    
+
     .. py:attribute:: batch_index
-    
+
         The index indicating which primitive in the batch was intersected.
-        
+
         If :py:attr:`primitive` is not an instance of :py:class:`PrimitiveBatch`
         then this will have a value of ``-1``.
 
@@ -1446,9 +1463,9 @@ can't add a tuple and a :py:class:`Vector` together).
     .. py:attribute:: inv_orientation
 
         The inverse of :py:attr:`orientation`
-    
+
     .. py:attribute:: material
-    
+
         The material of the primitive.
 
     .. py:attribute:: orientation
@@ -1525,24 +1542,24 @@ can't add a tuple and a :py:class:`Vector` together).
 .. py:class:: TriangleBatch(triangles)
 
     Bases: :py:class:`PrimitiveBatch`
-    
+
     A batch of simplexes with data rearranged for faster computation.
 
     Instances of this class are read-only.
-    
+
     :param triangles: An iterable yielding exactly :py:const:`BATCH_SIZE`
         instances of :py:class:`Triangle`
 
     .. py:method:: __getitem__(index)
-    
+
         Extract the ``index``'th simplex.
 
         :code:`self.__getitem__(i)` <==> :code:`self[i]`
 
     .. py:method:: __len__()
-    
+
         Return the number of simplexes in the batch.
-        
+
         This is always equal :py:const:`BATCH_SIZE`.
 
         :code:`self.__len__()` <==> :code:`len(self)`
@@ -1551,7 +1568,7 @@ can't add a tuple and a :py:class:`Vector` together).
 .. py:class:: TriangleBatchPointData
 
     A read-only sequence of :py:class:`TriangleBatchPointDatum` instances.
-    
+
     Instances of this class are read-only. This class cannot be instantiated
     directly in Python code.
 
@@ -1592,7 +1609,7 @@ can't add a tuple and a :py:class:`Vector` together).
     .. py:attribute:: dimension
 
         The dimension of the simplexes.
-        
+
         This is a single value since the simplexes must all have the same
         dimension.
 
@@ -1604,7 +1621,7 @@ can't add a tuple and a :py:class:`Vector` together).
 .. py:class:: TrianglePointData
 
     A read-only sequence of :py:class:`TrianglePointDatum` instances.
-    
+
     Instances of this class are read-only. This class cannot be instantiated
     directly in Python code.
 
@@ -1675,11 +1692,11 @@ can't add a tuple and a :py:class:`Vector` together).
     .. py:method:: __add__(b)
 
         :code:`self.__add__(y)` <==> :code:`self+y`
-        
+
     .. py:method:: __div__(b)
-    
+
         Divide every element of the vector by ``b``.
-    
+
         :code:`self.__div__(y)` <==> :code:`self/y`
 
     .. py:method:: __eq__(b)
@@ -1780,12 +1797,12 @@ can't add a tuple and a :py:class:`Vector` together).
 .. py:class:: VectorBatch
 
     A batch of vectors with data rearranged for faster computation.
-    
+
     Instances of this class are read-only. This class cannot be instantiated
     directly in Python code.
 
     .. py:method:: __getitem__(index)
-    
+
         Extract the ``index``'th vector from the batch.
 
         :code:`self.__getitem__(i)` <==> :code:`self[i]`
@@ -1793,7 +1810,7 @@ can't add a tuple and a :py:class:`Vector` together).
     .. py:method:: __len__()
 
         Return the number of vectors in the batch.
-        
+
         This should not be confused with the length of the vectors themselves.
 
         This is always equal to :py:const:`BATCH_SIZE`.
@@ -1805,18 +1822,18 @@ can't add a tuple and a :py:class:`Vector` together).
     CompositeScene
 
     Create a scene from a sequence of :py:class:`PrimitivePrototype` instances.
-    
+
     If :py:const:`BATCH_SIZE` is greater than ``1``, instances of
     :py:class:`TrianglePrototype` will be automatically merged into instances
     of :py:class:`TriangleBatchPrototype`. If :py:const:`BATCH_SIZE` is equal to
     ``1``, then ``primitives`` cannot contain any instances of
     :py:class:`TriangleBatchPrototype`.
-    
+
     By default, this will use all available processing cores to build the scene,
     but this can be controlled by passing a non-negative integer to
     ``extra_threads`` (a value of zero would make it run single-threaded). Note
     that fewer threads may be used if the resulting k-d tree is too shallow.
-    
+
     :param iterable primitives: One or more instances of
         :py:class:`PrimitivePrototype`.
     :param integer extra_threads: How many extra threads to use or -1 to use as
@@ -1827,24 +1844,24 @@ can't add a tuple and a :py:class:`Vector` together).
 
     Create a k-d tree from a sequence of :py:class:`PrimitivePrototype`
     instances.
-    
+
     The return value is a tuple containing an instance of :py:class:`AABB`
     followed by the root node of k-d tree (an instance of :py:class:`KDNode`).
     The :py:class:`AABB` encloses all the primitives from ``primitives``. The
     tuple's values can be passed directly to :py:class:`CompositeScene` (which
     is exactly what :py:func:`build_composite_scene` does).
-    
+
     If :py:const:`BATCH_SIZE` is greater than ``1``, instances of
     :py:class:`TrianglePrototype` will be automatically merged into instances
     of :py:class:`TriangleBatchPrototype`. If :py:const:`BATCH_SIZE` is equal to
     ``1``, then ``primitives`` cannot contain any instances of
     :py:class:`TriangleBatchPrototype`.
-    
+
     By default, this will use all available processing cores to build the tree,
     but this can be controlled by passing a non-negative integer to
     ``extra_threads`` (a value of zero would make it run single-threaded). Note
     that fewer threads may be used if the resulting tree is too shallow.
-    
+
     :param sequence primitives: One or more instances of
         :py:class:`PrimitivePrototype`.
     :param integer extra_threads: How many extra threads to use or -1 to use as
@@ -1867,7 +1884,7 @@ can't add a tuple and a :py:class:`Vector` together).
 .. py:data:: BATCH_SIZE
 
     The number of objects that batch objects group.
-    
+
     On hardware that has SIMD registers, certain operations can be performed
     more efficiently if data from multiple objects is rearranged so that every
     numeric value is followed the equivalent value in the next object, up to the
@@ -1879,7 +1896,7 @@ can't add a tuple and a :py:class:`Vector` together).
     be able to take advantage of the largest registers of the instruction set
     that this package was compiled for (when compiling from source, the latest
     instruction set that the current machine supports, is chosen by default).
-    
+
     The source code of this package supports SSE and AVX. If this package is
     compiled for an instruction set that supports neither of these technologies,
     ``BATCH_SIZE`` will be equal to ``1``. In such a case, :py:class:`KDLeaf`
@@ -1887,7 +1904,7 @@ can't add a tuple and a :py:class:`Vector` together).
     of :py:class:`PrimitiveBatch` to its constructor will cause and exception to
     be raised) so that the ray tracer can be streamlined. The batch classes will
     still exist, however, for the sake of testing compatibility.
-    
+
     Most users will not have to worry about the value of ``BATCH_SIZE`` or batch
     objects since :py:func:`build_composite_scene` (and :py:func:`build_kdtree`)
     will automatically combine instances of :py:class:`TrianglePrototype` into
@@ -1920,9 +1937,9 @@ can't add a tuple and a :py:class:`Vector` together).
 .. automodule:: ntracer.pygame_render
 
 .. autoclass:: PygameRenderer
-    
+
     .. automethod:: begin_render
-    
+
     .. autoattribute:: ON_COMPLETE
         :annotation:
 
@@ -1966,4 +1983,3 @@ unpickled, the specialized versions are used when available.
 Note that equivalent types between the generic and specific versions are not
 compatible with each other (e.g. an instance ``tracern.Vector`` cannot be added
 to an instance of ``tracer3.Vector`` even if they have the same dimension).
-

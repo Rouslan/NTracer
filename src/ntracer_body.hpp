@@ -8,6 +8,9 @@
 #include "var_geometry.hpp"
 #include "tracer.hpp"
 
+// this file is generated
+#include "ntracer_body_strings.hpp"
+
 
 #define _STR(X) #X
 #define STR(X) _STR(X)
@@ -35,6 +38,18 @@ typedef vector<module_store,v_real> n_vector_batch;
 
 
 package_common package_common_data = {nullptr};
+PyTypeObject *locked_error_exc = nullptr;
+
+
+struct instance_data_t {
+    interned_strings istrings;
+};
+
+inline instance_data_t *get_instance_data(PyObject *mod) {
+    return reinterpret_cast<instance_data_t*>(PyModule_GetState(mod));
+}
+
+instance_data_t *get_instance_data();
 
 
 Py_ssize_t check_dimension(int d) {
@@ -219,7 +234,7 @@ template<> struct _wrapped_type<composite_scene<module_store>> {
 
 template<typename T> void ensure_unlocked(T *s) {
     if(s->get_base().locked) {
-        PyErr_SetString(PyExc_RuntimeError,"the scene is locked for reading");
+        PyErr_SetString(reinterpret_cast<PyObject*>(locked_error_exc),"the scene is locked for reading");
         throw py_error_set();
     }
 }
@@ -629,11 +644,12 @@ PyMethodDef obj_BoxScene_methods[] = {
 };
 
 FIX_STACK_ALIGN PyObject *obj_BoxScene_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
+    auto idata = get_instance_data();
     auto ptr = reinterpret_cast<obj_BoxScene*>(type->tp_alloc(type,0));
     if(ptr) {
         try {
             try {
-                auto [d] = get_arg::get_args("BoxScene.__new__",args,kwds,param<real>("dimension"));
+                auto [d] = get_arg::get_args("BoxScene.__new__",args,kwds,param<real>(P(dimension)));
 
                 check_dimension(d);
 
@@ -652,6 +668,7 @@ FIX_STACK_ALIGN PyObject *obj_BoxScene_new(PyTypeObject *type,PyObject *args,PyO
 
 PyGetSetDef obj_BoxScene_getset[] = {
     {"locked",OBJ_GETTER(obj_BoxScene,self->base.locked),NULL,NULL,NULL},
+    {"dimension",OBJ_GETTER(obj_BoxScene,self->base.dimension()),NULL,NULL,NULL},
     {NULL}
 };
 
@@ -726,11 +743,12 @@ FIX_STACK_ALIGN PyObject *obj_CompositeScene_add_light(obj_CompositeScene *self,
 }
 
 FIX_STACK_ALIGN PyObject *obj_CompositeScene_set_background(obj_CompositeScene *self,PyObject *args,PyObject *kwds) {
+    auto idata = get_instance_data();
     try {
         ensure_unlocked(self);
         auto &base = self->get_base();
 
-        const char *names[] = {"c1","c2","c3","axis",nullptr};
+        PyObject *names[] = {P(c1),P(c2),P(c3),P(axis),nullptr};
         get_arg ga(args,kwds,names,"CompositeScene.set_background");
         color c1;
         read_color(c1,ga(true));
@@ -789,11 +807,12 @@ PyMethodDef obj_CompositeScene_methods[] = {
 };
 
 FIX_STACK_ALIGN PyObject *obj_CompositeScene_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
+    auto idata = get_instance_data();
     auto ptr = type->tp_alloc(type,0);
     if(ptr) {
         try {
             try {
-                const char *names[] = {"boundary","data",nullptr};
+                PyObject *names[] = {P(boundary),P(data),nullptr};
                 get_arg ga(args,kwds,names,"CompositeScene.__new__");
 
                 auto &boundary = get_base<n_aabb>(ga(true));
@@ -876,6 +895,7 @@ PyGetSetDef obj_CompositeScene_getset[] = {
     {"global_lights",OBJ_GETTER(
         obj_CompositeScene,
         py::new_ref(new cs_light_list<global_light_list_base>(self))),NULL,NULL,NULL},
+    {"dimension",OBJ_GETTER(obj_CompositeScene,self->get_base().dimension()),NULL,NULL,NULL},
     {NULL}
 };
 
@@ -898,29 +918,34 @@ void check_index(const n_camera &c,Py_ssize_t index) {
     if(index < 0 || index >= c.dimension()) THROW_PYERR_STRING(IndexError,"index out of range");
 }
 
+/* a bug in GCC 9 prevents us from using function attributes on lambda
+functions */
+FIX_STACK_ALIGN PyObject *obj_CameraAxes_sq_item(PyObject *self,Py_ssize_t index) {
+    try {
+        auto &base = reinterpret_cast<obj_CameraAxes*>(self)->base->get_base();
+        check_index(base,index);
+        return to_pyobject(n_vector(base.t_orientation[index]));
+    } PY_EXCEPT_HANDLERS(nullptr)
+}
+FIX_STACK_ALIGN int obj_CameraAxes_sq_ass_item(PyObject *self,Py_ssize_t index,PyObject *value) {
+    if(UNLIKELY(!value)) {
+        PyErr_SetString(PyExc_TypeError,"items of CameraAxes cannot be deleted");
+        return -1;
+    }
+    try {
+        auto &base = reinterpret_cast<obj_CameraAxes*>(self)->base->get_base();
+        check_index(base,index);
+        base.t_orientation[index] = from_pyobject<n_vector>(value);
+        return 0;
+    } PY_EXCEPT_HANDLERS(-1)
+}
+
 PySequenceMethods obj_CameraAxes_sequence_methods = {
     .sq_length = [](PyObject *self) -> Py_ssize_t {
         return reinterpret_cast<obj_CameraAxes*>(self)->base->get_base().dimension();
     },
-    .sq_item = [](PyObject *self,Py_ssize_t index) FIX_STACK_ALIGN -> PyObject* {
-        try {
-            auto &base = reinterpret_cast<obj_CameraAxes*>(self)->base->get_base();
-            check_index(base,index);
-            return to_pyobject(n_vector(base.t_orientation[index]));
-        } PY_EXCEPT_HANDLERS(nullptr)
-    },
-    .sq_ass_item = [](PyObject *self,Py_ssize_t index,PyObject *value) FIX_STACK_ALIGN -> int {
-        if(UNLIKELY(!value)) {
-            PyErr_SetString(PyExc_TypeError,"items of CameraAxes cannot be deleted");
-            return -1;
-        }
-        try {
-            auto &base = reinterpret_cast<obj_CameraAxes*>(self)->base->get_base();
-            check_index(base,index);
-            base.t_orientation[index] = from_pyobject<n_vector>(value);
-            return 0;
-        } PY_EXCEPT_HANDLERS(-1)
-    }
+    .sq_item = &obj_CameraAxes_sq_item,
+    .sq_ass_item = &obj_CameraAxes_sq_ass_item
 };
 
 PyTypeObject obj_CameraAxes::_pytype = {
@@ -942,10 +967,11 @@ void check_origin_dir_compat(const n_vector &o,const n_vector &d) {
 }
 
 FIX_STACK_ALIGN PyObject *obj_Primitive_intersects(primitive<module_store> *self,PyObject *args,PyObject *kwds) {
+    auto idata = get_instance_data();
     try {
         auto [origin,direction] = get_arg::get_args("Primitive.intersects",args,kwds,
-            param<n_vector>("origin"),
-            param<n_vector>("direction"));
+            param<n_vector>(P(origin)),
+            param<n_vector>(P(direction)));
 
         check_origin_dir_compat(origin,direction);
 
@@ -977,11 +1003,12 @@ PyTypeObject obj_Primitive::_pytype = {
 
 
 FIX_STACK_ALIGN PyObject *obj_PrimitiveBatch_intersects(primitive_batch<module_store> *self,PyObject *args,PyObject *kwds) {
+    auto idata = get_instance_data();
     try {
         auto vals = get_arg::get_args("PrimitiveBatch.intersects",args,kwds,
-            param<n_vector>("origin"),
-            param<n_vector>("direction"),
-            param<int>("index"));
+            param<n_vector>(P(origin)),
+            param<n_vector>(P(direction)),
+            param<int>(P(index)));
 
         check_origin_dir_compat(std::get<0>(vals),std::get<1>(vals));
 
@@ -1050,8 +1077,9 @@ PyMethodDef obj_Solid_methods[] = {
 };
 
 FIX_STACK_ALIGN PyObject *obj_Solid_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
+    auto idata = get_instance_data();
     try {
-        const char *names[] = {"type","position","orientation","material",nullptr};
+        PyObject *names[] = {P(type),P(position),P(orientation),P(material),nullptr};
         get_arg ga(args,kwds,names,"Solid.__new__");
         auto type = from_pyobject<solid_type>(ga(true));
         auto position = from_pyobject<n_vector>(ga(true));
@@ -1127,8 +1155,9 @@ std::vector<n_vector,simd::allocator<n_vector>> points_for_triangle(PyObject *ob
 }
 
 FIX_STACK_ALIGN PyObject *obj_Triangle_from_points(PyObject*,PyObject *args,PyObject *kwds) {
+    auto idata = get_instance_data();
     try {
-        const char *names[] = {"points","material",nullptr};
+        PyObject *names[] = {P(points),P(material),nullptr};
         get_arg ga(args,kwds,names,"Triangle.from_points");
         auto obj_points = ga(true);
         auto m = checked_py_cast<material>(ga(true));
@@ -1163,9 +1192,10 @@ PyMethodDef obj_Triangle_methods[] = {
 
 FIX_STACK_ALIGN PyObject *obj_Triangle_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
     const char dim_err[] = "all supplied vectors must have the same dimension";
+    auto idata = get_instance_data();
 
     try {
-        const char *names[] = {"p1","face_normal","edge_normals","material",nullptr};
+        PyObject *names[] = {P(p1),P(face_normal),P(edge_normals),P(material),nullptr};
         get_arg ga(args,kwds,names,"Triangle.__new__");
         auto p1 = from_pyobject<n_vector>(ga(true));
         auto face_normal = from_pyobject<n_vector>(ga(true));
@@ -1261,9 +1291,10 @@ PySequenceMethods obj_TriangleBatch_sequence_methods = {
     .sq_item = reinterpret_cast<ssizeargfunc>(&obj_TriangleBatch_sequence_getitem)};
 
 FIX_STACK_ALIGN PyObject *obj_TriangleBatch_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
+    auto idata = get_instance_data();
     try {
         auto arg = std::get<0>(get_arg::get_args("TriangleBatch.__new__",args,kwds,
-            param("triangles")));
+            param(P(triangles))));
 
         auto tris = sized_iter(py::borrowed_ref(arg),v_real::size);
 
@@ -1329,17 +1360,18 @@ void set_target(intersection_target<module_store,true> &t,PyObject *p,int index)
 }
 
 FIX_STACK_ALIGN PyObject *kdnode_intersects(obj_KDNode *self,PyObject *args,PyObject *kwds) {
+    auto idata = get_instance_data();
     try {
         assert(self->_data->type == LEAF || self->_data->type == BRANCH);
 
         auto [origin,direction,t_near,t_far,source,batch_index]
             = get_arg::get_args("KDNode.intersects",args,kwds,
-            param<n_vector>("origin"),
-            param<n_vector>("direction"),
-            param<real>("t_near",std::numeric_limits<real>::lowest()),
-            param<real>("t_far",std::numeric_limits<real>::max()),
-            param<PyObject*>("source",nullptr),
-            param<int>("batch_index",-1));
+            param<n_vector>(P(origin)),
+            param<n_vector>(P(direction)),
+            param<real>(P(t_near),std::numeric_limits<real>::lowest()),
+            param<real>(P(t_far),std::numeric_limits<real>::max()),
+            param<PyObject*>(P(source),nullptr),
+            param<int>(P(batch_index),-1));
 
         check_origin_dir_compat(origin,direction);
 
@@ -1375,18 +1407,19 @@ FIX_STACK_ALIGN PyObject *kdnode_intersects(obj_KDNode *self,PyObject *args,PyOb
 }
 
 FIX_STACK_ALIGN PyObject *kdnode_occludes(obj_KDNode *self,PyObject *args,PyObject *kwds) {
+    auto idata = get_instance_data();
     try {
         assert(self->_data->type == LEAF || self->_data->type == BRANCH);
 
         auto [origin,direction,distance,t_near,t_far,source,batch_index]
             = get_arg::get_args("KDNode.occludes",args,kwds,
-            param<n_vector>("origin"),
-            param<n_vector>("direction"),
-            param<real>("distance",std::numeric_limits<real>::max()),
-            param<real>("t_near",std::numeric_limits<real>::lowest()),
-            param<real>("t_far",std::numeric_limits<real>::max()),
-            param<PyObject*>("source",nullptr),
-            param<int>("batch_index",-1));
+            param<n_vector>(P(origin)),
+            param<n_vector>(P(direction)),
+            param<real>(P(distance),std::numeric_limits<real>::max()),
+            param<real>(P(t_near),std::numeric_limits<real>::lowest()),
+            param<real>(P(t_far),std::numeric_limits<real>::max()),
+            param<PyObject*>(P(source),nullptr),
+            param<int>(P(batch_index),-1));
 
         check_origin_dir_compat(origin,direction);
 
@@ -1470,12 +1503,13 @@ inline kd_leaf<module_store,true> *create_kd_leaf(Py_ssize_t size,py::tuple prim
 }
 
 FIX_STACK_ALIGN PyObject *obj_KDLeaf_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
+    auto idata = get_instance_data();
     auto ptr = reinterpret_cast<obj_KDLeaf*>(type->tp_alloc(type,0));
     if(!ptr) return nullptr;
 
     try {
         try {
-            const char *names[] = {"primitives",nullptr};
+            PyObject *names[] = {P(primitives),nullptr};
             get_arg ga(args,kwds,names,"KDLeaf.__new__");
             py::tuple primitives(py::object(py::borrowed_ref(ga(true))));
             ga.finished();
@@ -1535,22 +1569,21 @@ obj_KDNode* acceptable_node(PyObject *obj) {
 }
 
 FIX_STACK_ALIGN PyObject *obj_KDBranch_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
+    auto idata = get_instance_data();
     auto ptr = reinterpret_cast<obj_KDBranch*>(type->tp_alloc(type,0));
     if(ptr) {
         try {
             try {
-                const char *names[] = {"axis","split","left","right",nullptr};
-                get_arg ga(args,kwds,names,"KDBranch.__new__");
-                auto axis = from_pyobject<int>(ga(true));
-                auto split = from_pyobject<real>(ga(true));
-                auto left = ga(false);
-                auto right = ga(false);
-                ga.finished();
+                auto [axis,split,left,right] = get_arg::get_args("KDBranch.__new__",args,kwds,
+                    param<int>(P(axis)),
+                    param<real>(P(split)),
+                    param<PyObject*>(P(left),nullptr),
+                    param<PyObject*>(P(right),nullptr));
 
                 auto lnode = acceptable_node(left);
                 auto rnode = acceptable_node(right);
 
-                if(!left && !right)
+                if(!lnode && !rnode)
                     THROW_PYERR_STRING(TypeError,"\"left\" and \"right\" can't both be None");
 
                 if(lnode && rnode && !compatible(*lnode,*rnode))
@@ -1612,13 +1645,57 @@ FIX_STACK_ALIGN PyObject *obj_RayIntersection_get_normal(wrapped_type<py_ray_int
 }
 
 PyGetSetDef obj_RayIntersection_getset[] = {
-    {const_cast<char*>("dist"),OBJ_GETTER(wrapped_type<py_ray_intersection>,self->get_base().dist),NULL,NULL,NULL},
-    {const_cast<char*>("origin"),reinterpret_cast<getter>(&obj_RayIntersection_get_origin),NULL,NULL,NULL},
-    {const_cast<char*>("normal"),reinterpret_cast<getter>(&obj_RayIntersection_get_normal),NULL,NULL,NULL},
-    {const_cast<char*>("primitive"),OBJ_GETTER(wrapped_type<py_ray_intersection>,self->get_base().p),NULL,NULL,NULL},
-    {const_cast<char*>("batch_index"),OBJ_GETTER(wrapped_type<py_ray_intersection>,self->get_base().index),NULL,NULL,NULL},
+    {"dist",OBJ_GETTER(wrapped_type<py_ray_intersection>,self->get_base().dist),NULL,NULL,NULL},
+    {"origin",reinterpret_cast<getter>(&obj_RayIntersection_get_origin),NULL,NULL,NULL},
+    {"normal",reinterpret_cast<getter>(&obj_RayIntersection_get_normal),NULL,NULL,NULL},
+    {"primitive",OBJ_GETTER(wrapped_type<py_ray_intersection>,self->get_base().p),NULL,NULL,NULL},
+    {"batch_index",OBJ_GETTER(wrapped_type<py_ray_intersection>,self->get_base().index),NULL,NULL,NULL},
     {NULL}
 };
+
+FIX_STACK_ALIGN PyObject *obj_RayIntersection_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
+    auto idata = get_instance_data();
+    auto ptr = reinterpret_cast<wrapped_type<py_ray_intersection>*>(type->tp_alloc(type,0));
+    if(ptr) {
+        try {
+            try {
+                auto [dist,origin,normal,primitive,batch_index] = get_arg::get_args("RayIntersection.__new__",args,kwds,
+                    param<real>(P(dist)),
+                    param<n_vector>(P(origin)),
+                    param<n_vector>(P(normal)),
+                    param(P(primitive)),
+                    param<int>(P(batch_index),-1));
+
+                if(PyObject_TypeCheck(primitive,obj_Primitive::pytype())) {
+                    if(batch_index != -1) THROW_PYERR_STRING(
+                        ValueError,
+                        "\"batch_index\" cannot be anything other than -1 unless \"primitive\" is an instance of PrimitiveBatch");
+                } else if(PyObject_TypeCheck(primitive,obj_PrimitiveBatch::pytype())) {
+                    if(batch_index < 0) THROW_PYERR_STRING(
+                        ValueError,
+                        "\"batch_index\" cannot be less than zero if \"primitive\" is an instance of PrimitiveBatch");
+                } else {
+                    THROW_PYERR_STRING(
+                        TypeError,
+                        "\"primitive\" must either be an instance of Primitive or PrimitiveBatch");
+                }
+
+                if(!compatible(origin,normal)) THROW_PYERR_STRING(TypeError,"\"origin\" and \"normal\" must have the same dimension");
+
+                new(&ptr->alloc_base()) py_ray_intersection(
+                    dist,
+                    origin,
+                    normal,
+                    primitive,
+                    batch_index);
+            } catch(...) {
+                Py_DECREF(ptr);
+                throw;
+            }
+        } PY_EXCEPT_HANDLERS(nullptr)
+    }
+    return py::ref(ptr);
+}
 
 PyTypeObject py_ray_intersection_obj_base::_pytype = {
     PyVarObject_HEAD_INIT(nullptr,0)
@@ -1627,48 +1704,7 @@ PyTypeObject py_ray_intersection_obj_base::_pytype = {
     .tp_dealloc = destructor_dealloc<wrapped_type<py_ray_intersection> >::value,
     .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE,
     .tp_getset = obj_RayIntersection_getset,
-    .tp_new = [](PyTypeObject *type,PyObject *args,PyObject *kwds) -> PyObject* {
-        auto ptr = reinterpret_cast<wrapped_type<py_ray_intersection>*>(type->tp_alloc(type,0));
-        if(ptr) {
-            try {
-                try {
-                    auto [dist,origin,normal,primitive,batch_index] = get_arg::get_args("RayIntersection.__new__",args,kwds,
-                        param<real>("dist"),
-                        param<n_vector>("origin"),
-                        param<n_vector>("normal"),
-                        param("primitive"),
-                        param<int>("batch_index",-1));
-
-                    if(PyObject_TypeCheck(primitive,obj_Primitive::pytype())) {
-                        if(batch_index != -1) THROW_PYERR_STRING(
-                            ValueError,
-                            "\"batch_index\" cannot be anything other than -1 unless \"primitive\" is an instance of PrimitiveBatch");
-                    } else if(PyObject_TypeCheck(primitive,obj_PrimitiveBatch::pytype())) {
-                        if(batch_index < 0) THROW_PYERR_STRING(
-                            ValueError,
-                            "\"batch_index\" cannot be less than zero if \"primitive\" is an instance of PrimitiveBatch");
-                    } else {
-                        THROW_PYERR_STRING(
-                            TypeError,
-                            "\"primitive\" must either be an instance of Primitive or PrimitiveBatch");
-                    }
-
-                    if(!compatible(origin,normal)) THROW_PYERR_STRING(TypeError,"\"origin\" and \"normal\" must have the same dimension");
-
-                    new(&ptr->alloc_base()) py_ray_intersection(
-                        dist,
-                        origin,
-                        normal,
-                        primitive,
-                        batch_index);
-                } catch(...) {
-                    Py_DECREF(ptr);
-                    throw;
-                }
-            } PY_EXCEPT_HANDLERS(nullptr)
-        }
-        return py::ref(ptr);
-    }};
+    .tp_new = &obj_RayIntersection_new};
 
 
 PyObject *obj_Vector_str(wrapped_type<n_vector> *self) {
@@ -1804,12 +1840,13 @@ FIX_STACK_ALIGN PyObject *obj_Vector_square(wrapped_type<n_vector> *self,PyObjec
     return to_pyobject(self->get_base().square());
 }
 
-FIX_STACK_ALIGN PyObject *obj_Vector_axis(PyObject*,PyObject *args,PyObject *kwds) {
+FIX_STACK_ALIGN PyObject *obj_Vector_axis(PyObject*,NTRACER_COMPAT_FASTCALL_KEYWORD_PARAMS) {
+    auto idata = get_instance_data();
     try {
-        auto [dim,axis,length] = get_arg::get_args("Vector.axis",args,kwds,
-            param<int>("dimension"),
-            param<int>("axis"),
-            param<real>("length",1));
+        auto [dim,axis,length] = get_arg::get_args("Vector.axis",NTRACER_COMPAT_FASTCALL_KEYWORD_ARGS,
+            param<int>(P(dimension)),
+            param<int>(P(axis)),
+            param<real>(P(length),1));
 
         check_dimension(dim);
         if(UNLIKELY(axis < 0 || axis >= dim)) {
@@ -1844,13 +1881,14 @@ FIX_STACK_ALIGN PyObject *obj_Vector_apply(wrapped_type<n_vector> *_self,PyObjec
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
-FIX_STACK_ALIGN PyObject *obj_Vector_set_c(wrapped_type<n_vector> *self,PyObject *args,PyObject *kwds) {
+FIX_STACK_ALIGN PyObject *obj_Vector_set_c(wrapped_type<n_vector> *self,NTRACER_COMPAT_FASTCALL_KEYWORD_PARAMS) {
+    auto idata = get_instance_data();
     try {
         auto &v = self->get_base();
 
-        auto [index,value] = get_arg::get_args("Vector.set_c",args,kwds,
-            param<Py_ssize_t>("index"),
-            param<real>("value"));
+        auto [index,value] = get_arg::get_args("Vector.set_c",NTRACER_COMPAT_FASTCALL_KEYWORD_ARGS,
+            param<Py_ssize_t>(P(index)),
+            param<real>(P(value)));
 
         v_index_check(v,index);
 
@@ -1870,11 +1908,11 @@ FIX_STACK_ALIGN PyObject *obj_Vector_reduce(wrapped_type<n_vector> *self,PyObjec
 
 PyMethodDef obj_Vector_methods[] = {
     {"square",reinterpret_cast<PyCFunction>(&obj_Vector_square),METH_NOARGS,NULL},
-    {"axis",reinterpret_cast<PyCFunction>(&obj_Vector_axis),METH_VARARGS|METH_KEYWORDS|METH_STATIC,NULL},
+    {"axis",reinterpret_cast<PyCFunction>(&obj_Vector_axis),NTRACER_COMPAT_METH_FASTCALL|METH_KEYWORDS|METH_STATIC,NULL},
     {"absolute",reinterpret_cast<PyCFunction>(&obj_Vector_absolute),METH_NOARGS,NULL},
     {"unit",reinterpret_cast<PyCFunction>(&obj_Vector_unit),METH_NOARGS,NULL},
     {"apply",reinterpret_cast<PyCFunction>(&obj_Vector_apply),METH_O,NULL},
-    {"set_c",reinterpret_cast<PyCFunction>(&obj_Vector_set_c),METH_VARARGS|METH_KEYWORDS,NULL},
+    {"set_c",reinterpret_cast<PyCFunction>(&obj_Vector_set_c),NTRACER_COMPAT_METH_FASTCALL|METH_KEYWORDS,NULL},
     {"__reduce__",reinterpret_cast<PyCFunction>(&obj_Vector_reduce),METH_NOARGS,NULL},
     immutable_copy,
     immutable_deepcopy,
@@ -1882,8 +1920,9 @@ PyMethodDef obj_Vector_methods[] = {
 };
 
 FIX_STACK_ALIGN PyObject *obj_Vector_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
+    auto idata = get_instance_data();
     try {
-        const char *names[] = {"dimension","values",nullptr};
+        PyObject *names[] = {P(dimension),P(values),nullptr};
         get_arg ga(args,kwds,names,"Vector.__new__");
         int dimension = from_pyobject<int>(ga(true));
         py::nullable<py::object> values(py::borrowed_ref(ga(false)));
@@ -2006,8 +2045,10 @@ PyMethodDef obj_Camera_methods[] = {
 };
 
 FIX_STACK_ALIGN PyObject *obj_Camera_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
+    auto idata = get_instance_data();
     try {
-        auto [dimension] = get_arg::get_args("Camera.__new__",args,kwds,param<int>("dimension"));
+        auto [dimension] = get_arg::get_args("Camera.__new__",args,kwds,
+            param<int>(P(dimension)));
 
         check_dimension(dimension);
 
@@ -2130,12 +2171,13 @@ FIX_STACK_ALIGN PyObject *obj_Matrix_scale(PyObject*,PyObject *args) {
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
-FIX_STACK_ALIGN PyObject *obj_Matrix_rotation(PyObject*,PyObject *args,PyObject *kwds) {
+FIX_STACK_ALIGN PyObject *obj_Matrix_rotation(PyObject*,NTRACER_COMPAT_FASTCALL_KEYWORD_PARAMS) {
+    auto idata = get_instance_data();
     try {
-        auto [a,b,angle] = get_arg::get_args("Matrix.rotation",args,kwds,
-            param<n_vector>("a"),
-            param<n_vector>("b"),
-            param<real>("angle"));
+        auto [a,b,angle] = get_arg::get_args("Matrix.rotation",NTRACER_COMPAT_FASTCALL_KEYWORD_ARGS,
+            param<n_vector>(P(a)),
+            param<n_vector>(P(b)),
+            param<real>(P(angle)));
 
         if(UNLIKELY(!compatible(a,b))) {
             PyErr_SetString(PyExc_TypeError,"cannot produce rotation matrix using vectors of different dimension");
@@ -2185,7 +2227,7 @@ FIX_STACK_ALIGN PyObject *obj_Matrix_reduce(wrapped_type<n_matrix> *self,PyObjec
 PyMethodDef obj_Matrix_methods[] = {
     {"reflection",reinterpret_cast<PyCFunction>(&obj_Matrix_reflection),METH_O|METH_STATIC,NULL},
     {"scale",reinterpret_cast<PyCFunction>(&obj_Matrix_scale),METH_VARARGS|METH_STATIC,NULL},
-    {"rotation",reinterpret_cast<PyCFunction>(&obj_Matrix_rotation),METH_VARARGS|METH_KEYWORDS|METH_STATIC,NULL},
+    {"rotation",reinterpret_cast<PyCFunction>(&obj_Matrix_rotation),NTRACER_COMPAT_METH_FASTCALL|METH_KEYWORDS|METH_STATIC,NULL},
     {"identity",reinterpret_cast<PyCFunction>(&obj_Matrix_identity),METH_O|METH_STATIC,NULL},
     {"determinant",reinterpret_cast<PyCFunction>(&obj_Matrix_determinant),METH_NOARGS,NULL},
     {"inverse",reinterpret_cast<PyCFunction>(&obj_Matrix_inverse),METH_NOARGS,NULL},
@@ -2205,8 +2247,9 @@ void copy_row(n_matrix &m,py::object values,int row,int len) {
 }
 
 FIX_STACK_ALIGN PyObject *obj_Matrix_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
+    auto idata = get_instance_data();
     try {
-        const char *names[] = {"dimension","values",nullptr};
+        PyObject *names[] = {P(dimension),P(values),nullptr};
         get_arg ga(args,kwds,names,"Matrix.__new__");
         int dimension = from_pyobject<int>(ga(true));
         py::object values(py::borrowed_ref(ga(true)));
@@ -2269,15 +2312,16 @@ PyTypeObject matrix_obj_base::_pytype = {
     .tp_new = &obj_Matrix_new};
 
 
-FIX_STACK_ALIGN PyObject *aabb_split(wrapped_type<n_aabb> *self,PyObject *args,PyObject *kwds,bool right) {
+FIX_STACK_ALIGN PyObject *aabb_split(wrapped_type<n_aabb> *self,NTRACER_COMPAT_FASTCALL_KEYWORD_PARAMS,bool right) {
+    auto idata = get_instance_data();
     wrapped_type<n_aabb> *r;
     int axis;
     real split;
 
     try {
-        std::tie(axis,split) = get_arg::get_args(right ? "AABB.right" : "AABB.left",args,kwds,
-            param<int>("axis"),
-            param<real>("split"));
+        std::tie(axis,split) = get_arg::get_args(right ? "AABB.right" : "AABB.left",NTRACER_COMPAT_FASTCALL_KEYWORD_ARGS,
+            param<int>(P(axis)),
+            param<real>(P(split)));
 
         auto &base = self->get_base();
 
@@ -2299,12 +2343,12 @@ FIX_STACK_ALIGN PyObject *aabb_split(wrapped_type<n_aabb> *self,PyObject *args,P
     return py::ref(r);
 }
 
-PyObject *obj_AABB_left(wrapped_type<n_aabb> *self,PyObject *args,PyObject *kwds) {
-    return aabb_split(self,args,kwds,false);
+PyObject *obj_AABB_left(wrapped_type<n_aabb> *self,NTRACER_COMPAT_FASTCALL_KEYWORD_PARAMS) {
+    return aabb_split(self,NTRACER_COMPAT_FASTCALL_KEYWORD_ARGS,false);
 }
 
-PyObject *obj_AABB_right(wrapped_type<n_aabb> *self,PyObject *args,PyObject *kwds) {
-    return aabb_split(self,args,kwds,true);
+PyObject *obj_AABB_right(wrapped_type<n_aabb> *self,NTRACER_COMPAT_FASTCALL_KEYWORD_PARAMS) {
+    return aabb_split(self,NTRACER_COMPAT_FASTCALL_KEYWORD_ARGS,true);
 }
 
 template<typename T,typename F> PyObject *try_intersects(const n_aabb &base,PyObject *obj,F f) {
@@ -2360,11 +2404,12 @@ struct intersects_flat_callback_t {
     }
 };
 
-FIX_STACK_ALIGN PyObject *obj_AABB_intersects_flat(wrapped_type<n_aabb> *self,PyObject *args,PyObject *kwds) {
+FIX_STACK_ALIGN PyObject *obj_AABB_intersects_flat(wrapped_type<n_aabb> *self,NTRACER_COMPAT_FASTCALL_KEYWORD_PARAMS) {
+    auto idata = get_instance_data();
     try {
-        auto vals = get_arg::get_args("AABB.intersects_flat",args,kwds,
-            param("primitive"),
-            param<int>("skip"));
+        auto vals = get_arg::get_args("AABB.intersects_flat",NTRACER_COMPAT_FASTCALL_KEYWORD_ARGS,
+            param(P(primitive)),
+            param<int>(P(skip)));
 
         auto &base = self->get_base();
         intersects_flat_callback_t callback{std::get<1>(vals)};
@@ -2385,42 +2430,43 @@ FIX_STACK_ALIGN PyObject *obj_AABB_intersects_flat(wrapped_type<n_aabb> *self,Py
 }
 
 PyMethodDef obj_AABB_methods[] = {
-    {"left",reinterpret_cast<PyCFunction>(&obj_AABB_left),METH_VARARGS|METH_KEYWORDS,NULL},
-    {"right",reinterpret_cast<PyCFunction>(&obj_AABB_right),METH_VARARGS|METH_KEYWORDS,NULL},
+    {"left",reinterpret_cast<PyCFunction>(&obj_AABB_left),NTRACER_COMPAT_METH_FASTCALL|METH_KEYWORDS,NULL},
+    {"right",reinterpret_cast<PyCFunction>(&obj_AABB_right),NTRACER_COMPAT_METH_FASTCALL|METH_KEYWORDS,NULL},
     {"intersects",reinterpret_cast<PyCFunction>(&obj_AABB_intersects),METH_O,NULL},
-    {"intersects_flat",reinterpret_cast<PyCFunction>(&obj_AABB_intersects_flat),METH_VARARGS|METH_KEYWORDS,NULL},
+    {"intersects_flat",reinterpret_cast<PyCFunction>(&obj_AABB_intersects_flat),NTRACER_COMPAT_METH_FASTCALL|METH_KEYWORDS,NULL},
     {NULL}
 };
 
 FIX_STACK_ALIGN PyObject *obj_AABB_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
+    auto idata = get_instance_data();
     auto ptr = type->tp_alloc(type,0);
     if(!ptr) return nullptr;
 
     try {
         try {
-            auto vals = get_arg::get_args("AABB.__new__",args,kwds,
-                param<int>("dimension"),
-                param<PyObject*>("start",nullptr),
-                param<PyObject*>("end",nullptr));
+            auto [d,obj_start,obj_end] = get_arg::get_args("AABB.__new__",args,kwds,
+                param<int>(P(dimension)),
+                param<PyObject*>(P(start),nullptr),
+                param<PyObject*>(P(end),nullptr));
 
-            check_dimension(std::get<0>(vals));
+            check_dimension(d);
 
             auto &base = reinterpret_cast<wrapped_type<n_aabb>*>(ptr)->alloc_base();
 
-            if(std::get<1>(vals)) {
-                auto start = from_pyobject<n_vector>(std::get<1>(vals));
-                if(std::get<0>(vals) != start.dimension())
+            if(obj_start) {
+                auto start = from_pyobject<n_vector>(obj_start);
+                if(d != start.dimension())
                     THROW_PYERR_STRING(TypeError,"\"start\" has a dimension different from \"dimension\"");
                 new(&base.start) n_vector(start);
-            } else new(&base.start) n_vector(std::get<0>(vals),std::numeric_limits<real>::lowest());
+            } else new(&base.start) n_vector(d,std::numeric_limits<real>::lowest());
 
 
-            if(std::get<2>(vals)) {
-                auto end = from_pyobject<n_vector>(std::get<2>(vals));
-                if(std::get<0>(vals) != end.dimension())
+            if(obj_end) {
+                auto end = from_pyobject<n_vector>(obj_end);
+                if(d != end.dimension())
                     THROW_PYERR_STRING(TypeError,"\"end\" has a dimension different from \"dimension\"");
                 new(&base.end) n_vector(end);
-            } else new(&base.end) n_vector(std::get<0>(vals),std::numeric_limits<real>::max());
+            } else new(&base.end) n_vector(d,std::numeric_limits<real>::max());
 
         } catch(...) {
             Py_DECREF(ptr);
@@ -2473,8 +2519,9 @@ PyTypeObject obj_PrimitivePrototype::_pytype = {
 
 
 FIX_STACK_ALIGN PyObject *obj_TrianglePrototype_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
+    auto idata = get_instance_data();
     try {
-        const char *names[] = {"points","material",nullptr};
+        PyObject *names[] = {P(points),P(material),nullptr};
         get_arg ga(args,kwds,names,"TrianglePrototype.__new__");
         auto points_obj = ga(true);
         auto m = checked_py_cast<material>(ga(true));
@@ -2547,9 +2594,10 @@ PyTypeObject triangle_prototype_obj_base::_pytype = {
 
 
 FIX_STACK_ALIGN PyObject *obj_TriangleBatchPrototype_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
+    auto idata = get_instance_data();
     try {
-        auto arg = std::get<0>(get_arg::get_args("TriangleBatchPrototype.__new__",args,kwds,
-            param("t_prototypes")));
+        auto [arg] = get_arg::get_args("TriangleBatchPrototype.__new__",args,kwds,
+            param(P(t_prototypes)));
 
         py::pyptr<obj_TrianglePrototype> vals[v_real::size];
         sized_iter itr{py::borrowed_ref(arg),v_real::size};
@@ -2663,12 +2711,13 @@ template<typename T> PyTypeObject detatched_triangle_point_obj_base<T>::_pytype 
 
 
 FIX_STACK_ALIGN PyObject *obj_SolidPrototype_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
+    auto idata = get_instance_data();
     auto ptr = type->tp_alloc(type,0);
     if(!ptr) return nullptr;
 
     try {
         try {
-            const char *names[] = {"type","position","orientation","material",nullptr};
+            PyObject *names[] = {P(type),P(position),P(orientation),P(material),nullptr};
             get_arg ga(args,kwds,names,"SolidPrototype.__new__");
             auto type = from_pyobject<solid_type>(ga(true));
             auto position = from_pyobject<n_vector>(ga(true));
@@ -2758,12 +2807,13 @@ PyTypeObject solid_prototype_obj_base::_pytype = {
 
 
 FIX_STACK_ALIGN PyObject *obj_PointLight_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
+    auto idata = get_instance_data();
     auto ptr = type->tp_alloc(type,0);
     if(!ptr) return nullptr;
 
     try {
         try {
-            const char *names[] = {"position","color",nullptr};
+            PyObject *names[] = {P(position),P(color),nullptr};
             get_arg ga(args,kwds,names,"PointLight.__new__");
             auto position = from_pyobject<n_vector>(ga(true));
             auto c = ga(false);
@@ -2813,19 +2863,20 @@ PyTypeObject point_light_obj_base::_pytype = {
 
 
 FIX_STACK_ALIGN PyObject *obj_GlobalLight_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
+    auto idata = get_instance_data();
     auto ptr = type->tp_alloc(type,0);
     if(!ptr) return nullptr;
 
     try {
         try {
             auto [direction,color] = get_arg::get_args("GlobalLight.__new__",args,kwds,
-                param<n_vector>("direction"),
-                param("color"));
+                param<n_vector>(P(direction)),
+                param(P(color)));
 
             auto &base = reinterpret_cast<wrapped_type<n_global_light>*>(ptr)->alloc_base();
 
             new(&base.direction) n_vector(direction);
-            read_color(base.c,color,"color");
+            read_color(base.c,color,P(color));
 
             return ptr;
         } catch(...) {
@@ -2950,11 +3001,12 @@ template<typename T> PyTypeObject cs_light_list<T>::_pytype = {
     }};
 
 
-FIX_STACK_ALIGN PyObject *obj_dot(PyObject*,PyObject *args,PyObject *kwds) {
+FIX_STACK_ALIGN PyObject *obj_dot(PyObject *mod,NTRACER_COMPAT_FASTCALL_KEYWORD_PARAMS) {
+    auto idata = get_instance_data(mod);
     try {
-        auto [a,b] = get_arg::get_args("dot",args,kwds,
-            param<n_vector>("a"),
-            param<n_vector>("b"));
+        auto [a,b] = get_arg::get_args("dot",NTRACER_COMPAT_FASTCALL_KEYWORD_ARGS,
+            param<n_vector>(P(a)),
+            param<n_vector>(P(b)));
 
         if(UNLIKELY(!compatible(a,b))) {
             PyErr_SetString(PyExc_TypeError,"cannot perform dot product on vectors of different dimension");
@@ -2999,7 +3051,15 @@ obj_PrimitivePrototype *p_proto_cast(PyObject *obj) {
 }
 
 std::tuple<n_aabb,kd_node<module_store>*> build_kdtree(const char *func,PyObject *args,PyObject *kwds) {
-    const char *names[] = {"primitives","extra_threads","max_depth","split_threshold","traversal_cost","intersection_cost",nullptr};
+    auto idata = get_instance_data();
+    PyObject *names[] = {
+        P(primitives),
+        P(extra_threads),
+        P(max_depth),
+        P(split_threshold),
+        P(traversal_cost),
+        P(intersection_cost),
+        nullptr};
 
     get_arg ga{args,kwds,names,func};
 
@@ -3067,7 +3127,7 @@ FIX_STACK_ALIGN PyObject *obj_build_composite_scene(PyObject*,PyObject *args,PyO
 }
 
 PyMethodDef func_table[] = {
-    {"dot",reinterpret_cast<PyCFunction>(&obj_dot),METH_VARARGS|METH_KEYWORDS,NULL},
+    {"dot",reinterpret_cast<PyCFunction>(&obj_dot),NTRACER_COMPAT_METH_FASTCALL|METH_KEYWORDS,NULL},
     {"cross",&obj_cross,METH_O,NULL},
     {"build_kdtree",reinterpret_cast<PyCFunction>(&obj_build_kdtree),METH_VARARGS|METH_KEYWORDS,NULL},
     {"build_composite_scene",reinterpret_cast<PyCFunction>(&obj_build_composite_scene),METH_VARARGS|METH_KEYWORDS,NULL},
@@ -3164,7 +3224,7 @@ PyModuleDef module_def = {
     PyModuleDef_HEAD_INIT,
     MODULE_STR,
     NULL,
-    0,
+    sizeof(instance_data_t),
     func_table,
     NULL,
     NULL,
@@ -3172,8 +3232,17 @@ PyModuleDef module_def = {
         (*package_common_data.invalidate_reference)(self);
         return 0;
     },
-    NULL
+    [](void *ptr) {
+        get_instance_data(reinterpret_cast<PyObject*>(ptr))->~instance_data_t();
+    }
 };
+
+inline instance_data_t *get_instance_data() {
+    auto m = PyState_FindModule(&module_def);
+    if(!m) return nullptr;
+
+    return get_instance_data(m);
+}
 
 extern "C" FIX_STACK_ALIGN SHARED(PyObject) * APPEND_MODULE_NAME(PyInit_)() {
     using namespace py;
@@ -3185,6 +3254,8 @@ extern "C" FIX_STACK_ALIGN SHARED(PyObject) * APPEND_MODULE_NAME(PyInit_)() {
             auto stype = get_pytype(rmod,"Scene");
             obj_BoxScene::pytype()->tp_base = stype;
             obj_CompositeScene::pytype()->tp_base = stype;
+
+            locked_error_exc = get_pytype(rmod,"LockedError");
 
             color_obj_base::_pytype = get_pytype(rmod,"Color");
             material::_pytype = get_pytype(rmod,"Material");
@@ -3213,6 +3284,8 @@ extern "C" FIX_STACK_ALIGN SHARED(PyObject) * APPEND_MODULE_NAME(PyInit_)() {
     PyModule_AddObject(m,"_CONSTRUCTORS",c);
 
     PyModule_AddIntConstant(m,"BATCH_SIZE",v_real::size);
+
+    if(!get_instance_data(m)->istrings.init()) return nullptr;
 
     return m;
 }

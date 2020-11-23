@@ -66,6 +66,21 @@
 #define OBJ_BASE_SETTER(T,EXPR) _OBJ_SETTER(get_base,T,EXPR)
 
 
+#if !defined(Py_LIMITED_API) && PY_VERSION_HEX >= 0x03070000
+  #define NTRACER_COMPAT_METH_FASTCALL METH_FASTCALL
+  #define NTRACER_COMPAT_FASTCALL_PARAMS PyObject *const *args,Py_ssize_t nargs
+  #define NTRACER_COMPAT_FASTCALL_KEYWORD_PARAMS PyObject *const *args,Py_ssize_t nargs,PyObject *kwnames
+  #define NTRACER_COMPAT_FASTCALL_ARGS args,nargs
+  #define NTRACER_COMPAT_FASTCALL_KEYWORD_ARGS args,nargs,kwnames
+#else
+  #define NTRACER_COMPAT_METH_FASTCALL METH_VARARGS
+  #define NTRACER_COMPAT_FASTCALL_PARAMS PyObject *args
+  #define NTRACER_COMPAT_FASTCALL_KEYWORD_PARAMS PyObject *args,PyObject *kwargs
+  #define NTRACER_COMPAT_FASTCALL_ARGS args
+  #define NTRACER_COMPAT_FASTCALL_KEYWORD_ARGS args,kwargs
+#endif
+
+
 // this value is taken from Python/pyarena.c of the CPython source
 const size_t PYOBJECT_ALIGNMENT = 8;
 
@@ -483,16 +498,16 @@ template<typename T,typename Base> struct simple_py_wrapper<T,Base,true,false> :
 template<typename T> struct parameter {
     typedef T type;
 
-    const char *name;
-    explicit constexpr parameter(const char *name) : name(name) {}
+    PyObject *name;
+    explicit constexpr parameter(PyObject *name) : name(name) {}
 };
 
 template<typename T> struct opt_parameter {
     typedef T type;
 
-    const char *name;
+    PyObject *name;
     const T def_value;
-    constexpr opt_parameter(const char *name,T def_value) : name(name), def_value(def_value) {}
+    constexpr opt_parameter(PyObject *name,T def_value) : name(name), def_value(def_value) {}
 };
 
 class get_arg {
@@ -502,38 +517,75 @@ public:
 private:
     struct get_arg_base {
         PyObject *args, *kwds;
-        const char **names;
+        PyObject **names;
         const char *fname;
         Py_ssize_t kcount;
 
-        get_arg_base(PyObject *args,PyObject *kwds,Py_ssize_t arg_len,const char **names,const char *fname);
+        get_arg_base(PyObject *args,PyObject *kwds,Py_ssize_t param_len,PyObject **names,const char *fname);
 
-        PyObject *operator()(size_t i,arg_type type);
+        PyObject *operator()(Py_ssize_t i,arg_type type);
         void finished();
     } base;
 
-    template<typename T> static inline T as_param(const parameter<T> &p,size_t index,get_arg_base &ga) {
+    struct fast_get_arg_base {
+        PyObject *const *args;
+        Py_ssize_t nargs;
+        PyObject *kwnames;
+        Py_ssize_t param_len;
+        PyObject **names;
+        const char *fname;
+        Py_ssize_t kcount;
+
+        fast_get_arg_base(PyObject *const *args,Py_ssize_t nargs,PyObject *kwnames,Py_ssize_t param_len,PyObject **names,const char *fname);
+        [[noreturn]] void missing_arg(Py_ssize_t index) const;
+
+        PyObject *operator()(Py_ssize_t i,arg_type type);
+        void finished();
+    };
+
+    template<typename T,typename U> static inline T as_param(const parameter<T> &p,Py_ssize_t index,U &ga) {
         return from_pyobject<T>(ga(index,REQUIRED));
     }
 
-    template<typename T> static inline T as_param(const opt_parameter<T> &p,size_t index,get_arg_base &ga) {
+    template<typename T,typename U> static inline T as_param(const opt_parameter<T> &p,Py_ssize_t index,U &ga) {
         PyObject *tmp = ga(index,OPTIONAL);
         return tmp ? from_pyobject<T>(tmp) : p.def_value;
     }
 
+    template<typename T> static inline T as_param_nokw(const parameter<T> &p,Py_ssize_t index,fast_get_arg_base &ga) {
+        if(UNLIKELY(index >= ga.nargs)) ga.missing_arg(index);
+        return from_pyobject<T>(ga.args[index]);
+    }
+
+    template<typename T> static inline T as_param_nokw(const opt_parameter<T> &p,Py_ssize_t index,fast_get_arg_base &ga) {
+        return index < ga.nargs ? from_pyobject<T>(ga.args[index]) : p.def_value;
+    }
+
     template<typename... P,size_t... Indexes> static inline std::tuple<typename P::type...> _get_args(std::index_sequence<Indexes...>,const char *fname,PyObject *args,PyObject *kwds,const P&... params) {
-        const char *arg_names[] = {params.name...,nullptr};
+        PyObject *arg_names[] = {params.name...,nullptr};
         get_arg_base ga(args,kwds,sizeof...(P),arg_names,fname);
         std::tuple<typename P::type...> r{as_param(params,Indexes,ga)...};
         ga.finished();
         return r;
     }
 
+    template<typename... P,size_t... Indexes> static inline std::tuple<typename P::type...> _get_args(std::index_sequence<Indexes...>,const char *fname,PyObject *const *args,Py_ssize_t nargs,PyObject *kwnames,const P&... params) {
+        PyObject *arg_names[] = {params.name...};
+        fast_get_arg_base ga(args,nargs,kwnames,sizeof...(P),arg_names,fname);
+        if(kwnames) {
+            std::tuple<typename P::type...> r{as_param(params,Indexes,ga)...};
+            ga.finished();
+            return r;
+        }
+
+        return std::tuple<typename P::type...>{as_param_nokw(params,Indexes,ga)...};
+    }
+
 public:
     Py_ssize_t arg_index;
 
-    get_arg(PyObject *args,PyObject *kwds,Py_ssize_t arg_len,const char **names=NULL,const char *fname=nullptr) : base(args,kwds,arg_len,names,fname), arg_index(0) {}
-    template<int N> get_arg(PyObject *args,PyObject *kwds,const char *(&names)[N],const char *fname=nullptr) : get_arg(args,kwds,N-1,names,fname) {
+    get_arg(PyObject *args,PyObject *kwds,Py_ssize_t param_len,PyObject **names=NULL,const char *fname=nullptr) : base(args,kwds,param_len,names,fname), arg_index(0) {}
+    template<int N> get_arg(PyObject *args,PyObject *kwds,PyObject *(&names)[N],const char *fname=nullptr) : get_arg(args,kwds,N-1,names,fname) {
         assert(names[N-1] == nullptr);
     }
 
@@ -544,10 +596,13 @@ public:
     template<typename... P> static std::tuple<typename P::type...> get_args(const char *fname,PyObject *args,PyObject *kwds,const P&... params) {
         return _get_args<P...>(std::make_index_sequence<sizeof...(P)>(),fname,args,kwds,params...);
     }
+    template<typename... P> static std::tuple<typename P::type...> get_args(const char *fname,PyObject *const *args,Py_ssize_t nargs,PyObject *kwnames,const P&... params) {
+        return _get_args<P...>(std::make_index_sequence<sizeof...(P)>(),fname,args,nargs,kwnames,params...);
+    }
 };
 
-template<typename T=PyObject*> constexpr parameter<T> param(const char *name) { return parameter<T>(name); }
-template<typename T=PyObject*> constexpr opt_parameter<T> param(const char *name,T def_value) { return {name,def_value}; }
+template<typename T=PyObject*> constexpr parameter<T> param(PyObject *name) { return parameter<T>(name); }
+template<typename T=PyObject*> constexpr opt_parameter<T> param(PyObject *name,T def_value) { return {name,def_value}; }
 
 
 void NoSuchOverload(PyObject *args);

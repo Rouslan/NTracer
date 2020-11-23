@@ -2,6 +2,9 @@
 #ifndef compatibility_hpp
 #define compatibility_hpp
 
+#ifndef __has_builtin
+#define __has_builtin(X) 0
+#endif
 
 #ifdef __GNUC__
   #define LIKELY(X) __builtin_expect(static_cast<bool>(X),1)
@@ -21,11 +24,7 @@
     #define FIX_STACK_ALIGN
   #endif
 
-  #if defined(__GNUC_GNU_INLINE__) && !defined(__clang__)
-    #define FORCE_INLINE inline __attribute__((gnu_inline,always_inline))
-  #else
-    #define FORCE_INLINE inline __attribute__((always_inline))
-  #endif
+  #define FORCE_INLINE inline __attribute__((always_inline))
 #else
   #define LIKELY(X) X
   #define UNLIKELY(X) X
@@ -53,4 +52,3 @@
 #endif
 
 #endif
-

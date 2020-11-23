@@ -1,7 +1,4 @@
-#!/usr/bin/python
-
-from __future__ import print_function
-
+#!python
 
 import sys
 import itertools
@@ -196,7 +193,7 @@ class UI:
             cls.pressed = False
             cls.redraw_active()
             cls.active.on_release()
-            
+
 
     @classmethod
     def on_active(cls,e):
@@ -277,7 +274,7 @@ def excepthook(type,value,traceback):
         print(str(value),file=sys.stderr)
     else:
         sys.__excepthook__(type,value,traceback)
-    
+
 sys.excepthook = excepthook
 
 argp = argparse.ArgumentParser(description='''Navigate around a hypercube or a
@@ -306,7 +303,7 @@ if args.file:
         if args.debug:
             raise
         sys.exit('could not load file: ' + str(e))
-        
+
     scene = ntracer.build_composite_scene(triangles)
 else:
     scene = ntracer.BoxScene()
@@ -367,7 +364,7 @@ def begin_render():
 begin_render()
 
 while True:
-    e = pygame.event.wait()    
+    e = pygame.event.wait()
     if e.type == pygame.MOUSEMOTION:
         UI.on_mousemove(e)
     elif e.type == pygame.MOUSEBUTTONDOWN:
@@ -390,7 +387,7 @@ while True:
         r.abort_render()
         pygame.event.clear(pygame.USEREVENT);
         screen = pygame.display.set_mode(e.size,pygame.RESIZABLE)
-        
+
         # the surfaces can be very large, so we free the memory first
         del current_img
         del next_img
@@ -399,4 +396,3 @@ while True:
         begin_render()
     elif e.type == pygame.QUIT:
         break
-    

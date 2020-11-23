@@ -157,6 +157,17 @@ namespace py {
             std::swap(_ptr,b._ptr);
         }
 
+    #if !defined(Py_LIMITED_API) && PY_VERSION_HEX >= 0x03090000
+        template<typename... Args> PyObject *vectorcall(Args*... args) const {
+            PyObject **argarray[] = {nullptr,args...};
+            return check_new_ref(PyObject_Vectorcall(
+                _ptr,
+                argarray+1,
+                sizeof...(Args) | PY_VECTORCALL_ARGUMENTS_OFFSET,
+                nullptr));
+        }
+    #endif
+
     public:
         explicit operator bool() const {
             return PyObject_IsTrue(_ptr);
@@ -172,7 +183,8 @@ namespace py {
         bool has_attr(const _object_base &name) const { return PyObject_HasAttr(_ptr,name._ptr); }
 
         inline object operator()() const;
-        template<typename Arg1,typename... Args> inline object operator()(const Arg1 &arg1,const Args&... args) const;
+        template<typename Arg1> inline object operator()(const Arg1 &arg1) const;
+        template<typename Arg1,typename Arg2,typename... Args> inline object operator()(const Arg1 &arg1,const Arg2 &arg2,const Args&... args) const;
 
 #define OBJECT_OP(OP,PYOP) bool operator OP(const _object_base &b) const { return bool(PyObject_RichCompareBool(_ptr,b._ptr,PYOP)); }
         OBJECT_OP(==,Py_EQ)
@@ -237,6 +249,17 @@ namespace py {
         const char *name;
 
         object_attr_proxy(PyObject *ptr,const char *name) : _ptr(ptr), name(name) {}
+
+    #if !defined(Py_LIMITED_API) && PY_VERSION_HEX >= 0x03090000
+        template<typename... Args> PyObject *vectorcall(Args*... args) const {
+            PyObject **argarray[] = {_ptr,args...};
+            return check_new_ref(PyObject_VectorcallMethod(
+                object(check_new_ref(PyUnicode_InternFromString(name))).ref(),
+                argarray,
+                (sizeof...(Args)+1) | PY_VECTORCALL_ARGUMENTS_OFFSET,
+                nullptr));
+        }
+    #endif
     public:
         operator object() const { return check_new_ref(PyObject_GetAttrString(_ptr,name)); }
 
@@ -250,26 +273,85 @@ namespace py {
             return operator=(static_cast<object>(val));
         }
 
-        template<typename... Args> object operator()(const Args&... args) const {
+        object operator()() const {
+        #if !defined(Py_LIMITED_API) && PY_VERSION_HEX >= 0x03090000
+            return check_new_ref(PyObject_CallMethodNoArgs(
+                _ptr,
+                object(check_new_ref(PyUnicode_InternFromString(name))).ref()));
+        #else
             return check_new_ref(PyObject_CallMethodObjArgs(
                 _ptr,
                 object(check_new_ref(PyUnicode_InternFromString(name))).ref(),
+                0));
+        #endif
+        }
+
+        template<typename Arg1> object operator()(const Arg1 &arg1) const {
+        #if !defined(Py_LIMITED_API) && PY_VERSION_HEX >= 0x03090000
+            return check_new_ref(PyObject_CallMethodOneArg(
+                _ptr,
+                object(check_new_ref(PyUnicode_InternFromString(name))).ref(),
+                make_object(arg1).ref()));
+        #else
+            return check_new_ref(PyObject_CallMethodObjArgs(
+                _ptr,
+                object(check_new_ref(PyUnicode_InternFromString(name))).ref(),
+                make_object(arg1).ref(),
+                0));
+        #endif
+        }
+
+        template<typename Arg1,typename Arg2,typename... Args>
+        object operator()(const Arg1 &arg1,const Arg2 &arg2,const Args&... args) const {
+        #if !defined(Py_LIMITED_API) && PY_VERSION_HEX >= 0x03090000
+            return check_new_ref(vectorcall(
+                make_object(arg1).ref(),
+                make_object(arg2).ref(),
+                make_object(args).ref()...));
+        #else
+            return check_new_ref(PyObject_CallMethodObjArgs(
+                _ptr,
+                object(check_new_ref(PyUnicode_InternFromString(name))).ref(),
+                make_object(arg1).ref(),
+                make_object(arg2).ref(),
                 make_object(args).ref()...,
                 0));
+        #endif
         }
     };
 
     inline object_attr_proxy _object_base::attr(const char *name) const { return object_attr_proxy(_ptr,name); }
 
     inline object _object_base::operator()() const {
+    #if !defined(Py_LIMITED_API) && PY_VERSION_HEX >= 0x03090000
+        return check_new_ref(PyObject_CallNoArgs(_ptr));
+    #else
         return check_new_ref(PyObject_CallObject(_ptr,0));
+    #endif
     }
 
-    template<typename Arg1,typename... Args> inline object _object_base::operator()(const Arg1 &arg1,const Args&... args) const {
+    template<typename Arg1> inline object _object_base::operator()(const Arg1 &arg1) const {
+    #if !defined(Py_LIMITED_API) && PY_VERSION_HEX >= 0x03090000
+        return check_new_ref(PyObject_CallOneArg(_ptr,make_object(arg1).ref()));
+    #else
+        return check_new_ref(PyObject_CallFunctionObjArgs(_ptr,make_object(arg1).ref(),0));
+    #endif
+    }
+
+    template<typename Arg1,typename Arg2,typename... Args>
+    inline object _object_base::operator()(const Arg1 &arg1,const Arg2 &arg2,const Args&... args) const {
+    #if !defined(Py_LIMITED_API) && PY_VERSION_HEX >= 0x03090000
+            return check_new_ref(vectorcall(
+                make_object(arg1).ref(),
+                make_object(arg2).ref(),
+                make_object(args).ref()...));
+    #else
         return check_new_ref(PyObject_CallFunctionObjArgs(_ptr,
             make_object(arg1).ref(),
+            make_object(arg2).ref(),
             make_object(args).ref()...,
             0));
+    #endif
     }
 
     inline void del(const object_attr_proxy &attr) {
@@ -1033,7 +1115,16 @@ namespace py {
         PyObject_HEAD
 
         obj_array_adapter(PyObject *origin,size_t size,Item *items) : data(origin,size,items) {
-            PyObject_Init(reinterpret_cast<PyObject*>(this),pytype());
+            PyObject_Init(ref(this),pytype());
+        }
+
+        /* a bug in GCC 9 prevents us from using function attributes on lambda
+        functions */
+        FIX_STACK_ALIGN static PyObject *_sq_item(PyObject *self,Py_ssize_t index) {
+            try {
+                return to_pyobject(reinterpret_cast<obj_array_adapter<Item,FullName,GC,ReadOnly>*>(self)
+                    ->data.sequence_getitem(index));
+            } PY_EXCEPT_HANDLERS(nullptr)
         }
 
         array_adapter<Item> data;
@@ -1044,12 +1135,7 @@ namespace py {
         .sq_length = [](PyObject *self) {
             return reinterpret_cast<obj_array_adapter<Item,FullName,GC,ReadOnly>*>(self)->data.length();
         },
-        .sq_item = [](PyObject *self,Py_ssize_t index) FIX_STACK_ALIGN -> PyObject* {
-            try {
-                return to_pyobject(reinterpret_cast<obj_array_adapter<Item,FullName,GC,ReadOnly>*>(self)
-                    ->data.sequence_getitem(index));
-            } PY_EXCEPT_HANDLERS(nullptr)
-        },
+        .sq_item = &obj_array_adapter<Item,FullName,GC,ReadOnly>::_sq_item,
         .sq_ass_item = impl::array_adapter_set_item<Item,FullName,GC,ReadOnly>::value};
 
     template<typename Item,const char* FullName,bool GC,bool ReadOnly>

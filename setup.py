@@ -42,6 +42,7 @@ sys.path.insert(0,os.path.join(base_dir,'support'))
 import version
 import generate_simd
 import simd_test
+import arg_helper
 
 
 GCC_OPTIMIZE_COMPILE_ARGS = [
@@ -101,7 +102,9 @@ CLANG_EXTRA_COMPILE_ARGS = [
 # and cause an error). There may also be arguments that need omitting when
 # Python was compiled with Clang and we're compiling with GCC, but I haven't
 # looked into it.
-GCC_TO_CLANG_FILTER = {'-fstack-clash-protection'}
+GCC_TO_CLANG_FILTER = {
+    # -fstack-clash-protection is not supported before Clang 11.
+    '-fstack-clash-protection'}
 
 MSVC_OPTIMIZE_COMPILE_ARGS = ['/Ox','/fp:fast','/volatile:iso','/Za']
 
@@ -208,8 +211,7 @@ class CustomBuildExt(build_ext):
                 'src/py_common.hpp','src/pyobject.hpp','src/geometry.hpp',
                 'src/fixed_geometry.hpp','src/tracer.hpp','src/light.hpp',
                 'src/render.hpp','src/camera.hpp','src/compatibility.hpp',
-                'src/v_array.hpp','src/instrumentation.hpp',
-                'src/index_list.hpp'],
+                'src/v_array.hpp','src/instrumentation.hpp'],
             include_dirs=['src'])
 
     def finalize_options(self):
@@ -284,18 +286,63 @@ class CustomBuildExt(build_ext):
     def mingw_dlls(self):
         if self.dry_run: return []
 
-        dir = find_executable('gcc')
-        if dir is None: raise DistutilsSetupError('cannot determine location of gcc.exe')
-        dir = os.path.dirname(dir)
+        objdump = 'objdump'
+        strip = 'strip'
+
+        # places to look for DLLs
+        exedirs = []
+        if sys.platform == 'win32':
+            exedir = find_executable('gcc')
+            if exedir is None: raise DistutilsSetupError('cannot determine location of gcc.exe')
+            exedirs.append(os.path.dirname(exedir))
+        else:
+            # if we are cross-compiling, the version of gcc used for compilation
+            # is not a Windows exe and will not be in the same location as the
+            # DLLs, but the environment variable PYTHONHOME may be set to an
+            # alternate root directory with the "bin" directory having the DLLs
+            phome = os.environ.get('PYTHONHOME')
+            if phome is not None:
+                exedirs.append(os.path.join(phome,'bin'))
+
+            # we can also check where the directory usually is, if the CC
+            # environment variable is set
+            cc = os.environ.get('CC')
+            if cc:
+                m = re.match('^(.+-mingw)-g(?:cc|\\+\\+)\\b([\'"]|)',cc)
+                if m:
+                    rootname = m.group(1)
+                    exedirs.append(os.path.join('/usr',os.path.basename(rootname),'sys-root','mingw','bin'))
+                    objdump = rootname + '-objdump'
+                    strip = rootname + '-strip'
+                    if m.group(2):
+                        objdump += m.group(2)
+                        strip += m.group(2)
+
+            if not exedirs:
+                raise DistutilsSetupError('cannot determine where to look for the required DLLs')
 
         suffix = sysconfig.get_config_vars('EXT_SUFFIX','SO')
-        info = subprocess.check_output(['objdump','-p',os.path.join(self.build_lib,'ntracer','render'+(suffix[0] or suffix[1]))])
+        info = subprocess.run(
+            [objdump,'-p',os.path.join(self.build_lib,'ntracer','render'+(suffix[0] or suffix[1]))],
+            capture_output=True,
+            check=True)
         r = []
-        for dll in get_dll_list(info.splitlines()):
-            p = os.path.join(dir,dll)
-            if os.path.exists(p): r.append(p)
+        exedir = None
+        if len(exedirs) == 1: exedir = exedirs[0]
+        for dll in get_dll_list(info.stdout.splitlines()):
+            if 'python' in dll: continue
+            if exedir is None:
+                for d in exedirs:
+                    p = os.path.join(d,dll)
+                    if os.path.exists(p):
+                        r.append(p)
+                        exedir = d
+                        break
+            else:
+                p = os.path.join(exedir,dll)
+                if os.path.exists(p): r.append(p)
 
-        return r
+        return strip,r
 
     def build_extensions(self):
         if not self.add_optimization():
@@ -317,14 +364,30 @@ class CustomBuildExt(build_ext):
 
         generate_simd.create_simd_hpp(base_dir,self.build_temp,self.force,self.dry_run)
 
+        # These create ntracer_body_strings.hpp and render_strings.hpp
+        # respectively
+        arg_helper.create_strings_hpp(base_dir,self.build_temp,'ntracer_body.hpp',self.force,self.dry_run)
+        arg_helper.create_strings_hpp(base_dir,self.build_temp,'render.cpp',self.force,self.dry_run)
+
         build_ext.build_extensions(self)
 
-        if self.copy_mingw_deps and self.compiler.compiler_type == 'mingw32':
+        if self.copy_mingw_deps and (
+                self.compiler.compiler_type == 'mingw32' or
+                'mingw' in os.path.basename(self.compiler.compiler_so[0])):
             log.info('copying MinGW-specific dependencies')
             out = os.path.join(self.build_lib,'ntracer')
             link = getattr(os,'link',None) and 'hard'
-            for dll in self.mingw_dlls():
+            strip,dlls = self.mingw_dlls()
+            skip_strip = False
+            for dll in dlls:
                 copy_file(dll,out,update=True,link=link)
+                if not skip_strip:
+                    try:
+                        subprocess.run(
+                            [strip,os.path.join(out,os.path.basename(dll))],
+                            check=True)
+                    except Exception:
+                        skip_strip = True
 
 
 with open('README.rst') as readme:
@@ -350,8 +413,7 @@ setup(name='ntracer',
             'render',
             ['src/render.cpp','src/py_common.cpp'],
             depends=['src/simd.hpp.in','src/py_common.hpp','src/render.hpp',
-                'src/pyobject.hpp','src/compatibility.hpp',
-                'src/index_list.hpp'],
+                'src/pyobject.hpp','src/compatibility.hpp'],
             define_macros=[('FORMAT_OTHER','0'),('FORMAT_IEEE_LITTLE','1'),
                 ('FORMAT_IEEE_BIG','2'),('FLOAT_NATIVE_FORMAT',float_format),
                 ('BYTEORDER_LITTLE','1'),('BYTEORDER_BIG','2'),
