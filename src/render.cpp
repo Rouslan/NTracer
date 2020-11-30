@@ -507,6 +507,8 @@ void worker_draw(renderer &r) {
     size_t chunks_x = (r.format.width + RENDER_CHUNK_SIZE - 1) / RENDER_CHUNK_SIZE;
     size_t chunks_y = (r.format.height + RENDER_CHUNK_SIZE - 1) / RENDER_CHUNK_SIZE;
 
+    std::unique_ptr<geom_allocator> allocator{r.sc->new_allocator()};
+
     for(;;) {
         int chunk = r.chunk.fetch_add(1);
         size_t start_y = chunk/chunks_x;
@@ -521,7 +523,7 @@ void worker_draw(renderer &r) {
             for(size_t x = start_x; x < std::min(start_x+RENDER_CHUNK_SIZE,r.format.width); ++x) {
                 if(UNLIKELY(r.state != renderer::NORMAL)) return;
 
-                color c = r.sc->calculate_color(x,y);
+                color c = r.sc->calculate_color(x,y,allocator.get());
                 int b_offset = 0;
                 long temp[MAX_PIXELSIZE / sizeof(long)] = {0};
                 for(auto &ch : r.format.channels) {
@@ -681,8 +683,9 @@ FIX_STACK_ALIGN PyObject *obj_Scene_calculate_color(obj_Scene *self,NTRACER_COMP
 
         {
             py::allow_threads __;
+            std::unique_ptr<geom_allocator> allocator{sc.new_allocator()};
             sc.set_view_size(width,height);
-            r = sc.calculate_color(x,y);
+            r = sc.calculate_color(x,y,allocator.get());
         }
 
         return to_pyobject(r);

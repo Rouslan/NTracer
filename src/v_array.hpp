@@ -5,6 +5,7 @@
 #include <utility>
 
 #include "simd.hpp"
+#include "geom_allocator.hpp"
 
 
 // this only applies to dividing by a scalar
@@ -85,9 +86,6 @@ namespace impl {
         template<typename A,typename B> static FORCE_INLINE auto op(A a,B b) {
             return a + b;
         }
-        template<typename A,typename B> static FORCE_INLINE auto assign(A &a,B b) {
-            return a += b;
-        }
         template<typename T> static FORCE_INLINE auto reduce(T x) {
             return simd::reduce_add(x);
         }
@@ -96,14 +94,6 @@ namespace impl {
         }
     };
 
-#define BINARY_EQ_OP(NAME,OP) struct NAME { \
-        template<typename A,typename B> static FORCE_INLINE auto op(A a,B b) { \
-            return a OP b; \
-        } \
-        template<typename A,typename B> static FORCE_INLINE auto assign(A &a,B b) { \
-            return a OP##= b; \
-        } \
-    }
 #define BINARY_OP(NAME,OP) struct NAME { \
         template<typename A,typename B> static FORCE_INLINE auto op(A a,B b) { \
             return a OP b; \
@@ -125,12 +115,12 @@ namespace impl {
         } \
     }
 
-    BINARY_EQ_OP(op_subtract,-);
-    BINARY_EQ_OP(op_multiply,*);
-    BINARY_EQ_OP(op_divide,/);
-    BINARY_EQ_OP(op_and,&);
-    BINARY_EQ_OP(op_or,|);
-    BINARY_EQ_OP(op_xor,^);
+    BINARY_OP(op_subtract,-);
+    BINARY_OP(op_multiply,*);
+    BINARY_OP(op_divide,/);
+    BINARY_OP(op_and,&);
+    BINARY_OP(op_or,|);
+    BINARY_OP(op_xor,^);
     BINARY_OP(op_eq,==);
     BINARY_OP(op_neq,!=);
     BINARY_OP(op_gt,>);
@@ -150,7 +140,6 @@ namespace impl {
     BINARY_FUNC(op_l_xor,simd::l_xor);
     BINARY_FUNC(op_l_xnor,simd::l_xnor);
 
-#undef BINARY_EQ_OP
 #undef BINARY_OP
 #undef BINARY_FUNC
 #undef UNARY_OP
@@ -223,7 +212,7 @@ namespace impl {
 
     template<typename T,typename F> struct v_apply;
     template<typename T,typename F,size_t Size> struct _v_item_t<v_apply<T,F>,Size> {
-        typedef simd::v_type<std::result_of_t<F(s_item_t<T>)>,Size> type;
+        typedef simd::v_type<std::invoke_result_t<F,s_item_t<T>>,Size> type;
     };
     template<typename T,typename F> struct v_apply : v_expr<v_apply<T,F>> {
         static const int v_score = T::v_score - 1;
@@ -277,24 +266,23 @@ namespace impl {
         static constexpr bool temporary = false;
         static const int max_items = Store::template type<v_item_count,T>::max_items;
 
-        explicit v_array(int s) : store(s) {}
+        explicit v_array(int s,v_array_allocator *a=Store::def_allocator) : store{s,a} {}
 
         v_array(const v_array&) = default;
-        v_array(v_array &&b) : store(std::move(b.store)) {}
+        v_array(v_array &&b) : store{std::move(b.store)} {}
 
-        template<typename F> v_array(int s,F f) : store(s) {
+        v_array(const v_array &b,shallow_copy_t) : store{b.store,shallow_copy} {}
+
+        template<typename F> v_array(int s,F f,v_array_allocator *a=Store::def_allocator) : store{s,a} {
             fill_with(f);
         }
 
-        template<typename B> FORCE_INLINE v_array(const v_expr<B> &b) : store(b.size()) {
+        template<typename B> FORCE_INLINE v_array(const v_expr<B> &b,v_array_allocator *a=Store::def_allocator) : store(b.size(),a) {
             fill_with(b);
         }
 
         v_array &operator=(const v_array&) = default;
-        v_array &operator=(v_array &&b) {
-            store = std::move(b.store);
-            return *this;
-        }
+        v_array &operator=(v_array &&b) = default;
 
         template<typename B> FORCE_INLINE v_array &operator=(const v_expr<B> &b) {
             fill_with(b);
@@ -323,7 +311,7 @@ namespace impl {
             const B &b;
 
             template<size_t Size> void operator()(size_t n) const {
-                Op::assign(self.template vec<Size>(n),b.template vec<Size>(n));
+                self.store.template store_vec<Size>(n,Op::op(self.template vec<Size>(n),b.template vec<Size>(n)));
             }
         };
         template<typename B> v_array &operator+=(const v_expr<B> &b) {
@@ -387,7 +375,7 @@ namespace impl {
             const B &b;
 
             template<size_t Size> void operator()(size_t n) const {
-                self.template vec<Size>(n) = b.template vec<Size>(n);
+                self.store.template store_vec<Size>(n,b.template vec<Size>(n));
             }
         };
         template<typename B> void fill_with(const v_expr<B> &b) {
@@ -398,11 +386,16 @@ namespace impl {
             for(size_t i=0; i<_size(); ++i) (*this)[i] = f(i);
         }
 
-        T *data() { return store.items.raw; }
-        const T *data() const { return store.items.raw; }
+        T *data() { return store.data(); }
+        const T *data() const { return store.data(); }
 
-        template<size_t Size> FORCE_INLINE simd::v_type<T,Size> &vec(size_t n) {
-            return store.template vec<Size>(n);
+        T &operator[](size_t n) {
+            assert(n < size());
+            return data()[n];
+        }
+        const T &operator[](size_t n) const {
+            assert(n < size());
+            return data()[n];
         }
 
         template<size_t Size> FORCE_INLINE simd::v_type<T,Size> vec(size_t n) const {
@@ -669,10 +662,6 @@ namespace impl {
             return {*this,b};
         }
 
-        s_item_t<T> &operator[](size_t n) {
-            assert(n < size());
-            return static_cast<T*>(this)->template vec<1>(n)[0];
-        }
         s_item_t<T> operator[](size_t n) const {
             assert(n < size());
             return static_cast<const T*>(this)->template vec<1>(n)[0];

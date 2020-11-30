@@ -1174,11 +1174,11 @@ FIX_STACK_ALIGN PyObject *obj_Triangle_reduce(obj_Triangle *self,PyObject*) {
         };
 
         module_store::type<item_size,const real*> values(self->dimension());
-        values.items.raw[0] = self->p1.data();
-        values.items.raw[1] = self->face_normal.data();
-        for(int i=0; i<self->dimension()-1; ++i) values.items.raw[i+2] = self->items()[i].data();
+        values.data()[0] = self->p1.data();
+        values.data()[1] = self->face_normal.data();
+        for(int i=0; i<self->dimension()-1; ++i) values.data()[i+2] = self->items()[i].data();
 
-        return (*package_common_data.triangle_reduce)(self->dimension(),values.items.raw,self->m.get());
+        return (*package_common_data.triangle_reduce)(self->dimension(),values.data(),self->m.get());
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 

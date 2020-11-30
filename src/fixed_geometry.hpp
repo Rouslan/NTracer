@@ -80,12 +80,20 @@ namespace fixed {
         static constexpr int _real_size = simd::padded_size<T>(RealItems::get(N));
         static constexpr int max_items = _real_size;
 
-        explicit item_array(int d) {
+        explicit item_array(int d,v_array_allocator* =nullptr) {
             assert(d == N);
             item_array_init(items.raw,RealItems::get(N),_real_size);
         }
 
         item_array(const item_array &b) {
+            (*this) = b;
+        }
+
+        item_array(const item_array &b,v_array_allocator*) {
+            (*this) = b;
+        }
+
+        item_array(const item_array &b,shallow_copy_t) {
             (*this) = b;
         }
 
@@ -117,13 +125,16 @@ namespace fixed {
             }
         }
 
-        template<size_t Size> FORCE_INLINE auto &vec(size_t n) {
-            return _vec<Size>(*this,n);
+        template<size_t Size> FORCE_INLINE void store_vec(size_t n,simd::v_type<T,Size> val) {
+            _vec<Size>(*this,n) = val;
         }
 
         template<size_t Size> FORCE_INLINE auto vec(size_t n) const {
             return _vec<Size>(*this,n);
         }
+
+        T *data() { return items.raw; }
+        const T *data() const { return items.raw; }
     };
 
     template<int N,typename T> struct item_store {
@@ -139,6 +150,16 @@ namespace fixed {
         template<typename U> using smaller_init_array = fixed::init_array<U,N-1>;
 
         template<typename RealItems,typename U=T> using type = item_array<N,RealItems,U>;
+
+        static constexpr v_array_allocator *def_allocator = nullptr;
+
+        static geom_allocator *new_allocator(int d,size_t items_per_block) {
+            return nullptr;
+        }
+
+        template<typename> static v_array_allocator *allocator_for(geom_allocator*) {
+            return nullptr;
+        }
     };
 }
 

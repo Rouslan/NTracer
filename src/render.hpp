@@ -3,13 +3,17 @@
 
 #include "light.hpp"
 #include "pyobject.hpp"
+#include "geom_allocator.hpp"
 
 class scene {
 public:
     virtual void set_view_size(int w,int h) = 0;
 
     // must be thread-safe
-    virtual color calculate_color(int x,int y) const = 0;
+    virtual color calculate_color(int x,int y,geom_allocator *a) const = 0;
+
+    // may return null
+    virtual geom_allocator *new_allocator() const = 0;
 
     /* Prevent python code from modifying the scene. The object is also expected
        to remain alive until unlock is called */

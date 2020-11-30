@@ -5,6 +5,7 @@
 #include <stdexcept>
 
 #include "v_array.hpp"
+#include "geom_allocator.hpp"
 
 
 typedef float real;
@@ -130,11 +131,18 @@ namespace impl {
         typedef typename vector::vector_expr_adapter base_t;
         typedef T item_t;
 
-        explicit vector(int d) : base_t(d) {}
+        explicit vector(int d,geom_allocator *a=nullptr) : base_t(d,Store::template allocator_for<vector>(a)) {}
         vector(const vector&) = default;
-        vector(vector &&b) : base_t(std::move(b)) {}
-        template<typename F> vector(int d,F f) : base_t(d,f) {}
-        template<typename B,typename Base> FORCE_INLINE vector(const vector_expr<B,Base> &b) : base_t(::v_expr(b)) {}
+        vector(vector&&) = default;
+
+        /* this allows vector{std::forward<T>(x),some_allocator} to do the right
+        thing */
+        vector(vector &&b,geom_allocator*) : vector(std::move(b)) {}
+
+        vector(const vector &b,shallow_copy_t) : base_t(b,shallow_copy) {}
+
+        template<typename F> vector(int d,F f,geom_allocator *a=nullptr) : base_t(d,f,Store::template allocator_for<vector>(a)) {}
+        template<typename B,typename Base> FORCE_INLINE vector(const vector_expr<B,Base> &b,geom_allocator *a=nullptr) : base_t(::v_expr(b),Store::template allocator_for<vector>(a)) {}
 
         vector &operator=(const vector&) = default;
         vector &operator=(vector &&b) {
@@ -466,7 +474,7 @@ namespace impl {
             return a.get(n,col);
         }
 
-        template<size_t Size> simd::v_type<typename Store::item_t,Size> &vec(size_t n) const {
+        template<size_t Size> simd::v_type<typename Store::item_t,Size> vec(size_t n) const {
             simd::v_type<typename Store::item_t,Size> r;
             for(size_t i=0; i<Size; ++i) r[i] = a.get(n+1,col);
             return r;
@@ -538,10 +546,6 @@ template<class Store> struct matrix : private impl::v_expr<matrix<Store>> {
 
     template<typename F> FORCE_INLINE void v_rep(F f) const {
         impl::v_rep(Store::v_dimension(dimension()),f);
-    }
-
-    template<size_t Size> FORCE_INLINE simd::v_type<item_t,Size> &vec(size_t n) {
-        return store.template vec<Size>(n);
     }
 
     template<size_t Size> FORCE_INLINE simd::v_type<item_t,Size> vec(size_t n) const {
@@ -663,7 +667,7 @@ template<class Store> struct matrix : private impl::v_expr<matrix<Store>> {
         assert(dimension() == tmp.dimension());
 
         typename Store::template type<impl::v_item_count,size_t> pivot(dimension());
-        int swapped = decompose(tmp,pivot.items.raw);
+        int swapped = decompose(tmp,pivot.data());
         if(swapped < 0) return 0;
 
         item_t r = swapped % 2 ? -1 : 1;
@@ -675,7 +679,7 @@ template<class Store> struct matrix : private impl::v_expr<matrix<Store>> {
         assert(dimension() == inv.dimension() && dimension() == tmp.dimension());
 
         typename Store::template type<impl::v_item_count,size_t> pivot(dimension());
-        int swapped = decompose(tmp,pivot.items.raw);
+        int swapped = decompose(tmp,pivot.data());
         if(swapped < 0) throw std::domain_error("matrix is singular (uninvertible)");
 
         // forward substitution
@@ -692,7 +696,7 @@ template<class Store> struct matrix : private impl::v_expr<matrix<Store>> {
 
         // back substitution
         for(int c=0; c<dimension(); ++c) {
-            int pc = pivot.items.raw[c];
+            int pc = pivot.data()[c];
             inv[dimension()-1][pc] = tmp[dimension()-1][c];
 
             for(int r=dimension()-2; r>-1; --r) {
@@ -820,14 +824,14 @@ template<class Store> struct matrix : private impl::v_expr<matrix<Store>> {
     impl::matrix_row<Store> operator[](size_t n) { return {*this,n}; }
     impl::const_matrix_row<Store> operator[](size_t n) const { return {*this,n}; }
 
-    item_t *data() { return store.items.raw; }
-    const item_t *data() const { return store.items.raw; }
+    item_t *data() { return store.data(); }
+    const item_t *data() const { return store.data(); }
 
     item_t &get(int r,int c) {
-        return store.items.raw[r*dimension() + c];
+        return store.data()[r*dimension() + c];
     }
     item_t get(int r,int c) const {
-        return store.items.raw[r*dimension() + c];
+        return store.data()[r*dimension() + c];
     }
 
     impl::matrix_column<Store> column(size_t n) { return {*this,n}; }

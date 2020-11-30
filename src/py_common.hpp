@@ -93,10 +93,6 @@ extern const char *init_on_derived_msg;
 extern const char *not_implemented_msg;
 
 
-constexpr size_t aligned(size_t size,size_t alignment) {
-    return ((size + alignment - 1) / alignment) * alignment;
-}
-
 template<typename T> struct range {
     T begin() const { return _begin; }
     T end() const { return _end; }

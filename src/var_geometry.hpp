@@ -2,12 +2,88 @@
 #define var_geometry_hpp
 
 #include <algorithm>
-#include <new>
 
+#include "geom_allocator.hpp"
 #include "geometry.hpp"
+
+//#define DEBUG_GEOM_MEM
+
+#if !defined(NDEBUG) && !defined(DEBUG_GEOM_MEM)
+  #define DEBUG_GEOM_MEM
+#endif
 
 
 namespace var {
+    class def_v_array_allocator_t final : public v_array_allocator {
+    public:
+        void *alloc(size_t size,size_t align);
+        void dealloc(void *ptr,size_t size,size_t align);
+    };
+    extern def_v_array_allocator_t def_v_array_allocator;
+
+    class simple_seg_storage final : public v_array_allocator {
+        char *first_block;
+        char *first_free_chunk;
+        const size_t chunk_size;
+        const size_t alignment;
+        const size_t items_per_block;
+    #ifdef DEBUG_GEOM_MEM
+        long alloc_items = 0;
+    #endif
+
+    public:
+        simple_seg_storage(size_t item_size,size_t alignment,size_t items_per_block);
+        simple_seg_storage(const simple_seg_storage&) = delete;
+        ~simple_seg_storage();
+
+        simple_seg_storage &operator=(const simple_seg_storage&) = delete;
+        simple_seg_storage &operator=(simple_seg_storage&&) = delete;
+
+        void *alloc_item();
+        void dealloc_item(void *ptr);
+
+        void *alloc(size_t size,size_t align);
+        void dealloc(void *ptr,size_t size,size_t align);
+    };
+
+    template<typename T,bool=(simd::v_sizes<T>::value[0] > 1)> class sss_allocator : public geom_allocator {
+        simple_seg_storage vec_storage;
+        simple_seg_storage batch_vec_storage;
+
+    public:
+        sss_allocator(size_t d,size_t items_per_block)
+            : vec_storage{sizeof(T) * d,
+                simd::largest_fit<T>(d) * sizeof(T),
+                items_per_block},
+            batch_vec_storage{sizeof(T) * d * simd::v_sizes<T>::value[0],
+                simd::v_sizes<T>::value[0] * sizeof(T),
+                items_per_block} {}
+
+        v_array_allocator *get_vec_alloc() {
+            return &vec_storage;
+        }
+        v_array_allocator *get_batch_vec_alloc() {
+            return &batch_vec_storage;
+        }
+    };
+
+    template<typename T> class sss_allocator<T,false> : public geom_allocator {
+        simple_seg_storage vec_storage;
+
+    public:
+        sss_allocator(size_t d,size_t alignment,size_t items_per_block)
+            : vec_storage{sizeof(T) * d,
+                simd::largest_fit<T>(d) * sizeof(T),
+                items_per_block} {}
+
+        v_array_allocator *get_vec_alloc() {
+            return &vec_storage;
+        }
+        v_array_allocator *get_batch_vec_alloc() {
+            return &vec_storage;
+        }
+    };
+
     /* an array that can be initialized with a call-back */
     template<typename T> struct init_array {
         size_t _size;
@@ -35,14 +111,14 @@ namespace var {
 
         template<typename F> init_array(size_t _size,F f) : _size(_size) {
             assert(_size);
-
-            data = operator new(sizeof(T) * _size);
+            data = global_new(sizeof(T) * _size,alignof(T));
 
             size_t i=0;
             try {
                 for(; i<_size; ++i) new(&(*this)[i]) T(f(i));
             } catch(...) {
                 while(i) (*this)[--i].~T();
+                global_delete(data,sizeof(T) * _size,alignof(T));
                 throw;
             }
         }
@@ -52,74 +128,82 @@ namespace var {
 
         ~init_array() {
             for(size_t i=0; i<_size; ++i) (*this)[i].~T();
-            operator delete(data);
+            global_delete(data,sizeof(T) * _size,alignof(T));
         }
-    };
-
-    /* Contains a type definition for a pointer to a SIMD type of width
-    "Width", if available, otherwise a void pointer. */
-    template<int Width,typename T,typename = std::void_t<>> struct vtype_if_available {
-        typedef void *type;
-    };
-
-    template<int Width,typename T>
-    struct vtype_if_available<Width,T,std::void_t<simd::v_type<T,Width/sizeof(T)>>> {
-        typedef simd::v_type<T,Width/sizeof(T)> *type;
     };
 
     template<typename RealItems,typename T> struct item_array {
-        static const int max_items = std::numeric_limits<int>::max();
+        static constexpr int max_items = std::numeric_limits<int>::max();
 
-        union {
-            T *raw;
-            simd::scalar<T> *s;
-            typename vtype_if_available<16,T>::type v16;
-            typename vtype_if_available<32,T>::type v32;
-            typename vtype_if_available<64,T>::type v64;
-        } items;
-
-        template<size_t Size,typename U> static FORCE_INLINE auto &_vec(U &self,size_t n) {
-            assert(n % Size == 0);
-            if constexpr(Size * sizeof(T) == 64) return self.items.v64[n/Size];
-            else if constexpr(Size * sizeof(T) == 32) return self.items.v32[n/Size];
-            else if constexpr(Size * sizeof(T) == 16) return self.items.v16[n/Size];
-            else {
-                static_assert(Size == 1,"a type with this size is not defined here");
-                return self.items.s[n];
-            }
-        }
-
-        template<size_t Size> FORCE_INLINE auto &vec(size_t n) {
-            return _vec<Size>(*this,n);
+        template<size_t Size> FORCE_INLINE void store_vec(size_t n,simd::v_type<T,Size> val) {
+            val.store(data() + n);
         }
 
         template<size_t Size> FORCE_INLINE auto vec(size_t n) const {
-            return _vec<Size>(*this,n);
+            return simd::v_type<T,Size>::load(data() + n);
         }
 
-        explicit item_array(int d) : size(d) {
+        T *data() { return reinterpret_cast<T*>(items); }
+        const T *data() const { return reinterpret_cast<const T*>(items); }
+
+        explicit item_array(int d,v_array_allocator *a=&def_v_array_allocator) : size{d}, allocator{a} {
             allocate();
         }
 
-        item_array(const item_array &b) : size(b.size) {
-            allocate();
-            memcpy(items.raw,b.items.raw,RealItems::get(size) * sizeof(T));
+        struct assign {
+            typedef T item_t;
+            static const int v_score = impl::V_SCORE_THRESHHOLD;
+            static const int max_items = item_array::max_items;
+
+            item_array &dest;
+            const item_array &src;
+
+            assign(item_array &dest,const item_array &src) : dest{dest}, src{src} {}
+
+            template<size_t Size> void operator()(size_t n) const {
+                dest.store_vec<Size>(n,src.vec<Size>(n));
+            }
+        };
+        static void copy_data(item_array &dest,const item_array &src) {
+            impl::v_rep(RealItems::get(dest.size),assign{dest,src});
         }
 
-        item_array(item_array &&b) : size(b.size) {
-            items.raw = b.items.raw;
-            b.items.raw = nullptr;
+        item_array(const item_array &b) : size{b.size}, allocator{b.allocator} {
+            if(allocator) {
+                allocate();
+                copy_data(*this,b);
+            } else {
+                items = b.items;
+            }
+        }
+
+        item_array(const item_array &b,v_array_allocator *a) : size{b.size}, allocator{a} {
+            allocate();
+            copy_data(*this,b);
+        }
+
+        item_array(const item_array &b,shallow_copy_t) : size{b.size}, allocator{nullptr} {
+            items = b.items;
+        }
+
+        item_array(item_array &&b) : size{b.size}, allocator{b.allocator} {
+            items = b.items;
+            b.items = nullptr;
+            b.allocator = nullptr;
         }
 
         ~item_array() {
             deallocate();
         }
 
+        // this only works if allocator is not null or the sizes are the same
         item_array &operator=(const item_array &b) {
-            deallocate();
-            size = b.size;
-            allocate();
-            memcpy(items.raw,b.items.raw,RealItems::get(size) * sizeof(T));
+            if(size != b.size) {
+                deallocate();
+                size = b.size;
+                allocate();
+            }
+            copy_data(*this,b);
 
             return *this;
         }
@@ -127,8 +211,10 @@ namespace var {
         item_array &operator=(item_array &&b) noexcept {
             deallocate();
             size = b.size;
-            items.raw = b.items.raw;
-            b.items.raw = nullptr;
+            items = b.items;
+            allocator = b.allocator;
+            b.items = nullptr;
+            b.allocator = nullptr;
             return *this;
         }
 
@@ -138,33 +224,32 @@ namespace var {
 
         void swap(item_array &b) {
             std::swap(size,b.size);
-            std::swap(this->items.raw,b.items.raw);
+            std::swap(items,b.items);
+            std::swap(allocator,b.allocator);
         }
 
     private:
         void allocate() {
-            assert(size > 0);
-            const size_t min_align = simd::largest_fit<T>(size) * sizeof(T);
-
-            if(min_align <= __STDCPP_DEFAULT_NEW_ALIGNMENT__) {
-                items.raw = reinterpret_cast<T*>(::operator new(RealItems::get(size) * sizeof(T)));
-            } else {
-                items.raw = reinterpret_cast<T*>(::operator new(RealItems::get(size) * sizeof(T),std::align_val_t{min_align}));
-            }
+            assert(size > 0 && allocator);
+            items = reinterpret_cast<char*>(allocator->alloc(
+                RealItems::get(size) * sizeof(T),
+                simd::largest_fit<T>(size) * sizeof(T)));
         }
 
         void deallocate() {
-            const size_t min_align = simd::largest_fit<T>(size) * sizeof(T);
-
-            if(min_align <= __STDCPP_DEFAULT_NEW_ALIGNMENT__) ::operator delete(items.raw);
-            else ::operator delete(items.raw,std::align_val_t{min_align});
+            if(allocator) allocator->dealloc(
+                items,
+                RealItems::get(size) * sizeof(T),
+                simd::largest_fit<T>(size) * sizeof(T));
         }
 
         int size;
+        v_array_allocator *allocator;
+        char *items;
     };
 
     template<typename T> struct item_store {
-        typedef T item_t;
+        using item_t = T;
 
         template<typename U=T> static int v_dimension(int d) {
             return d;
@@ -176,6 +261,22 @@ namespace var {
         template<typename U> using smaller_init_array = var::init_array<U>;
 
         template<typename RealItems,typename U=T> using type = item_array<RealItems,U>;
+
+        static geom_allocator *new_allocator(int d,size_t items_per_block) {
+            return new sss_allocator<T>(d,items_per_block);
+        }
+
+        static constexpr v_array_allocator *def_allocator = &def_v_array_allocator;
+
+        template<typename U> static v_array_allocator *allocator_for(geom_allocator *a) {
+            if constexpr(std::is_same_v<U,vector<item_store>>) {
+                return a ? static_cast<sss_allocator<T>*>(a)->get_vec_alloc() : &def_v_array_allocator;
+            } else if constexpr(std::is_same_v<U,vector_batch<item_store>>) {
+                return a ? static_cast<sss_allocator<T>*>(a)->get_batch_vec_alloc() : &def_v_array_allocator;
+            } else {
+                return &def_v_array_allocator;
+            }
+        }
     };
 }
 

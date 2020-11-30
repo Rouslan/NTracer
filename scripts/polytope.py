@@ -71,11 +71,12 @@ parser.add_argument('-d','--cam-dist',metavar='DIST',type=float,default=4,
     help='How far the view-port is from the center of the polytope. The '+
         'value is a multiple of the outer raidius of the polytope.')
 parser.add_argument('--benchmark',action='store_true',help='measure the speed of rendering the scene')
+parser.add_argument('--no-special',action='store_true',help='use the slower generic version of library even if a specialized version exists')
 args = parser.parse_args()
 
 
 material = Material((1,0.5,0.5))
-nt = NTracer(max(len(args.schlafli)+1,3))
+nt = NTracer(max(len(args.schlafli)+1,3),force_generic=args.no_special)
 
 
 def higher_dihedral_supplement(schlafli,ds):
