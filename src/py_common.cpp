@@ -223,7 +223,7 @@ void NoSuchOverload(PyObject *args) {
     }
 }
 
-PyObject *immutable_copy_func(PyObject *self,PyObject*) {
+PyObject *immutable_copy_func(PyObject *self,PyObject*) noexcept {
     Py_INCREF(self);
     return self;
 }

@@ -105,7 +105,7 @@ public:
 };
 
 
-template<typename Store> real hypercube_intersects(const ray<Store> &target,ray<Store> &normal) {
+template<typename Store> HOT_FUNC real hypercube_intersects(const ray<Store> &target,ray<Store> &normal) {
     assert(target.dimension() == normal.dimension());
     INSTRUMENTATION_TIMER;
 
@@ -131,7 +131,7 @@ template<typename Store> real hypercube_intersects(const ray<Store> &target,ray<
     return 0;
 }
 
-template<typename Store> real hypersphere_intersects(const ray<Store> &target,ray<Store> &normal) {
+template<typename Store> HOT_FUNC real hypersphere_intersects(const ray<Store> &target,ray<Store> &normal) {
     INSTRUMENTATION_TIMER;
 
     real a = target.direction.square();
@@ -212,7 +212,7 @@ template<typename Store> struct solid : solid_obj_common, primitive<Store> {
     solid(int dimension,solid_type type,material *m)
         : primitive<Store>(m,pytype()), type(type), orientation(dimension), inv_orientation(dimension), position(dimension) {}
 
-    real intersects(const ray<Store> &target,ray<Store> &normal,geom_allocator *a=nullptr) const {
+    HOT_FUNC real intersects(const ray<Store> &target,ray<Store> &normal,geom_allocator *a=nullptr) const {
         ray<Store> transformed{
             inv_orientation * target.origin - position,
             inv_orientation * target.direction,
@@ -429,7 +429,7 @@ private:
     }
 };
 
-template<typename Store> real primitive<Store>::intersects(const ray<Store> &target,ray<Store> &normal,geom_allocator *a) const {
+template<typename Store> HOT_FUNC real primitive<Store>::intersects(const ray<Store> &target,ray<Store> &normal,geom_allocator *a) const {
     if(Py_TYPE(this) == triangle_obj_common::pytype()) {
         INSTRUMENTATION_TIMER;
         return static_cast<const triangle<Store>*>(this)->intersects(target,normal,a);
@@ -468,7 +468,7 @@ template<typename Store> struct triangle_batch : triangle_batch_obj_common, prim
         return size_t(dimension()-1);
     }
 
-    real intersects(const ray<Store> &target,ray<Store> &normal,int &index,geom_allocator *a=nullptr) const {
+    FORCE_INLINE real intersects(const ray<Store> &target,ray<Store> &normal,int &index,geom_allocator *a=nullptr) const {
         INSTRUMENTATION_TIMER;
         auto zeros = v_real::zeros();
 
@@ -543,7 +543,7 @@ private:
     }
 };
 
-template<typename Store> real primitive_batch<Store>::intersects(const ray<Store> &target,ray<Store> &normal,int &index,geom_allocator *a) const {
+template<typename Store> HOT_FUNC real primitive_batch<Store>::intersects(const ray<Store> &target,ray<Store> &normal,int &index,geom_allocator *a) const {
     assert(Py_TYPE(this) == triangle_batch_obj_common::pytype());
     return static_cast<const triangle_batch<Store>*>(this)->intersects(target,normal,index,a);
 }
@@ -758,7 +758,7 @@ template<typename Store,bool Batched=(v_real::size>1)> struct kd_leaf : kd_node<
         return new(size) kd_leaf(size,f);
     }
 
-    bool intersects(const ray<Store> &target,intersection_target<Store> skip,ray_intersection<Store> &o_hit,ray_intersections<Store> &t_hits,geom_allocator *a=nullptr) const {
+    HOT_FUNC bool intersects(const ray<Store> &target,intersection_target<Store> skip,ray_intersection<Store> &o_hit,ray_intersections<Store> &t_hits,geom_allocator *a=nullptr) const {
         assert(dimension() == target.dimension() && dimension() == o_hit.normal.dimension());
 
         size_t h_start = t_hits.size();
@@ -806,7 +806,7 @@ template<typename Store,bool Batched=(v_real::size>1)> struct kd_leaf : kd_node<
         return true;
     }
 
-    bool occludes(const ray<Store> &target,real ldistance,intersection_target<Store> skip,ray_intersections<Store> &hits,geom_allocator *a=nullptr) const {
+    HOT_FUNC bool occludes(const ray<Store> &target,real ldistance,intersection_target<Store> skip,ray_intersections<Store> &hits,geom_allocator *a=nullptr) const {
         assert(dimension() == target.dimension());
 
         real dist;
@@ -855,7 +855,7 @@ template<typename Store> struct kd_leaf<Store,true> : kd_node<Store>, flexible_s
         return new(size) kd_leaf(size,f);
     }
 
-    bool intersects(const ray<Store> &target,intersection_target<Store> skip,ray_intersection<Store> &o_hit,ray_intersections<Store> &t_hits,geom_allocator *a=nullptr) const {
+    HOT_FUNC bool intersects(const ray<Store> &target,intersection_target<Store> skip,ray_intersection<Store> &o_hit,ray_intersections<Store> &t_hits,geom_allocator *a=nullptr) const {
         assert(dimension() == target.dimension() && dimension() == o_hit.normal.dimension());
 
         size_t h_start = t_hits.size();
@@ -951,7 +951,7 @@ template<typename Store> struct kd_leaf<Store,true> : kd_node<Store>, flexible_s
         return true;
     }
 
-    bool occludes(const ray<Store> &target,real ldistance,intersection_target<Store> skip,ray_intersections<Store> &hits,geom_allocator *a=nullptr) const {
+    HOT_FUNC bool occludes(const ray<Store> &target,real ldistance,intersection_target<Store> skip,ray_intersections<Store> &hits,geom_allocator *a=nullptr) const {
         assert(dimension() == target.dimension());
 
         real dist;
@@ -1016,7 +1016,7 @@ private:
     }
 };
 
-template<typename Store> bool _intersects(const kd_node<Store> *node,const ray<Store> &target,const vector<Store> &invdir,intersection_target<Store> skip,ray_intersection<Store> &o_hit,ray_intersections<Store> &t_hits,real t_near,real t_far,geom_allocator *a) {
+template<typename Store> HOT_FUNC bool _intersects(const kd_node<Store> *node,const ray<Store> &target,const vector<Store> &invdir,intersection_target<Store> skip,ray_intersection<Store> &o_hit,ray_intersections<Store> &t_hits,real t_near,real t_far,geom_allocator *a) {
     while(node) {
         if(node->type == LEAF) {
             bool r = static_cast<const kd_leaf<Store>*>(node)->intersects(target,skip,o_hit,t_hits,a);
@@ -1084,7 +1084,7 @@ template<typename Store> inline bool intersects(const kd_node<Store> *node,const
     return _intersects<Store>(node,target,1/target.direction,skip,o_hit,t_hits,t_near,t_far,a);
 }
 
-template<typename Store> bool _occludes(const kd_node<Store> *node,const ray<Store> &target,const vector<Store> &invdir,real ldistance,intersection_target<Store> skip,ray_intersections<Store> &hits,real t_near,real t_far,geom_allocator *a) {
+template<typename Store> HOT_FUNC bool _occludes(const kd_node<Store> *node,const ray<Store> &target,const vector<Store> &invdir,real ldistance,intersection_target<Store> skip,ray_intersections<Store> &hits,real t_near,real t_far,geom_allocator *a) {
     while(node) {
         if(node->type == LEAF) return static_cast<const kd_leaf<Store>*>(node)->occludes(target,ldistance,skip,hits,a);
 
@@ -1620,7 +1620,7 @@ template<typename Store> struct composite_scene final : scene {
         fovI = (2 * std::tan(fov/2)) / w;
     }
 
-    bool light_reaches(const ray<Store> &target,real ldistance,intersection_target<Store> skip,color &filtered,geom_allocator *a=nullptr) const {
+    HOT_FUNC bool light_reaches(const ray<Store> &target,real ldistance,intersection_target<Store> skip,color &filtered,geom_allocator *a=nullptr) const {
         ray_intersections<Store> transparent_hits;
 
         if(occludes(root.get(),target,ldistance,skip,transparent_hits,0,std::numeric_limits<real>::max(),a)) return false;
@@ -1638,7 +1638,7 @@ template<typename Store> struct composite_scene final : scene {
         return true;
     }
 
-    color base_color(const ray<Store> &target,const ray<Store> &normal,intersection_target<Store> source,int depth,geom_allocator *a=nullptr) const {
+    HOT_FUNC color base_color(const ray<Store> &target,const ray<Store> &normal,intersection_target<Store> source,int depth,geom_allocator *a=nullptr) const {
         auto m = source.mat();
 
         auto light = color(0,0,0);
@@ -1726,7 +1726,7 @@ template<typename Store> struct composite_scene final : scene {
         return specular + r * (1 - spec_a);
     }
 
-    color ray_color(const ray<Store> &target,int depth,intersection_target<Store> source,geom_allocator *a) const {
+    HOT_FUNC color ray_color(const ray<Store> &target,int depth,intersection_target<Store> source,geom_allocator *a) const {
         ray_intersection<Store> hit{target.dimension(),a};
         ray_intersections<Store> transparent_hits;
         color r;
@@ -1754,7 +1754,7 @@ template<typename Store> struct composite_scene final : scene {
         return r;
     }
 
-    color calculate_color(int x,int y,geom_allocator *a) const {
+    HOT_FUNC color calculate_color(int x,int y,geom_allocator *a) const {
         return ray_color({
                 vector<Store>{cam.origin,a},
                 (cam.forward() + cam.right() * (fovI * (x - half_w)) - cam.up() * (fovI * (y - half_h))).unit(),
@@ -1764,7 +1764,7 @@ template<typename Store> struct composite_scene final : scene {
             a);
     }
 
-    real aabb_distance(const ray<Store> &target) const {
+    HOT_FUNC real aabb_distance(const ray<Store> &target) const {
         INSTRUMENTATION_TIMER;
 
         for(int i=0; i<dimension(); ++i) {

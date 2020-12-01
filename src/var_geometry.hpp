@@ -39,11 +39,11 @@ namespace var {
         simple_seg_storage &operator=(const simple_seg_storage&) = delete;
         simple_seg_storage &operator=(simple_seg_storage&&) = delete;
 
-        void *alloc_item();
-        void dealloc_item(void *ptr);
+        HOT_FUNC void *alloc_item();
+        HOT_FUNC void dealloc_item(void *ptr);
 
-        void *alloc(size_t size,size_t align);
-        void dealloc(void *ptr,size_t size,size_t align);
+        HOT_FUNC void *alloc(size_t size,size_t align);
+        HOT_FUNC void dealloc(void *ptr,size_t size,size_t align);
     };
 
     template<typename T,bool=(simd::v_sizes<T>::value[0] > 1)> class sss_allocator : public geom_allocator {
@@ -168,7 +168,7 @@ namespace var {
             impl::v_rep(RealItems::get(dest.size),assign{dest,src});
         }
 
-        item_array(const item_array &b) : size{b.size}, allocator{b.allocator} {
+        HOT_FUNC item_array(const item_array &b) : size{b.size}, allocator{b.allocator} {
             if(allocator) {
                 allocate();
                 copy_data(*this,b);

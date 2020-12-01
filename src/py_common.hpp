@@ -611,7 +611,7 @@ inline void setter_no_delete(PyObject *arg) {
 }
 
 
-PyObject *immutable_copy_func(PyObject *self,PyObject*);
+PyObject *immutable_copy_func(PyObject *self,PyObject*) noexcept;
 constexpr PyMethodDef immutable_copy = {"__copy__",&immutable_copy_func,METH_NOARGS,NULL};
 constexpr PyMethodDef immutable_deepcopy = {"__deepcopy__",&immutable_copy_func,METH_O,NULL};
 

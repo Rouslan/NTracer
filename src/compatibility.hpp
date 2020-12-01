@@ -25,6 +25,9 @@
   #endif
 
   #define FORCE_INLINE inline __attribute__((always_inline))
+
+  #define HOT_FUNC __attribute__((hot))
+  #define COLD_FUNC __attribute__((cold))
 #else
   #define LIKELY(X) X
   #define UNLIKELY(X) X
@@ -32,6 +35,9 @@
   #define ASSUME(X) (void)0
 
   #define FIX_STACK_ALIGN
+
+  #define HOT_FUNC
+  #define COLD_FUNC
 
   #if defined(_MSC_VER)
     #define RESTRICT __restrict
