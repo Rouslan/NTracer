@@ -193,7 +193,7 @@ long narrow(long x,long max,long min) {
     return x;
 }
 
-void NoSuchOverload(PyObject *args) {
+COLD_FUNC void NoSuchOverload(PyObject *args) {
     const char *const format = "no overload takes (%s)";
     if(PyTuple_Check(args)) {
         if(PyTuple_GET_SIZE(args)) {
@@ -226,4 +226,31 @@ void NoSuchOverload(PyObject *args) {
 PyObject *immutable_copy_func(PyObject *self,PyObject*) noexcept {
     Py_INCREF(self);
     return self;
+}
+
+int setup_buffer(PyObject *self,Py_buffer *view,int flags,void *data,const char *format,int item_size,int length) {
+    view->obj = nullptr;
+    if((flags & PyBUF_WRITABLE) == PyBUF_WRITABLE) {
+        PyErr_SetString(PyExc_BufferError,"Object is not writable");
+        return -1;
+    }
+
+    view->format = nullptr;
+    if((flags & PyBUF_FORMAT) == PyBUF_FORMAT) view->format = const_cast<char*>(format);
+
+    view->buf = data;
+    view->len = length * item_size;
+    view->readonly = 1;
+    view->itemsize = item_size;
+    view->ndim = 1;
+    view->internal = reinterpret_cast<void*>(intptr_t(length));
+    view->shape = nullptr;
+    if((flags & PyBUF_ND) == PyBUF_ND) view->shape = reinterpret_cast<Py_ssize_t*>(&view->internal);
+    view->strides = nullptr;
+    if((flags & PyBUF_STRIDES) == PyBUF_STRIDES) view->strides = &(view->itemsize);
+    view->suboffsets = nullptr;
+
+    view->obj = self;
+    Py_INCREF(self);
+    return 0;
 }

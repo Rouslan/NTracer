@@ -296,6 +296,17 @@ protected:
     ~obj_KDNode() = default;
 };
 
+template<> void ensure_unlocked<obj_KDNode>(obj_KDNode *node) {
+    if(node->parent) {
+        if(PyObject_TypeCheck(node->parent.ref(),obj_KDNode::pytype())) {
+            ensure_unlocked(reinterpret_cast<obj_KDNode*>(node->parent.ref()));
+        } else {
+            assert(PyObject_TypeCheck(node->parent.ref(),obj_CompositeScene::pytype()));
+            ensure_unlocked(reinterpret_cast<obj_CompositeScene*>(node->parent.ref()));
+        }
+    }
+}
+
 struct obj_KDBranch : obj_KDNode {
     CONTAINED_PYTYPE_DEF
 
@@ -1462,11 +1473,11 @@ PyTypeObject obj_KDNode::_pytype = {
     }};
 
 
-Py_ssize_t obj_KDLeaf___sequence_len__(obj_KDLeaf *self) {
+Py_ssize_t obj_KDLeaf_sequence_len(obj_KDLeaf *self) {
     return self->data()->size;
 }
 
-PyObject *obj_KDLeaf___sequence_getitem__(obj_KDLeaf *self,Py_ssize_t index) {
+PyObject *obj_KDLeaf_sequence_getitem(obj_KDLeaf *self,Py_ssize_t index) {
     if(UNLIKELY(index < 0 || index >= static_cast<Py_ssize_t>(self->data()->size))) {
         PyErr_SetString(PyExc_IndexError,"index out of range");
         return nullptr;
@@ -1475,8 +1486,8 @@ PyObject *obj_KDLeaf___sequence_getitem__(obj_KDLeaf *self,Py_ssize_t index) {
 }
 
 PySequenceMethods obj_KDLeaf_sequence_methods = {
-    .sq_length = reinterpret_cast<lenfunc>(&obj_KDLeaf___sequence_len__),
-    .sq_item = reinterpret_cast<ssizeargfunc>(&obj_KDLeaf___sequence_getitem__)
+    .sq_length = reinterpret_cast<lenfunc>(&obj_KDLeaf_sequence_len),
+    .sq_item = reinterpret_cast<ssizeargfunc>(&obj_KDLeaf_sequence_getitem)
 };
 
 inline int dim_at(const kd_leaf<module_store,false> *n,size_t i) {
@@ -1953,6 +1964,18 @@ PyGetSetDef obj_Vector_getset[] = {
     {NULL}
 };
 
+template<typename T> struct _buffer_format {};
+template<> struct _buffer_format<float> { static constexpr const char *value = "f"; };
+template<> struct _buffer_format<double> { static constexpr const char *value = "d"; };
+template<typename T> const char *buffer_format = _buffer_format<T>::value;
+
+FIX_STACK_ALIGN int obj_Vector_get_buffer(PyObject *self,Py_buffer *view,int flags) {
+    auto &v = reinterpret_cast<wrapped_type<n_vector>*>(self)->get_base();
+    return setup_buffer(self,view,flags,v.data(),buffer_format<n_vector::item_t>,sizeof(n_vector::item_t),v.dimension());
+}
+PyBufferProcs obj_Vector_buffer = {
+    .bf_getbuffer = &obj_Vector_get_buffer};
+
 PyTypeObject vector_obj_base::_pytype = {
     PyVarObject_HEAD_INIT(nullptr,0)
     .tp_name = FULL_MODULE_STR ".Vector",
@@ -1962,6 +1985,7 @@ PyTypeObject vector_obj_base::_pytype = {
     .tp_as_number = &obj_Vector_number_methods,
     .tp_as_sequence = &obj_Vector_sequence_methods,
     .tp_str = reinterpret_cast<reprfunc>(&obj_Vector_str),
+    .tp_as_buffer = &obj_Vector_buffer,
     .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE,
     .tp_richcompare = reinterpret_cast<richcmpfunc>(&obj_Vector_richcompare),
     .tp_methods = obj_Vector_methods,

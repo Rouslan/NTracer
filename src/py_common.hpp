@@ -615,6 +615,7 @@ PyObject *immutable_copy_func(PyObject *self,PyObject*) noexcept;
 constexpr PyMethodDef immutable_copy = {"__copy__",&immutable_copy_func,METH_NOARGS,NULL};
 constexpr PyMethodDef immutable_deepcopy = {"__deepcopy__",&immutable_copy_func,METH_O,NULL};
 
+int setup_buffer(PyObject *self,Py_buffer *view,int flags,void *data,const char *format,int item_size,int length);
 
 inline void add_class(PyObject *module,const char *name,PyTypeObject *type) {
     Py_INCREF(type);

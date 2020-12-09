@@ -1207,6 +1207,13 @@ PyMemberDef obj_Color_members[] = {
     {NULL}
 };
 
+FIX_STACK_ALIGN int obj_Color_get_buffer(PyObject *self,Py_buffer *view,int flags) {
+    color &c = reinterpret_cast<wrapped_type<color>*>(self)->get_base();
+    return setup_buffer(self,view,flags,c.vals,"f",sizeof(float),3);
+}
+PyBufferProcs obj_Color_buffer = {
+    .bf_getbuffer = &obj_Color_get_buffer};
+
 PyTypeObject color_obj_base::_pytype = {
     PyVarObject_HEAD_INIT(nullptr,0)
     .tp_name = FULL_MODULE_STR ".Color",
@@ -1215,6 +1222,7 @@ PyTypeObject color_obj_base::_pytype = {
     .tp_repr = reinterpret_cast<reprfunc>(&obj_Color_repr),
     .tp_as_number = &obj_Color_number_methods,
     .tp_as_sequence = &obj_Color_sequence_methods,
+    .tp_as_buffer = &obj_Color_buffer,
     .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE,
     .tp_richcompare = reinterpret_cast<richcmpfunc>(&obj_Color_richcompare),
     .tp_methods = obj_Color_methods,
@@ -1375,8 +1383,8 @@ PyGetSetDef obj_Material_getset[] = {
 PyMemberDef obj_Material_members[] = {
     {"opacity",T_FLOAT,offsetof(material,opacity),0,NULL},
     {"reflectivity",T_FLOAT,offsetof(material,reflectivity),0,NULL},
-    {"specular_intensity",T_FLOAT,offsetof(material,reflectivity),0,NULL},
-    {"specular_exp",T_FLOAT,offsetof(material,reflectivity),0,NULL},
+    {"specular_intensity",T_FLOAT,offsetof(material,specular_intensity),0,NULL},
+    {"specular_exp",T_FLOAT,offsetof(material,specular_exp),0,NULL},
     {NULL}
 };
 

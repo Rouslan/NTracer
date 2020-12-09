@@ -385,14 +385,14 @@ template<typename Store> struct triangle : triangle_obj_common, primitive<Store>
     static triangle<Store> *from_points(const vector<Store> *points,material *mat) {
         const vector<Store> &P1 = points[0];
         int n = P1.dimension();
-        smaller<matrix<Store> > tmp(n-1);
+        smaller<matrix<Store>> tmp(n-1);
 
-        typename Store::template smaller_init_array<vector<Store> > vsides(n-1,[&P1,points](int i) -> vector<Store> { return points[i+1] - P1; });
+        typename Store::template smaller_init_array<vector<Store>> vsides(n-1,[&P1,points](int i) -> vector<Store> { return points[i+1] - P1; });
         vector<Store> N(n);
         cross_(N,tmp,static_cast<vector<Store>*>(vsides));
         real square = N.square();
 
-        return create(P1,N,[&,square](int i) -> vector<Store> {
+        return create(P1,N,[&,square](int i) {
             vector<Store> old = vsides[i];
             vsides[i] = N;
             vector<Store> r(N.dimension());

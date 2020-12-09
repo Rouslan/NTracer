@@ -2,7 +2,7 @@ import unittest
 import random
 
 from ..wrapper import NTracer,CUBE,SPHERE
-from ..render import Material
+from ..render import Material,Color
 
 def pydot(a,b):
     return sum(ia*ib for ia,ib in zip(a,b))
@@ -21,7 +21,7 @@ class Tests(unittest.TestCase):
             a = nt.Vector(range(d))
             b = nt.Vector(x+12 for x in range(d-1,-1,-1))
             self.assertAlmostEqual(nt.dot(a,b),pydot(a,b))
-            
+
             d = d >> 1
 
     @and_generic
@@ -31,23 +31,23 @@ class Tests(unittest.TestCase):
         mb = nt.Matrix([13,6,9,6,7,3,3,13,1,11,12,7,12,15,17,15])
         mx = ma * mb
         my = nt.Matrix([195,159,200,167,210,245,283,277,342,385,447,441,474,525,611,605])
-        
+
         self.assertEqual(mx,my)
         for vx,vy in zip(mx.values,my.values):
             self.assertEqual(vx,vy)
-        
+
         for a,b in zip((mb * mb.inverse()).values,[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]):
             self.assertAlmostEqual(a,b,4)
-        
+
         for a,b in zip(nt.Vector(13,2,16,14).unit(),[0.52,0.08,0.64,0.56]):
             self.assertAlmostEqual(a,b,4)
-    
+
     @and_generic
     def test_triangle(self,generic):
         nt = NTracer(3,generic)
         mat = Material((1,1,1))
         box = nt.AABB((-1,-1,-1),(1,1,1))
-        
+
         self.assertFalse(box.intersects(nt.TrianglePrototype([
             (-2.092357,0.1627209,0.9231308),
             (0.274588,0.8528936,2.309217),
@@ -62,12 +62,12 @@ class Tests(unittest.TestCase):
             (-4.335572,-1.690142,-1.302721),
             (0.8976227,0.5090631,4.6815),
             (-0.8176082,4.334341,-1.763081)],mat)))
-        
+
         self.assertTrue(box.intersects(nt.TrianglePrototype([
             (0,0,0),
             (5,5,5),
             (1,2,3)],mat)))
-        
+
         self.assertTrue(nt.AABB(
             (-0.894424974918,-1.0,-0.850639998913),
             (0.0,-0.447214990854,0.850639998913)).intersects(
@@ -75,13 +75,13 @@ class Tests(unittest.TestCase):
                     (0.0,-1.0,0.0),
                     (0.723599970341,-0.447214990854,0.525720000267),
                     (-0.276385009289,-0.447214990854,0.850639998913)],mat)))
-    
+
     @and_generic
     def test_cube(self,generic):
         nt = NTracer(3,generic)
         mat = Material((1,1,1))
         box = nt.AABB((-1,-1,-1),(1,1,1))
-        
+
         self.assertFalse(box.intersects(nt.SolidPrototype(
             CUBE,
             nt.Vector(1.356136,1.717844,1.577731),
@@ -121,33 +121,33 @@ class Tests(unittest.TestCase):
                       -0.7643852,-0.6406123,0.07301452,
                       0.5223108,-0.6816301,-0.5124177),
             mat)))
-    
+
     @and_generic
     def test_sphere(self,generic):
         nt = NTracer(3,generic)
         mat = Material((1,1,1))
         box = nt.AABB((-1,-1,-1),(1,1,1))
-        
+
         self.assertFalse(box.intersects(nt.SolidPrototype(
             SPHERE,
             nt.Vector(-1.32138,1.6959,1.729396),
             nt.Matrix.identity(),
             mat)))
-        
+
         self.assertTrue(box.intersects(nt.SolidPrototype(
             SPHERE,
             nt.Vector(1.623511,-1.521197,-1.243952),
             nt.Matrix.identity(),
             mat)))
-    
+
     @and_generic
     def test_batch_interface(self,generic):
         nt = NTracer(4,generic)
         mat = Material((1,1,1))
-        
+
         lo = lambda: random.uniform(-1,1)
         hi = lambda: random.uniform(9,11)
-        
+
         protos = []
         for i in range(nt.BATCH_SIZE):
             protos.append(nt.TrianglePrototype([
@@ -155,7 +155,7 @@ class Tests(unittest.TestCase):
                 (lo(),hi(),lo(),lo()),
                 (hi(),lo(),lo(),lo()),
                 (lo(),lo(),hi(),lo())],Material((1,1,1.0/(i+1)))))
-        
+
         bproto = nt.TriangleBatchPrototype(protos)
         for i in range(nt.BATCH_SIZE):
             self.assertEqual(protos[i].face_normal,bproto.face_normal[i])
@@ -164,7 +164,15 @@ class Tests(unittest.TestCase):
                 self.assertEqual(protos[i].point_data[j].edge_normal,bproto.point_data[j].edge_normal[i])
             self.assertEqual(protos[i].material,bproto.material[i])
 
+    @and_generic
+    def test_buffer_interface(self,generic):
+        nt = NTracer(7,generic)
+        v = nt.Vector(1,2,3,4,5,6,7)
+        self.assertEqual(list(v),list(memoryview(v)))
+
+        c = Color(0.5,0.1,0)
+        self.assertEqual(list(c),list(memoryview(c)))
+
 
 if __name__ == '__main__':
     unittest.main()
-

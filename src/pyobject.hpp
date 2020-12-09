@@ -1139,55 +1139,23 @@ namespace py {
         .sq_ass_item = impl::array_adapter_set_item<Item,FullName,GC,ReadOnly>::value};
 
     template<typename Item,const char* FullName,bool GC,bool ReadOnly>
-        PyTypeObject obj_array_adapter<Item,FullName,GC,ReadOnly>::_pytype = {
-            PyVarObject_HEAD_INIT(nullptr,0)
-            .tp_name = FullName,
-            .tp_basicsize = sizeof(obj_array_adapter<Item,FullName,GC,ReadOnly>),
-            .tp_dealloc = [](PyObject *self) -> void {
-                typedef obj_array_adapter<Item,FullName,GC,ReadOnly> self_t;
+    PyTypeObject obj_array_adapter<Item,FullName,GC,ReadOnly>::_pytype = {
+        PyVarObject_HEAD_INIT(nullptr,0)
+        .tp_name = FullName,
+        .tp_basicsize = sizeof(obj_array_adapter<Item,FullName,GC,ReadOnly>),
+        .tp_dealloc = [](PyObject *self) -> void {
+            typedef obj_array_adapter<Item,FullName,GC,ReadOnly> self_t;
 
-                reinterpret_cast<self_t*>(self)->~self_t();
-                (*self_t::pytype()->tp_free)(self);
-            },
-            .tp_as_sequence = &obj_array_adapter<Item,FullName,GC,ReadOnly>::seq_methods,
-            .tp_flags = obj_array_adapter<Item,FullName,GC,ReadOnly>::tp_flags,
-            .tp_traverse = obj_array_adapter<Item,FullName,GC,ReadOnly>::traverse,
-            .tp_new = [](PyTypeObject *type,PyObject *args,PyObject *kwds) -> PyObject* {
-                PyErr_Format(PyExc_TypeError,"The %s type cannot be instantiated directly",typename_base(FullName));
-                return nullptr;
-            }};
-
-
-    /*template<typename T> inline pyptr<T> newpy() {
-        return new_ref(new wrapped_type<T>::type());
-    }
-
-    template<typename T,typename A1> inline pyptr<T> newpy(A1 a1) {
-        return new_ref(new wrapped_type<T>::type(a1));
-    }
-
-    template<typename T,typename A1,typename A2> inline pyptr<T> newpy(A1 a1,A2 a2) {
-        return new_ref(new wrapped_type<T>::type(a1,a2));
-    }
-
-    template<typename T,typename A1,typename A2,typename A3> inline pyptr<T> newpy(A1 a1,A2 a2,A3 a3) {
-        return new_ref(new wrapped_type<T>::type(a1,a2,a3));
-    }
-
-    template<typename T,typename A1,typename A2,typename A3,typename A4> inline pyptr<T> newpy(A1 a1,A2 a2,A3 a3,A4 a4) {
-        return new_ref(new wrapped_type<T>::type(a1,a2,a3,a4));
-    }*/
-
-
-
-
-    /*template<> inline PyObject *to_pyobject<const std::string&>(const std::string &x) {
-        return PyString_FromStringAndSize(x.c_str(),x.size());
-    }
-
-    template<> inline PyObject *to_pyobject<const std::wstring&>(const std::wstring &x) {
-        return PyUnicode_FromWideChar(x.c_str(),x.size());
-    }*/
+            reinterpret_cast<self_t*>(self)->~self_t();
+            (*self_t::pytype()->tp_free)(self);
+        },
+        .tp_as_sequence = &obj_array_adapter<Item,FullName,GC,ReadOnly>::seq_methods,
+        .tp_flags = obj_array_adapter<Item,FullName,GC,ReadOnly>::tp_flags,
+        .tp_traverse = obj_array_adapter<Item,FullName,GC,ReadOnly>::traverse,
+        .tp_new = [](PyTypeObject *type,PyObject *args,PyObject *kwds) -> PyObject* {
+            PyErr_Format(PyExc_TypeError,"The %s type cannot be instantiated directly",typename_base(FullName));
+            return nullptr;
+        }};
 }
 
 
