@@ -58,7 +58,7 @@ struct interned_strings {{
 def create_strings_hpp(base_dir,build_temp,ifile,force,dry_run):
     ofile = os.path.join(build_temp,os.path.splitext(ifile)[0]+'_strings.hpp')
     ifile = os.path.join(base_dir,'src',ifile)
-    if force or newer(ifile,ofile):
+    if force or newer(ifile,ofile) or newer(__file__,ofile):
         log.info('creating {0} from {1}'.format(ofile,ifile))
         if not dry_run:
             generate(ifile,ofile)

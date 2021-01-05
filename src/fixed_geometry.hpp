@@ -62,20 +62,6 @@ namespace fixed {
         }
     }
 
-    /* Contains a type definition for an array of a SIMD type of width "Width",
-    and array length of "N" divided by the number of elements in the SIMD type.
-    If such a SIMD type is not available or the array length would be zero
-    (rounded down), the type defined is an empty struct. */
-    template<int N,int Width,typename T,typename = std::void_t<>> struct vtype_if_available {
-        struct type {};
-    };
-
-    template<int N,int Width,typename T>
-    struct vtype_if_available<N,Width,T,std::void_t<simd::v_type<T,Width/sizeof(T)>[N*sizeof(T)/Width]>> {
-        typedef simd::v_type<T,Width/sizeof(T)> type[N*sizeof(T)/Width];
-    };
-
-
     template<int N,typename RealItems,typename T> struct item_array {
         static constexpr int _real_size = simd::padded_size<T>(RealItems::get(N));
         static constexpr int max_items = _real_size;
@@ -104,33 +90,14 @@ namespace fixed {
 
         int dimension() const { return N; }
 
-        union {
-            T raw[_real_size];
-            simd::scalar<T> s[_real_size];
-            typename vtype_if_available<_real_size,16,T>::type v16;
-            typename vtype_if_available<_real_size,32,T>::type v32;
-            typename vtype_if_available<_real_size,64,T>::type v64;
-        } items;
-
-        template<size_t Size,typename U> static FORCE_INLINE auto &_vec(U &self,size_t n) {
-            static_assert(Size <= _real_size,"trying to get vector type larger than entire array");
-
-            assert(n % Size == 0);
-            if constexpr(Size * sizeof(T) == 64) return self.items.v64[n/Size];
-            else if constexpr(Size * sizeof(T) == 32) return self.items.v32[n/Size];
-            else if constexpr(Size * sizeof(T) == 16) return self.items.v16[n/Size];
-            else {
-                static_assert(Size == 1,"a type with this size is not defined here");
-                return self.items.s[n];
-            }
-        }
+        simd::packed_union_array<T,_real_size> items;
 
         template<size_t Size> FORCE_INLINE void store_vec(size_t n,simd::v_type<T,Size> val) {
-            _vec<Size>(*this,n) = val;
+            simd::at<Size>(items,n) = val;
         }
 
         template<size_t Size> FORCE_INLINE auto vec(size_t n) const {
-            return _vec<Size>(*this,n);
+            return simd::at<Size>(items,n);
         }
 
         T *data() { return items.raw; }

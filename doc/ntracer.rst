@@ -537,11 +537,11 @@ can't add a tuple and a :py:class:`Vector` together).
 
     .. py:attribute:: end
 
-        A vector specifying the minimum extent of the box.
+        A vector specifying the maximum extent of the box.
 
     .. py:attribute:: start
 
-        A vector specifying the maximum extent of the box.
+        A vector specifying the minimum extent of the box.
 
 
 .. py:class:: BoxScene(dimension)
@@ -1818,7 +1818,7 @@ can't add a tuple and a :py:class:`Vector` together).
         :code:`self.__len__()` <==> :code:`len(self)`
 
 
-.. py:function:: build_composite_scene(primitives[,extra_threads=-1]) -> \
+.. py:function:: build_composite_scene(primitives[,extra_threads=-1,*,update_primitives=False]) -> \
     CompositeScene
 
     Create a scene from a sequence of :py:class:`PrimitivePrototype` instances.
@@ -1838,9 +1838,13 @@ can't add a tuple and a :py:class:`Vector` together).
         :py:class:`PrimitivePrototype`.
     :param integer extra_threads: How many extra threads to use or -1 to use as
         many extra threads as there are extra processing cores.
+    :param boolean update_primitives: If true, primitives must be an instance of
+        ``list`` and will be updated to contain the actual primtive prototypes
+        used, with the :py:class:`TrianglePrototype` instances added and with
+        their un-batched counterparts removed.
 
 
-.. py:function:: build_kdtree(primitives[,extra_threads=-1]) -> tuple
+.. py:function:: build_kdtree(primitives[,extra_threads=-1,*,update_primitives=False]) -> tuple
 
     Create a k-d tree from a sequence of :py:class:`PrimitivePrototype`
     instances.
@@ -1866,6 +1870,10 @@ can't add a tuple and a :py:class:`Vector` together).
         :py:class:`PrimitivePrototype`.
     :param integer extra_threads: How many extra threads to use or -1 to use as
         many extra threads as there are extra processing cores.
+    :param boolean update_primitives: If true, primitives must be an instance of
+        ``list`` and will be updated to contain the actual primtive prototypes
+        used, with the :py:class:`TrianglePrototype` instances added and with
+        their un-batched counterparts removed.
 
 
 .. py:function:: cross(vectors) -> Vector
@@ -1879,6 +1887,21 @@ can't add a tuple and a :py:class:`Vector` together).
 .. py:function:: dot(a,b) -> float
 
     Compute the dot product of two vectors.
+
+
+.. py:function:: screen_coord_to_ray(cam,x,y,w,h,fov) -> Vector
+
+    Create the same direction vector for camera ``cam``, that
+    :py:class:`BoxScene` and :py:class:`CompositeScene` create when calling
+    :py:meth:`.render.Scene.calculate_color`.
+
+    :param cam: The camera.
+    :type cam: :py:class:`Camera`
+    :param float x: The x coordinate.
+    :param float y: The y coordinate.
+    :param integer w: The width.
+    :param integer h: The height.
+    :param float fov: The vertical field of view in radians.
 
 
 .. py:data:: BATCH_SIZE
@@ -1900,10 +1923,10 @@ can't add a tuple and a :py:class:`Vector` together).
     The source code of this package supports SSE and AVX. If this package is
     compiled for an instruction set that supports neither of these technologies,
     ``BATCH_SIZE`` will be equal to ``1``. In such a case, :py:class:`KDLeaf`
-    wont even support instances of :py:class:`PrimitiveBatch` (passing instances
-    of :py:class:`PrimitiveBatch` to its constructor will cause and exception to
-    be raised) so that the ray tracer can be streamlined. The batch classes will
-    still exist, however, for the sake of testing compatibility.
+    won't even support instances of :py:class:`PrimitiveBatch` (passing
+    instances of :py:class:`PrimitiveBatch` to its constructor will cause and
+    exception to be raised) so that the ray tracer can be streamlined. The batch
+    classes will still exist, however, for the sake of compatibility.
 
     Most users will not have to worry about the value of ``BATCH_SIZE`` or batch
     objects since :py:func:`build_composite_scene` (and :py:func:`build_kdtree`)

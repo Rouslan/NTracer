@@ -39,7 +39,6 @@ namespace impl {
         constexpr int size = simd::v_sizes<typename F::item_t>::value[SI];
         if constexpr(F::v_score >= V_SCORE_THRESHHOLD && size > 1) {
             if constexpr(F::max_items >= size) {
-                static const size_t size = simd::v_sizes<typename F::item_t>::value[SI];
                 for(; long(i)<(long(n) - (long(size) - 1)); i+= size) f.template operator()<size>(i);
             }
 
@@ -77,6 +76,92 @@ namespace impl {
         assert(n != VSIZE_MAX);
         return _v_rep_until<F,0>(n,0,f);
     }
+    template<typename F> FORCE_INLINE bool v_rep_until(size_t start,size_t end,F f) {
+        return _v_rep_until<F,0>(end,start,f);
+    }
+
+    #if 0
+    template<typename TR,size_t RSize,typename F,size_t SI>
+    simd::packed_union_array<TR,RSize> _v_rep_cvt_step(size_t i,F1 f1) {
+        constexpr int size = simd::v_sizes<typename F::item_t>::value[SI];
+        static_assert(size <= RSize);
+
+        simd::packed_union_array<F::item_t,RSize> tmp;
+        for(size_t j=0; j<RSize; j+=size) simd::at<size>(tmp,j) = f1.template operator()<size>(i+j);
+
+        return simd::convert<TR>(tmp);
+    }
+
+    template<typename TR,size_t RSize,typename F1,size_t SI1,typename F2,size_t SI2,typename... Fn,size_t... SIn>
+    simd::packed_union_array<TR,RSize> _v_rep_cvt_step(size_t i,F1 f1,F2 f2,Fn... fn) {
+        constexpr int size = simd::v_sizes<typename F1::item_t>::value[SI1];
+        static_assert(size <= RSize);
+        constexpr int maxsize2 = std::max({
+            simd::v_sizes<typename F2::item_t>::value[SI2],
+            simd::v_sizes<typename Fn::item_t>::value[SIn]...});
+
+        simd::packed_union_array<F2::item_t,RSize> tmp;
+        for(size_t j=0; j<RSize; j+=maxsize2) {
+            simd::chunk_at<maxsize2>(tmp,j) = _v_rep_cvt_step<F1::item_t,maxsize2,F2,SI2,Fn...,SIn...>(i+j,f2,fn...);
+        }
+        simd::packed_union_array<F1::item_t,RSize> tmp2;
+        for(size_t j=0; j<RSize; j+=size) {
+            simd::at<size>(tmp2,j) = f1.template operator()<size>(i+j,simd::at<size>(tmp,j));
+        }
+
+        return simd::convert<TR>(tmp2);
+    }
+
+    template<typename F,size_t SI> constexpr size_t _advance_si(size_t maxsize) {
+        return simd::v_sizes<typename F1::item_t>::value[SI] == maxsize ? SI + 1 : SI;
+    }
+
+    template<typename F1,size_t SI1,typename F2,size_t SI2,typename... Fn,size_t... SIn>
+    void _v_rep_cvt(size_t n,size_t i,F1 f1,F2 f2,Fn... fn) {
+        constexpr int size = simd::v_sizes<typename F1::item_t>::value[SI1];
+        constexpr int maxsize2 = std::max({
+            simd::v_sizes<typename F2::item_t>::value[SI2],
+            simd::v_sizes<typename Fn::item_t>::value[SIn]...});
+        constexpr int maxsize = std::max(size,maxsize2);
+        constexpr size_t max_items = std::min({F1::max_items,F2::max_items,Fs::max_items...});
+        constexpr size_t avg_score = (F1::v_score + F2::v_score + ... + Fn::v_score) / (sizeof...(Fn) + 2);
+        if constexpr(avg_score >= V_SCORE_THRESHHOLD && maxsize > 1) {
+            if constexpr(max_items >= size) {
+                for(; long(i)<(long(n) - (long(size) - 1)); i+= size) {
+                    simd::packed_union_array<F2::item_t,maxsize> tmp;
+                    for(size_t j=0; j<maxsize; j+=maxsize2) {
+                        simd::chunk_at<size>(tmp,j) = _v_rep_cvt_step<F1::item_t,maxsize2,F2,SI2,Fn...,SIn...>(i+j,f2,fn...);
+                    }
+
+                    for(size_t j=0; j<maxsize; j+=size) {
+                        f1.template operator()<size>(i+j,simd::at<size>(tmp,j));
+                    }
+                }
+            }
+
+            _v_rep<
+                F1,
+                _advance_si<F1,SI1>(maxsize),
+                F2,
+                _advance_si<F2,SI2>(maxsize),
+                Fn...,
+                _advance_si<Fn,SIn>(maxsize)...>(n,i,f1,f2,fn...);
+        } else {
+            for(; i<n; ++i) f1.template operator()<1>(i,simd::at<1>(_v_rep_cvt<F::item_t,1,F2,SI2,Fn...,SIn...>(i,f2,fn...),0));
+        }
+    }
+
+    template<typename> struct _zero { static constexpr size_t value = 0; };
+
+    /* When working with more than one base type, the largest compatible vector
+    register might not hold the same number of items, thus the operations need
+    to be broken into seperate functors, so they may be called different numbers
+    of times */
+    template<typename F1,typename F2,typename... Fs> FORCE_INLINE void v_rep_cvt(size_t n,F1 f1,F2 f2Fs... fs) {
+        assert(n != VSIZE_MAX);
+        _v_rep<F1,0,F2,0,_zero<Fs>::value...>(n,0,f1,f2,fs...);
+    }
+    #endif
 
 
     template<typename T> using v_expr_store = std::conditional_t<T::temporary,T,const T&>;

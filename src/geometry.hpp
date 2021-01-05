@@ -295,7 +295,7 @@ using vector_batch = vector<Store,simd::v_type<typename Store::item_t,Size> >;
    expression to compute a single vector is wasteful. It is better to call
    interleave1 on each batch vector in the expression. */
 template<typename Store,size_t Size=simd::v_sizes<typename Store::item_t>::value[0]>
-impl::v_interleave1<vector_batch<Store,Size> > interleave1(const vector_batch<Store,Size> &a,size_t index) {
+impl::v_interleave1<vector_batch<Store,Size>> interleave1(const vector_batch<Store,Size> &a,size_t index) {
     return {a,index};
 }
 

@@ -13,6 +13,7 @@
 #include <unordered_map>
 
 #include "pyobject.hpp"
+#include "v_array.hpp"
 #define RENDER_MODULE
 #include "render.hpp"
 
@@ -106,11 +107,11 @@ PyMemberDef obj_Channel_members[] = {
     {NULL}
 };
 
-PyTypeObject channel_obj_base::_pytype = {
-    PyVarObject_HEAD_INIT(nullptr,0)
-    .tp_name = FULL_MODULE_STR ".Channel",
-    .tp_basicsize = sizeof(wrapped_type<channel>),
-    .tp_dealloc = destructor_dealloc<wrapped_type<channel> >::value,
+PyTypeObject channel_obj_base::_pytype = make_pytype(
+    FULL_MODULE_STR ".Channel",
+    sizeof(wrapped_type<channel>),
+    {
+    .tp_dealloc = destructor_dealloc<wrapped_type<channel>>::value,
     .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE,
     .tp_members = obj_Channel_members,
     .tp_new = [](PyTypeObject *type,PyObject *args,PyObject *kwds) -> PyObject* {
@@ -157,7 +158,7 @@ PyTypeObject channel_obj_base::_pytype = {
 
             return ptr;
         } PY_EXCEPT_HANDLERS(nullptr)
-    }};
+    }});
 
 
 struct image_format {
@@ -233,10 +234,10 @@ PyMemberDef obj_ImageFormat_members[] = {
     {NULL}
 };
 
-PyTypeObject image_format_obj_base::_pytype = {
-    PyVarObject_HEAD_INIT(nullptr,0)
-    .tp_name = FULL_MODULE_STR ".ImageFormat",
-    .tp_basicsize = sizeof(wrapped_type<image_format>),
+PyTypeObject image_format_obj_base::_pytype = make_pytype(
+    FULL_MODULE_STR ".ImageFormat",
+    sizeof(wrapped_type<image_format>),
+    {
     .tp_dealloc = destructor_dealloc<wrapped_type<image_format> >::value,
     .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE,
     .tp_methods = obj_ImageFormat_methods,
@@ -278,7 +279,7 @@ PyTypeObject image_format_obj_base::_pytype = {
 
             return ptr;
         } PY_EXCEPT_HANDLERS(nullptr)
-    }};
+    }});
 
 
 void check_index(const obj_ChannelList *cl,Py_ssize_t index) {
@@ -301,17 +302,17 @@ PySequenceMethods obj_ChannelList_sequence_methods = {
     .sq_item = reinterpret_cast<ssizeargfunc>(&obj_ChannelList_getitem)
 };
 
-PyTypeObject obj_ChannelList::_pytype = {
-    PyVarObject_HEAD_INIT(nullptr,0)
-    .tp_name = FULL_MODULE_STR ".ChannelList",
-    .tp_basicsize = sizeof(obj_ChannelList),
+PyTypeObject obj_ChannelList::_pytype = make_pytype(
+    FULL_MODULE_STR ".ChannelList",
+    sizeof(obj_ChannelList),
+    {
     .tp_dealloc = destructor_dealloc<obj_ChannelList>::value,
     .tp_as_sequence = &obj_ChannelList_sequence_methods,
     .tp_flags = Py_TPFLAGS_DEFAULT,
     .tp_new = [](PyTypeObject*,PyObject*,PyObject*) -> PyObject* {
         PyErr_SetString(PyExc_TypeError,"the ChannelList type cannot be instantiated directly");
         return nullptr;
-    }};
+    }});
 
 
 struct renderer {
@@ -386,122 +387,77 @@ template<> struct _wrapped_type<callback_renderer> {
 };
 
 
-/*struct process_pixel {
+struct process_pixel {
     typedef float item_t;
     static const int v_score = impl::V_SCORE_THRESHHOLD;
     static const int max_items = RENDER_CHUNK_SIZE;
 
     byte *pixels;
-    volatile renderer::state_t *state;
+    renderer &r;
+    geom_allocator *allocator;
+    size_t y;
 
-    template<size_t Size> void operator()(size_t n) const {
-        if(UNLIKELY(state != renderer::NORMAL)) return true;
+    template<size_t Size> bool operator()(size_t x) {
+        typedef simd::v_type<float,Size> v_float;
 
-        if constexpr(Size == 1) {
-            color c = r.sc->calculate_color(x,y,r.format.width,r.format.height);
-            int b_offset = 0;
-            long temp[MAX_PIXELSIZE / sizeof(long)] = {0};
-            for(auto &ch : r.format.channels) {
-                union {
-                    float f;
-                    uint32_t i;
-                } val;
+        _color<v_float> c;
 
-                val.f = ch.f_r*c.r() + ch.f_g*c.g() + ch.f_b*c.b() + ch.f_c;
-                if(val.f > 1) val.f = 1;
-                else if(val.f < 0) val.f = 0;
+        for(unsigned int i=0; i<Size; ++i) {
+            if(UNLIKELY(r.state != renderer::NORMAL)) return true;
+            color c1 = r.sc->calculate_color(x+i,y,allocator);
+            c.r()[i] = c1.r();
+            c.g()[i] = c1.g();
+            c.b()[i] = c1.b();
+        }
 
+        int b_offset[Size] = {0};
+        long temp[Size][MAX_PIXELSIZE / sizeof(long)] = {0};
+        for(auto &ch : r.format.channels) {
+            union {
+                v_float f;
+                uint32_t i[Size];
+            } val;
+
+            val.f = simd::clamp(ch.f_r*c.r() + ch.f_g*c.g() + ch.f_b*c.b() + v_float::repeat(ch.f_c),0.0f,1.0f);
+
+            for(size_t i=0; i<Size; ++i) {
                 unsigned long ival;
 
                 if(ch.tfloat) {
                     assert(ch.bit_size == 32);
                     static_assert(sizeof(float) == 4,"A float is assumed to be 32 bits");
 
-                    ival = val.i;
+                    ival = val.i[i];
                 } else {
                     assert(ch.bit_size < 32);
-                    ival = std::round(val.f * (0xffffffffu >> (32 - ch.bit_size)));
+                    ival = std::lround(val.f[i] * (0xffffffffu >> (32 - ch.bit_size)));
                 }
 
-                int o = b_offset / (sizeof(long)*8);
-                int rm = b_offset % (sizeof(long)*8);
+                int o = b_offset[i] / (sizeof(long)*8);
+                int rm = b_offset[i] % (sizeof(long)*8);
                 int s = sizeof(long)*8 - rm - ch.bit_size;
-                temp[o] |= s >= 0 ? ival << s : ival >> -s;
+                temp[i][o] |= s >= 0 ? ival << s : ival >> -s;
 
                 if(rm + ch.bit_size > int(sizeof(long)*8))
-                    temp[o+1] = ival << (sizeof(long)*16 - rm - ch.bit_size);
+                    temp[i][o+1] = ival << (sizeof(long)*16 - rm - ch.bit_size);
 
-                b_offset += ch.bit_size;
+                b_offset[i] += ch.bit_size;
             }
+        }
 
+        for(size_t i=0; i<Size; ++i) {
             if(r.format.reversed) {
-                for(int i = r.format.bytes_per_pixel-1; i >= 0; --i)
-                    *pixels++ = (temp[i/sizeof(long)] >> ((sizeof(long) - 1 - (i % sizeof(long))) * 8)) & 0xff;
+                for(int j = r.format.bytes_per_pixel-1; j >= 0; --j)
+                    *pixels++ = (temp[i][j/sizeof(long)] >> ((sizeof(long) - 1 - (j % sizeof(long))) * 8)) & 0xff;
             } else {
-                for(int i = 0; i < r.format.bytes_per_pixel; ++i)
-                    *pixels++ = (temp[i/sizeof(long)] >> ((sizeof(long) - 1 - (i % sizeof(long))) * 8)) & 0xff;
-            }
-        } else {
-            typedef simd::v_type<float,Size> v_float;
-
-            _color<v_float> c;
-
-            for(unsigned int i=0; i<Size; ++i) {
-                color c1 = r.sc->calculate_color(x,y,r.format.width,r.format.height);
-                c.r()[i] = c.r();
-                c.g()[i] = c.g();
-                c.b()[i] = c.b();
-            }
-
-            int b_offset = 0;
-            long temp[MAX_PIXELSIZE / sizeof(long)] = {0};
-            for(auto &ch : r.format.channels) {
-                v_float f = ch.f_r*c.r() + ch.f_g*c.g() + ch.f_b*c.b() + ch.f_c;
-                f = simd::clamp(f,0.0f,1.0f);
-                union {
-                    float f;
-                    uint32_t i;
-                } val;
-
-                val.f = ch.f_r*c.r() + ch.f_g*c.g() + ch.f_b*c.b() + ch.f_c;
-                if(val.f > 1) val.f = 1;
-                else if(val.f < 0) val.f = 0;
-
-                unsigned long ival;
-
-                if(ch.tfloat) {
-                    assert(ch.bit_size == 32);
-                    static_assert(sizeof(float) == 4,"A float is assumed to be 32 bits");
-
-                    ival = val.i;
-                } else {
-                    assert(ch.bit_size < 32);
-                    ival = std::round(val.f * (0xffffffffu >> (32 - ch.bit_size)));
-                }
-
-                int o = b_offset / (sizeof(long)*8);
-                int rm = b_offset % (sizeof(long)*8);
-                int s = sizeof(long)*8 - rm - ch.bit_size;
-                temp[o] |= s >= 0 ? ival << s : ival >> -s;
-
-                if(rm + ch.bit_size > int(sizeof(long)*8))
-                    temp[o+1] = ival << (sizeof(long)*16 - rm - ch.bit_size);
-
-                b_offset += ch.bit_size;
-            }
-
-            if(r.format.reversed) {
-                for(int i = r.format.bytes_per_pixel-1; i >= 0; --i)
-                    *pixels++ = (temp[i/sizeof(long)] >> ((sizeof(long) - 1 - (i % sizeof(long))) * 8)) & 0xff;
-            } else {
-                for(int i = 0; i < r.format.bytes_per_pixel; ++i)
-                    *pixels++ = (temp[i/sizeof(long)] >> ((sizeof(long) - 1 - (i % sizeof(long))) * 8)) & 0xff;
+                for(int j = 0; j < r.format.bytes_per_pixel; ++j)
+                    *pixels++ = (temp[i][j/sizeof(long)] >> ((sizeof(long) - 1 - (j % sizeof(long))) * 8)) & 0xff;
             }
         }
 
         return false;
     }
-};*/
+};
 
 void worker_draw(renderer &r) {
     size_t chunks_x = (r.format.width + RENDER_CHUNK_SIZE - 1) / RENDER_CHUNK_SIZE;
@@ -518,55 +474,14 @@ void worker_draw(renderer &r) {
         start_y *= RENDER_CHUNK_SIZE;
 
         for(size_t y = start_y; y < std::min(start_y+RENDER_CHUNK_SIZE,r.format.height); ++y) {
-            byte *pixels = reinterpret_cast<byte*>(r.buffer.buf) + y * r.format.pitch + start_x * r.format.bytes_per_pixel;
-
-            for(size_t x = start_x; x < std::min(start_x+RENDER_CHUNK_SIZE,r.format.width); ++x) {
-                if(UNLIKELY(r.state != renderer::NORMAL)) return;
-
-                color c = r.sc->calculate_color(x,y,allocator.get());
-                int b_offset = 0;
-                long temp[MAX_PIXELSIZE / sizeof(long)] = {0};
-                for(auto &ch : r.format.channels) {
-                    union {
-                        float f;
-                        uint32_t i;
-                    } val;
-
-                    val.f = ch.f_r*c.r() + ch.f_g*c.g() + ch.f_b*c.b() + ch.f_c;
-                    if(val.f > 1) val.f = 1;
-                    else if(val.f < 0) val.f = 0;
-
-                    unsigned long ival;
-
-                    if(ch.tfloat) {
-                        assert(ch.bit_size == 32);
-                        static_assert(sizeof(float) == 4,"A float is assumed to be 32 bits");
-
-                        ival = val.i;
-                    } else {
-                        assert(ch.bit_size < 32);
-                        ival = std::round(val.f * (0xffffffffu >> (32 - ch.bit_size)));
-                    }
-
-                    int o = b_offset / (sizeof(long)*8);
-                    int rm = b_offset % (sizeof(long)*8);
-                    int s = sizeof(long)*8 - rm - ch.bit_size;
-                    temp[o] |= s >= 0 ? ival << s : ival >> -s;
-
-                    if(rm + ch.bit_size > int(sizeof(long)*8))
-                        temp[o+1] = ival << (sizeof(long)*16 - rm - ch.bit_size);
-
-                    b_offset += ch.bit_size;
-                }
-
-                if(r.format.reversed) {
-                    for(int i = r.format.bytes_per_pixel-1; i >= 0; --i)
-                        *pixels++ = (temp[i/sizeof(long)] >> ((sizeof(long) - 1 - (i % sizeof(long))) * 8)) & 0xff;
-                } else {
-                    for(int i = 0; i < r.format.bytes_per_pixel; ++i)
-                        *pixels++ = (temp[i/sizeof(long)] >> ((sizeof(long) - 1 - (i % sizeof(long))) * 8)) & 0xff;
-                }
-            }
+            if(UNLIKELY(impl::v_rep_until(
+                start_x,
+                std::min(start_x+RENDER_CHUNK_SIZE,r.format.width),
+                process_pixel{
+                    reinterpret_cast<byte*>(r.buffer.buf) + y * r.format.pitch + start_x * r.format.bytes_per_pixel,
+                    r,
+                    allocator.get(),
+                    y}))) return;
         }
     }
 }
@@ -697,16 +612,16 @@ PyMethodDef obj_Scene_methods[] = {
     {NULL}
 };
 
-PyTypeObject obj_Scene::_pytype = {
-    PyVarObject_HEAD_INIT(nullptr,0)
-    .tp_name = FULL_MODULE_STR ".Scene",
-    .tp_basicsize = sizeof(obj_Scene),
+PyTypeObject obj_Scene::_pytype = make_pytype(
+    FULL_MODULE_STR ".Scene",
+    sizeof(obj_Scene),
+    {
     .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE,
     .tp_methods = obj_Scene_methods,
     .tp_new = [](PyTypeObject *type,PyObject *args,PyObject *kwds) -> PyObject* {
         PyErr_SetString(PyExc_TypeError,"the Scene type cannot be instantiated directly");
         return nullptr;
-    }};
+    }});
 
 
 template<typename T> FIX_STACK_ALIGN void obj_Renderer_dealloc(wrapped_type<T> *self) {
@@ -831,10 +746,10 @@ FIX_STACK_ALIGN int obj_CallbackRenderer_init(obj_CallbackRenderer *self,PyObjec
     return 0;
 }
 
-PyTypeObject callback_renderer_obj_base::_pytype = {
-    PyVarObject_HEAD_INIT(nullptr,0)
-    .tp_name = FULL_MODULE_STR ".CallbackRenderer",
-    .tp_basicsize = sizeof(obj_CallbackRenderer),
+PyTypeObject callback_renderer_obj_base::_pytype = make_pytype(
+    FULL_MODULE_STR ".CallbackRenderer",
+    sizeof(obj_CallbackRenderer),
+    {
     .tp_dealloc = reinterpret_cast<destructor>(&obj_Renderer_dealloc<callback_renderer>),
     .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE|Py_TPFLAGS_HAVE_GC,
     .tp_traverse = &traverse_idict<obj_CallbackRenderer>,
@@ -842,7 +757,7 @@ PyTypeObject callback_renderer_obj_base::_pytype = {
     .tp_weaklistoffset = offsetof(obj_CallbackRenderer,weaklist),
     .tp_methods = obj_CallbackRenderer_methods,
     .tp_dictoffset = offsetof(obj_CallbackRenderer,idict),
-    .tp_init = reinterpret_cast<initproc>(&obj_CallbackRenderer_init)};
+    .tp_init = reinterpret_cast<initproc>(&obj_CallbackRenderer_init)});
 
 
 struct blocking_renderer : renderer {
@@ -1030,10 +945,10 @@ FIX_STACK_ALIGN int obj_BlockingRenderer_init(obj_BlockingRenderer *self,PyObjec
     return 0;
 }
 
-PyTypeObject blocking_renderer_obj_base::_pytype = {
-    PyVarObject_HEAD_INIT(nullptr,0)
-    .tp_name = FULL_MODULE_STR ".BlockingRenderer",
-    .tp_basicsize = sizeof(obj_BlockingRenderer),
+PyTypeObject blocking_renderer_obj_base::_pytype = make_pytype(
+    FULL_MODULE_STR ".BlockingRenderer",
+    sizeof(obj_BlockingRenderer),
+    {
     .tp_dealloc = reinterpret_cast<destructor>(&obj_Renderer_dealloc<blocking_renderer>),
     .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE|Py_TPFLAGS_HAVE_GC,
     .tp_traverse = &traverse_idict<obj_BlockingRenderer>,
@@ -1041,7 +956,7 @@ PyTypeObject blocking_renderer_obj_base::_pytype = {
     .tp_weaklistoffset = offsetof(obj_BlockingRenderer,weaklist),
     .tp_methods = obj_BlockingRenderer_methods,
     .tp_dictoffset = offsetof(obj_BlockingRenderer,idict),
-    .tp_init = reinterpret_cast<initproc>(&obj_BlockingRenderer_init)};
+    .tp_init = reinterpret_cast<initproc>(&obj_BlockingRenderer_init)});
 
 
 PyObject *obj_Color_repr(wrapped_type<color> *self) {
@@ -1214,10 +1129,10 @@ FIX_STACK_ALIGN int obj_Color_get_buffer(PyObject *self,Py_buffer *view,int flag
 PyBufferProcs obj_Color_buffer = {
     .bf_getbuffer = &obj_Color_get_buffer};
 
-PyTypeObject color_obj_base::_pytype = {
-    PyVarObject_HEAD_INIT(nullptr,0)
-    .tp_name = FULL_MODULE_STR ".Color",
-    .tp_basicsize = sizeof(wrapped_type<color>),
+PyTypeObject color_obj_base::_pytype = make_pytype(
+    FULL_MODULE_STR ".Color",
+    sizeof(wrapped_type<color>),
+    {
     .tp_dealloc = destructor_dealloc<wrapped_type<color> >::value,
     .tp_repr = reinterpret_cast<reprfunc>(&obj_Color_repr),
     .tp_as_number = &obj_Color_number_methods,
@@ -1227,7 +1142,7 @@ PyTypeObject color_obj_base::_pytype = {
     .tp_richcompare = reinterpret_cast<richcmpfunc>(&obj_Color_richcompare),
     .tp_methods = obj_Color_methods,
     .tp_members = obj_Color_members,
-    .tp_new = &obj_Color_new};
+    .tp_new = &obj_Color_new});
 
 
 struct py_mem_deleter {
@@ -1388,29 +1303,30 @@ PyMemberDef obj_Material_members[] = {
     {NULL}
 };
 
-PyTypeObject material::_pytype = {
-    PyVarObject_HEAD_INIT(nullptr,0)
-    .tp_name = FULL_MODULE_STR ".Material",
-    .tp_basicsize = sizeof(material),
+PyTypeObject material::_pytype = make_pytype(
+    FULL_MODULE_STR ".Material",
+    sizeof(material),
+    {
     .tp_dealloc = destructor_dealloc<material>::value,
     .tp_repr = reinterpret_cast<reprfunc>(&obj_Material_repr),
     .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE,
     .tp_methods = obj_Material_methods,
     .tp_members = obj_Material_members,
     .tp_getset = obj_Material_getset,
-    .tp_new = &obj_Material_new};
+    .tp_new = &obj_Material_new});
 
 
-PyTypeObject locked_error_type = {
-    PyVarObject_HEAD_INIT(nullptr,0)
-    .tp_name = FULL_MODULE_STR ".LockedError",
+PyTypeObject locked_error_type = make_pytype(
+    FULL_MODULE_STR ".LockedError",
+    0,
+    {
     .tp_str = [](PyObject *self) -> PyObject* {
         if(PyTuple_GET_SIZE(reinterpret_cast<PyBaseExceptionObject*>(self)->args) == 0) {
             return PyUnicode_FromString("scene is locked");
         }
         return reinterpret_cast<PyTypeObject*>(PyExc_RuntimeError)->tp_str(self);
     },
-    .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE};
+    .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE});
 
 
 // like tracerx_cache_item except owns reference to mod

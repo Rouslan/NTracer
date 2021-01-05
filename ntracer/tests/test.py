@@ -43,6 +43,16 @@ class Tests(unittest.TestCase):
             self.assertAlmostEqual(a,b,4)
 
     @and_generic
+    def test_aabb(self,generic):
+        nt = NTracer(5,generic)
+        a = nt.AABB((1,7,-5,5,4),(5,13,-1,6,12))
+        self.assertEqual(a.dimension,5)
+        self.assertEqual(list(a.end),[5,13,-1,6,12])
+        self.assertEqual(list(a.start),[1,7,-5,5,4])
+        self.assertEqual(list(a.right(2,-3).start),[1,7,-3,5,4])
+        self.assertEqual(list(a.left(0,2).end),[2,13,-1,6,12])
+
+    @and_generic
     def test_triangle(self,generic):
         nt = NTracer(3,generic)
         mat = Material((1,1,1))

@@ -121,6 +121,7 @@ namespace py {
     class object_attr_proxy;
     class object_item_proxy;
     class object_iterator;
+    bool is_true(PyObject *o);
 
     class _object_base {
     protected:
@@ -170,7 +171,7 @@ namespace py {
 
     public:
         explicit operator bool() const {
-            return PyObject_IsTrue(_ptr);
+            return is_true(_ptr);
         }
 
         PyObject *ref() const { return _ptr; }
@@ -612,7 +613,8 @@ namespace py {
 
         list_item_proxy &operator=(object val) {
             PyObject *oldval = PyList_GET_ITEM(_ptr,index);
-            PyList_SET_ITEM(_ptr,index,val.new_ref());
+            PyObject *tmp = val.new_ref();
+            PyList_SET_ITEM(_ptr,index,tmp);
             Py_DECREF(oldval);
             return *this;
         }
@@ -932,6 +934,14 @@ namespace py {
             return *this;
         }
 
+        void reset(new_ref r) { _obj = r; }
+        void reset(borrowed_ref r) { _obj = r; }
+        void reset(object o) { _obj = o; }
+        void reset(T *o) { _obj = new_ref(reinterpret_cast<PyObject*>(o)); }
+        template<typename U,typename=typename std::enable_if<std::is_convertible<U*,T*>::value>::type> void reset(U *o) {
+            _obj = new_ref(reinterpret_cast<PyObject*>(o));
+        }
+
         T &operator*() const { return *get(); }
         T *operator->() const { return get(); }
 
@@ -977,11 +987,11 @@ namespace py {
         return PyBytes_GET_SIZE(o.ref());
     }
 
-    inline object str(const object &o) {
+    inline object str(const _object_base &o) {
         return check_new_ref(PyObject_Str(o.ref()));
     }
 
-    inline object repr(const object &o) {
+    inline object repr(const _object_base &o) {
         return check_new_ref(PyObject_Repr(o.ref()));
     }
 
@@ -989,11 +999,21 @@ namespace py {
         return check_new_ref(PyImport_ImportModule(mod));
     }
 
+    inline bool is_true(PyObject *o) {
+        int r = PyObject_IsTrue(o);
+        if(r < 0) throw py_error_set{};
+        return r != 0;
+    }
+
+    inline bool is_true(const _object_base &o) {
+        return is_true(o.ref());
+    }
+
     inline object iter(PyObject *o) {
         return check_new_ref(PyObject_GetIter(o));
     }
 
-    inline object iter(const object &o) {
+    inline object iter(const _object_base &o) {
         return iter(o.ref());
     }
 
@@ -1139,10 +1159,10 @@ namespace py {
         .sq_ass_item = impl::array_adapter_set_item<Item,FullName,GC,ReadOnly>::value};
 
     template<typename Item,const char* FullName,bool GC,bool ReadOnly>
-    PyTypeObject obj_array_adapter<Item,FullName,GC,ReadOnly>::_pytype = {
-        PyVarObject_HEAD_INIT(nullptr,0)
-        .tp_name = FullName,
-        .tp_basicsize = sizeof(obj_array_adapter<Item,FullName,GC,ReadOnly>),
+    PyTypeObject obj_array_adapter<Item,FullName,GC,ReadOnly>::_pytype = make_pytype(
+        FullName,
+        sizeof(obj_array_adapter<Item,FullName,GC,ReadOnly>),
+        {
         .tp_dealloc = [](PyObject *self) -> void {
             typedef obj_array_adapter<Item,FullName,GC,ReadOnly> self_t;
 
@@ -1155,7 +1175,7 @@ namespace py {
         .tp_new = [](PyTypeObject *type,PyObject *args,PyObject *kwds) -> PyObject* {
             PyErr_Format(PyExc_TypeError,"The %s type cannot be instantiated directly",typename_base(FullName));
             return nullptr;
-        }};
+        }});
 }
 
 
@@ -1168,9 +1188,15 @@ inline void swap(py::bytes &a,py::bytes &b) { a.swap(b); }
 template<typename T> inline void swap(py::nullable<T> &a,py::nullable<T> &b) { a.swap(b); }
 template<typename T> inline void swap(py::pyptr<T> &a,py::pyptr<T> &b) { a.swap(b); }
 
-template<typename T> inline T from_pyobject(const py::_object_base &o) {
+template<typename T> inline auto from_pyobject(const py::_object_base &o) {
     return from_pyobject<T>(o.ref());
 }
+
+template<typename T> struct _from_pyobject<T*,std::enable_if_t<std::is_base_of_v<py::pyobj_subclass,T>>> {
+    static inline T *go(PyObject *o) {
+        return checked_py_cast<T>(o);
+    }
+};
 
 template<> inline py::object from_pyobject<py::object>(PyObject *o) {
     return py::borrowed_ref(o);

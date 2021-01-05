@@ -47,10 +47,8 @@ import arg_helper
 
 GCC_OPTIMIZE_COMPILE_ARGS = [
     '-O3',
-    '-fmerge-all-constants',
     '-funsafe-loop-optimizations',
     '-ffast-math',
-    '-fsched2-use-superblocks',
     '-fstrict-enums',
     '-fno-enforce-eh-specs',
     '-fnothrow-opt',
@@ -83,7 +81,6 @@ GCC_EXTRA_COMPILE_ARGS = [
 
 CLANG_OPTIMIZE_COMPILE_ARGS = [
     '-O3',
-    '-fmerge-all-constants',
     '-ffast-math',
     '-fstrict-enums',
     '-march=native']
@@ -94,7 +91,6 @@ CLANG_EXTRA_COMPILE_ARGS = [
     '-Wno-format',
     '-Wno-format-security',
     '-Wno-invalid-offsetof',
-    '-Wno-c99-designator',
     '-Werror=return-type']
 
 # If Python was compiled with GCC and we want to compile the extension with
@@ -106,7 +102,7 @@ GCC_TO_CLANG_FILTER = {
     # -fstack-clash-protection is not supported before Clang 11.
     '-fstack-clash-protection'}
 
-MSVC_OPTIMIZE_COMPILE_ARGS = ['/Ox','/fp:fast','/volatile:iso','/Za']
+MSVC_OPTIMIZE_COMPILE_ARGS = ['/Ox','/fp:fast','/volatile:iso','/std:c++latest']
 
 DEFAULT_OPTIMIZED_DIMENSIONS = frozenset(range(3,9))
 

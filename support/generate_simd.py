@@ -6,9 +6,10 @@ import re
 import sys
 import itertools
 import os.path
+import io
 import ast
 
-from collections import namedtuple
+from collections import namedtuple,defaultdict
 from functools import partial
 from distutils import log
 from distutils.dep_util import newer
@@ -134,6 +135,14 @@ for t in [
     ('double',64,'d',FLOAT)]:
     types[t[0]] = CType(*t)
 
+wrapped_types = [
+    types['int8_t'],
+    types['int16_t'],
+    types['int32_t'],
+    types['int64_t'],
+    types['float'],
+    types['double']]
+
 v_types = {}
 for t in [
     ('__m128i',128,'si128',INTEGER),
@@ -162,13 +171,17 @@ all_types.update(m_types)
 def mm_prefix(width):
     return '_mm{}'.format(width if width > 128 else '')
 
-def generic_intrinsic_name(type,width,base,scalar):
-    return '{}_{}_{}{}{}'.format(
-        mm_prefix(width),
-        base,
-        '' if width == 64 or type.float == FLOAT else 'e',
+def mm_typecode(type,width,scalar):
+    return '{}{}{}'.format(
+        '' if width == 64 or type.float == FLOAT or scalar else 'e',
         's' if scalar else 'p',
         type.code)
+
+def generic_intrinsic_name(type,width,base,scalar=False):
+    return '{}_{}_{}'.format(
+        mm_prefix(width),
+        base,
+        mm_typecode(type,width,scalar))
 
 def rename_if_keyword(x):
     return x + '_' if x in CPP_KEYWORDS else x
@@ -205,13 +218,16 @@ def name_broadcast(type,width,base,scalar):
     if scalar or type.name not in BROADCAST_SUFFIXES: return
     suffixed = base + BROADCAST_SUFFIXES[type.name]
     yield base,generic_intrinsic_name(type,width,suffixed,False)
-    yield 'mask_'+base,generic_intrinsic_name(type,width,'mask_'+suffixed,False)
-    yield 'maskz_'+base,generic_intrinsic_name(type,width,'maskz_'+suffixed,False)
+    yield 'mask_'+base,generic_intrinsic_name(type,width,'mask_'+suffixed)
+    yield 'maskz_'+base,generic_intrinsic_name(type,width,'maskz_'+suffixed)
 
 def name_cmp(type,width,base,scalar):
     for bname,iname in name_masked(type,width,base,scalar):
         yield bname,iname
         yield bname+'_mask',iname+'_mask'
+
+def cvt_intr_name(type1,width1,type2,width2,scalar):
+    return generic_intrinsic_name(type2,max(width1,width2),'cvt'+mm_typecode(type1,width1,scalar),scalar)
 
 INTR_OPS = [
     # 2intersect
@@ -597,17 +613,14 @@ class _Intr:
 
 _V_CONFIGS = []
 for w in t_widths:
-    for t in [
-            types['float'],
-            types['double'],
-            types['int32_t'],
-            types['int64_t'],
-            types['int8_t'],
-            types['int16_t']]:
+    for t in wrapped_types:
         _V_CONFIGS.append((t,w//t.size))
 
+def feature_guard(req):
+    return ' && '.join('defined(SUPPORT_{})'.format(r.replace('.','_')) for r in req)
+
 class TmplState:
-    def __init__(self,intrinsics,intr_names,outfile):
+    def __init__(self,intrinsics,intr_names,intr_by_name,outfile):
         self.implied_flag_stack = []
         self.implied_flags = frozenset()
         self.locals = {
@@ -623,19 +636,93 @@ class TmplState:
             '_iter_val_':None,
             'recur':(lambda f,*args: f(f,*args)),
             'V_CONFIGS': _V_CONFIGS,
-            'types':types}
+            'types': types,
+            'cvt_supported': self._cvt_supported,
+            'cvt': self._cvt,
+            'AGGREGATE_START': self._aggregate_start,
+            'AGGREGATE_END': self._aggregate_end}
         for name in intr_names:
             self.locals[name] = _Intr(intrinsics,name)
         self.intrinsics = intrinsics
+        self.intr_by_name = intr_by_name
         self.outfile = outfile
+        self._aggregate_output = None
+        self._agg_f_stack_size = 0
 
-    def push_flags(self,flags):
+    def _check_agg_stack_exit(self):
+        if self._aggregate_output is not None and self._agg_f_stack_size == len(self.implied_flag_stack):
+            raise ValueError('aggregate output must end before exitting the scope where it started')
+
+    def if_guard(self,flags):
         self.implied_flag_stack.append(flags)
         self.implied_flags = self.implied_flags.union(flags)
 
-    def pop_flags(self):
+        if self._aggregate_output is None:
+            print('#if '+feature_guard(flags),file=self.outfile)
+
+    def elif_guard(self,flags):
+        self._check_agg_stack_exit()
+
+        self.implied_flag_stack[-1] = flags
+        self.implied_flags = frozenset().union(*self.implied_flag_stack)
+
+        if self._aggregate_output is None:
+            print('#elif '+feature_guard(flags),file=self.outfile)
+        else:
+            raise TypeError('aggregate elif is not implemented yet')
+
+    def else_guard(self):
+        self._check_agg_stack_exit()
+
+        self.implied_flag_stack[-1] = frozenset()
+        self.implied_flags = frozenset().union(*self.implied_flag_stack)
+
+        if self._aggregate_output is None:
+            print('#else',file=self.outfile)
+        else:
+            raise TypeError('aggregate else is not implemented yet')
+
+    def endif_guard(self):
+        self._check_agg_stack_exit()
+
         self.implied_flag_stack.pop()
         self.implied_flags = frozenset().union(*self.implied_flag_stack)
+
+        if self._aggregate_output is None:
+            print('#endif',file=self.outfile)
+
+    def _aggregate_start(self):
+        """Aggregate the output.
+
+        Instead of immediateley outputting lines, store them in buffers and
+        group them by #if requirements.
+        """
+        if self._aggregate_output is not None:
+            raise ValueError('aggregate output has already started')
+        self._aggregate_output = defaultdict(io.StringIO)
+        self._agg_f_stack_size = len(self.implied_flag_stack)
+
+    def _aggregate_end(self):
+        if self._aggregate_output is None:
+            raise ValueError('aggregate output has not started')
+        if self._agg_f_stack_size != len(self.implied_flag_stack):
+            # this currently only tests flag guard scope
+            raise ValueError('aggregate output must end in the same scope as the start')
+
+        for req,buff in self._aggregate_output.items():
+            if req:
+                print('#if '+feature_guard(req),file=self.outfile)
+                self.outfile.write(buff.getvalue())
+                print('#endif',file=self.outfile)
+            else:
+                self.outfile.write(buff.getvalue())
+        self._aggregate_output = None
+
+    def write(self,value):
+        if self._aggregate_output is not None:
+            self._aggregate_output[self.implied_flags].write(value)
+        else:
+            self.outfile.write(value)
 
     def exec(self,code):
         # it's actually important that the same dictionary is passed as globals
@@ -667,6 +754,14 @@ class TmplState:
     def _min_support(self,type,size):
         return MIN_SUPPORT[(type,type.size*size)] - self.implied_flags
 
+    def _cvt_supported(self,type1,size1,type2,size2,scalar=False):
+        intr = self.intr_by_name.get(cvt_intr_name(type1,size1*type1.size,type2,size2*type2.size,scalar))
+        if intr is None: return None
+        return intr['cpuid'] - self.implied_flags
+
+    def _cvt(self,type1,size1,type2,size2,scalar=False):
+        return cvt_intr_name(type1,size1*type1.size,type2,size2*type2.size,scalar)
+
 re_for = re.compile(r'^for\s+(.+)\s+in\s+(.+)$')
 re_cfor = re.compile(r'^for\s+([^;]+)\s*;\s*([^;]+)\s*;\s*([^;]+)$')
 re_if = re.compile(r'^(el|)if\s+(.*)$')
@@ -688,8 +783,8 @@ class CppLine:
 
     def __call__(self,state):
         for i,p in enumerate(self.parts):
-            print(tmpl_to_string(state.eval(p)) if i % 2 else p,end='',file=state.outfile)
-        #print(file=state.outfile)
+            print(tmpl_to_string(state.eval(p)) if i % 2 else p,end='',file=state)
+        #print(file=state)
 
 class Condition:
     """An if-elif-else chain.
@@ -713,27 +808,22 @@ class Condition:
             if req or is_set:
                 pushed = False
                 if req and is_set:
-                    print('#{}if '.format(['','el'][opened]) + ' && '.join(
-                            'defined(SUPPORT_{})'.format(r.replace('.','_')) for r in req
-                        ),file=state.outfile)
+                    (state.elif_guard if opened else state.if_guard)(req)
                     opened = True
-                    state.push_flags(req)
-                    pushed = True
                 elif opened:
-                    print('#else',file=state.outfile)
+                    state.else_guard()
                 for line in body:
                     line(state)
-                if pushed: state.pop_flags()
                 if is_set != bool(req):
                     break
         else:
             if self.else_ is not None:
                 if opened:
-                    print('#else',file=state.outfile)
+                    state.else_guard()
                 for line in self.else_:
                     line(state)
         if opened:
-            print('#endif',file=state.outfile)
+            state.endif_guard()
 
 class For:
     def __init__(self,varassign,iterexpr,body):
@@ -924,7 +1014,7 @@ def generate(data_file,input_file,output_file):
     body = handler.send(ParsedLine('EOF',None,None,input_file))
 
     with open(output_file,'w') as ofile:
-        state = TmplState(funcs,supported,ofile)
+        state = TmplState(funcs,supported,intrinsics,ofile)
         for line in body:
             line(state)
 
@@ -933,7 +1023,7 @@ def create_simd_hpp(base_dir,build_temp,force,dry_run):
     simd_out = os.path.join(build_temp,'simd.hpp')
     tmpl_in = os.path.join(base_dir,'src','simd.hpp.in')
     data_in = os.path.join(base_dir,'src','intrinsics.json')
-    if force or newer(data_in,simd_out) or newer(tmpl_in,simd_out):
+    if force or newer(data_in,simd_out) or newer(tmpl_in,simd_out) or newer(__file__,simd_out):
         log.info('creating {0} from {1}'.format(simd_out,tmpl_in))
         if not dry_run:
             generate(data_in,tmpl_in,simd_out)

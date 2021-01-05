@@ -19,7 +19,7 @@ public:
        to remain alive until unlock is called */
     virtual void lock() = 0;
 
-    virtual void unlock() throw() = 0;
+    virtual void unlock() noexcept = 0;
 
 protected:
     ~scene() = default;

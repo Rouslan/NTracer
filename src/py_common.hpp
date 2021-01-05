@@ -185,9 +185,15 @@ inline PyObject *to_pyobject(PyObject *x) {
 }
 
 
+template<typename T,typename> struct _from_pyobject {
+    static inline T go(PyObject *o) {
+        static_assert(sizeof(T) == 0,"no conversion to this type defined");
+        return T{};
+    }
+};
+
 template<typename T> inline T from_pyobject(PyObject *o) {
-    static_assert(sizeof(T) == 0,"no conversion to this type defined");
-    return T();
+    return _from_pyobject<T,void>::go(o);
 }
 
 
@@ -317,6 +323,10 @@ template<typename T> T &get_base(PyObject *o) {
 template<typename T> T *get_base_if_is_type(PyObject *o) {
     return PyObject_TypeCheck(o,wrapped_type<T>::pytype()) ? &reinterpret_cast<wrapped_type<T>*>(o)->get_base() : nullptr;
 }
+
+template<typename T> struct _from_pyobject<T&,std::void_t<wrapped_type<T>>> {
+    static inline T &go(PyObject *o) { return get_base<T>(o); }
+};
 
 
 template<typename T,bool trivial=std::is_trivially_destructible_v<T>> struct destructor_dealloc {
@@ -620,6 +630,55 @@ int setup_buffer(PyObject *self,Py_buffer *view,int flags,void *data,const char 
 inline void add_class(PyObject *module,const char *name,PyTypeObject *type) {
     Py_INCREF(type);
     PyModule_AddObject(module,name,reinterpret_cast<PyObject*>(type));
+}
+
+/* designated initializers cannot be used with non-designated initializers in
+standard C++, but the PyVarObject_HEAD_INIT macro uses non-designated
+initializers, so this function is a work-around to use designated initializers
+*/
+constexpr PyTypeObject make_pytype(const char *name,Py_ssize_t basicsize,const PyTypeObject &args) {
+    PyTypeObject r{PyVarObject_HEAD_INIT(nullptr,0) name,basicsize};
+    r.tp_itemsize = args.tp_itemsize;
+    r.tp_dealloc = args.tp_dealloc;
+#if PY_VERSION_HEX >= 0x03080000
+    r.tp_vectorcall_offset = args.tp_vectorcall_offset;
+#endif
+    r.tp_repr = args.tp_repr;
+    r.tp_as_number = args.tp_as_number;
+    r.tp_as_sequence = args.tp_as_sequence;
+    r.tp_as_mapping = args.tp_as_mapping;
+    r.tp_hash = args.tp_hash;
+    r.tp_call = args.tp_call;
+    r.tp_str = args.tp_str;
+    r.tp_getattro = args.tp_getattro;
+    r.tp_setattro = args.tp_setattro;
+    r.tp_as_buffer = args.tp_as_buffer;
+    r.tp_flags = args.tp_flags;
+    r.tp_doc = args.tp_doc;
+    r.tp_traverse = args.tp_traverse;
+    r.tp_clear = args.tp_clear;
+    r.tp_richcompare = args.tp_richcompare;
+    r.tp_weaklistoffset = args.tp_weaklistoffset;
+    r.tp_iter = args.tp_iter;
+    r.tp_iternext = args.tp_iternext;
+    r.tp_methods = args.tp_methods;
+    r.tp_members = args.tp_members;
+    r.tp_getset = args.tp_getset;
+    r.tp_base = args.tp_base;
+    r.tp_descr_get = args.tp_descr_get;
+    r.tp_descr_set = args.tp_descr_set;
+    r.tp_dictoffset = args.tp_dictoffset;
+    r.tp_init = args.tp_init;
+    r.tp_alloc = args.tp_alloc;
+    r.tp_new = args.tp_new;
+    r.tp_free = args.tp_free;
+#if PY_VERSION_HEX >= 0x03040000
+    r.tp_finalize = args.tp_finalize;
+#endif
+#if PY_VERSION_HEX >= 0x03090000
+    r.tp_vectorcall = args.tp_vectorcall;
+#endif
+    return r;
 }
 
 #endif

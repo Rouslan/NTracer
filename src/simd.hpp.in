@@ -11,17 +11,6 @@
 #include "compatibility.hpp"
 
 
-#if defined(__linux__) || defined(__linux) || defined(linux)
-    #include <stdlib.h>
-
-    #define USE_POSIX
-#elif defined(_WIN32) || defined(__WIN32__) || defined(__TOS_WIN__) || defined(__WINDOWS__)
-    #include <malloc.h>
-
-    #define USE_WIN
-#endif
-
-
 #ifndef DISABLE_SIMD
 
 
@@ -137,7 +126,11 @@ namespace simd {
     namespace detail {
         template<> struct ones<__m512i> {
             static FORCE_INLINE __m512i go() {
+            #if defined(_MSC_VER)
+                auto tmp = _mm512_setzero_si512();
+            #else
                 auto tmp = _mm512_undefined_epi32();
+            #endif
                 return _mm512_ternarylogic_epi32(tmp,tmp,tmp,0xff);
             }
         };
@@ -154,14 +147,15 @@ namespace simd {
     }
 #endif
 
-#undef AVX512_MASK_OPS1
-#undef AVX512_MASK_OPS2
-
 #ifdef SUPPORT_AVX2
     namespace detail {
         template<> struct ones<__m256i> {
             static FORCE_INLINE __m256i go() {
+            #if defined(_MSC_VER)
+                auto tmp = _mm256_setzero_si256();
+            #else
                 auto tmp = _mm256_undefined_si256();
+            #endif
                 return _mm256_cmpeq_epi32(tmp,tmp);
             }
         };
@@ -172,22 +166,30 @@ namespace simd {
     namespace detail {
         template<> struct ones<__m256> {
             static FORCE_INLINE __m256 go() {
-            #ifdef SUPPORT_AVX2
+        #ifdef SUPPORT_AVX2
                 return _mm256_castsi256_ps(ones<__m256i>::go());
+        #else
+            #if defined(_MSC_VER)
+                auto tmp = _mm256_setzero_ps();
             #else
                 auto tmp = _mm256_undefined_ps();
-                return _mm256_cmp_ps(tmp,tmp,_CMP_TRUE_UQ);
             #endif
+                return _mm256_cmp_ps(tmp,tmp,_CMP_TRUE_UQ);
+        #endif
             }
         };
         template<> struct ones<__m256d> {
             static FORCE_INLINE __m256d go() {
-            #ifdef SUPPORT_AVX2
+        #ifdef SUPPORT_AVX2
                 return _mm256_castsi256_pd(ones<__m256i>::go());
+        #else
+            #if defined(_MSC_VER)
+                auto tmp = _mm256_setzero_pd();
             #else
                 auto tmp = _mm256_undefined_pd();
-                return _mm256_cmp_pd(tmp,tmp,_CMP_TRUE_UQ);
             #endif
+                return _mm256_cmp_pd(tmp,tmp,_CMP_TRUE_UQ);
+        #endif
             }
         };
     }
@@ -197,7 +199,11 @@ namespace simd {
     namespace detail {
         template<> struct ones<__m128i> {
             static FORCE_INLINE __m128i go() {
+            #if defined(_MSC_VER)
+                auto tmp = _mm_setzero_si128();
+            #else
                 auto tmp = _mm_undefined_si128();
+            #endif
                 return _mm_cmpeq_epi32(tmp,tmp);
             }
         };
@@ -354,15 +360,6 @@ namespace simd {
         };
     }
 #endif
-
-    namespace raw {
-    #if defined(SUPPORT_AVX2)
-        // this is missing in GCC as of version 10.2.1
-        FORCE_INLINE __m128d _mm_broadcastsd_pd(__m128d a) {
-            return _mm_movedup_pd(a);
-        }
-    #endif
-    }
 
     FORCE_INLINE bool l_andn(bool a,bool b) { return !a && b; }
     FORCE_INLINE bool l_xor(bool a,bool b) { return a != b; }
@@ -626,14 +623,26 @@ namespace simd {
         return scalar<T>{zfilter(m.data,x.data)};
     }
 
+    template<typename T> FORCE_INLINE T clamp(T x,T minval,T maxval) {
+        return max(min(x,maxval),minval);
+    }
+
+    template<typename T> FORCE_INLINE T clamp(T x,typename T::item_t minval,typename T::item_t maxval) {
+        return clamp(x,T::repeat(minval),T::repeat(maxval));
+    }
+
     namespace detail {
         template<typename T> struct _zeros<scalar<T>> {
             static FORCE_INLINE scalar<T> go() { return scalar<T>{zeros<T>()}; }
         };
         template<typename T> struct _is_v_type : std::false_type {};
-        template<typename T,size_t Size> struct _v_type {};
+        template<typename T> struct _is_v_type<scalar<T>> : std::true_type {};
+        template<typename T,size_t Size> struct _v_type {
+            static constexpr bool defined = false;
+        };
 
         template<typename T> struct _v_type<T,1> {
+            static constexpr bool defined = true;
             using type = scalar<T>;
         };
     }
@@ -642,6 +651,7 @@ namespace simd {
     template<typename T,size_t Size=v_sizes<T>::value[0]> using v_mask = typename v_type<T,Size>::mask;
     template<typename T> constexpr bool is_v_type = detail::_is_v_type<T>::value;
     template<typename T> using single = typename detail::_single<T>::type;
+    template<typename T,size_t Size=v_sizes<T>::value[0]> constexpr bool has_v_type = detail::_v_type<T,Size>::defined;
 
 //$ for type,size in V_CONFIGS
 //$ if min_support(type,size)
@@ -765,6 +775,7 @@ namespace simd {
 
     namespace detail {
         template<> struct _v_type<$type,$size> {
+            static constexpr bool defined = true;
             using type = $v_type;
         };
         template<> struct _is_v_type<$v_type> : std::true_type {};
@@ -1220,6 +1231,169 @@ namespace simd {
 //$ endif
 //$ endfor
 
+    template<typename T,typename U> FORCE_INLINE T convert(U x);
+
+    namespace detail {
+        template<typename T,typename U> struct _convert {
+            FORCE_INLINE static T go(U x) {
+                if constexpr(std::is_same_v<T,U>) {
+                    return x;
+                } else if constexpr(is_v_type<T> && is_v_type<U> && T::size == U::size) {
+                    T r;
+                    for(size_t i=0; i<T::size; ++i) r[i] = static_cast<typename T::item_t>(x[i]);
+                    return r;
+                } else {
+                    static_assert(
+                        std::is_arithmetic_v<T> && std::is_arithmetic_v<U>,
+                        "no conversion defined for these types");
+                    return static_cast<T>(x);
+                }
+            }
+        };
+    }
+
+    template<typename T,typename U> FORCE_INLINE T convert(U x) { return detail::_convert<T,U>::go(x); }
+
+//$ AGGREGATE_START()
+//$ for type1,size1 in V_CONFIGS
+//$     v_type1 = "v_type" + suffix(type1,size1)
+//$     for type2,size2 in V_CONFIGS
+//$         v_type2 = "v_type" + suffix(type2,size2)
+//$         if type1 is not type2 and size1 == size2
+//$             if cvt_supported(type1,size1,type2,size2)
+    template<> FORCE_INLINE $v_type2 convert<$v_type2,$v_type1>($v_type1 x) {
+        return $v_type2{${cvt(type1,size1,type2,size2)}(x.data.p)};
+    }
+//$             endif
+//$         endif
+//$     endfor
+//$ endfor
+//$ AGGREGATE_END()
+
+    namespace detail {
+        /* Contains a type definition for an array of a SIMD type of width "Width",
+        and array length of "N" divided by the number of elements in the SIMD type.
+        If such a SIMD type is not available or the array length would be zero
+        (rounded down), the type defined is an empty struct. */
+        template<int N,int Width,typename T,typename=void> struct vtype_if_available {
+            struct type {};
+        };
+
+        template<int N,int Width,typename T>
+        struct vtype_if_available<N,Width,T,std::void_t<simd::v_type<T,Width/sizeof(T)>[N*sizeof(T)/Width]>> {
+            typedef v_type<T,Width/sizeof(T)> type[N*sizeof(T)/Width];
+        };
+    }
+
+    template<typename T,size_t Size> union packed_union_array;
+    template<typename T,typename U,size_t ChunkSize> struct packed_union_array_chunk;
+    template<size_t ItemSize,typename T,size_t Size> v_type<T,ItemSize> &at(packed_union_array<T,Size> &x,size_t i);
+    template<size_t ItemSize,typename T,size_t Size> const v_type<T,ItemSize> &at(const packed_union_array<T,Size> &x,size_t i);
+
+    template<typename T,size_t Size> union packed_union_array {
+        T raw[Size];
+        scalar<T> s[Size];
+        typename detail::vtype_if_available<Size,16,T>::type v16;
+        typename detail::vtype_if_available<Size,32,T>::type v32;
+        typename detail::vtype_if_available<Size,64,T>::type v64;
+
+        T &operator[](size_t i) { return raw[i]; }
+        const T &operator[](size_t i) const { return raw[i]; }
+
+        packed_union_array() = default;
+        template<typename U> packed_union_array(const packed_union_array_chunk<T,U,Size> &b) {
+            *this = b;
+        }
+
+        template<typename U> packed_union_array &operator=(const packed_union_array_chunk<T,U,Size> &b);
+    };
+
+    template<typename T,typename U,size_t ChunkSize> struct packed_union_array_chunk {
+        U &base;
+        size_t i;
+
+        packed_union_array_chunk(U &base,size_t i) : base{base}, i{i} {}
+        packed_union_array_chunk(const packed_union_array_chunk&) = delete;
+
+        auto &operator[](size_t j) const { return base.raw[i+j]; }
+
+        template<typename V> packed_union_array_chunk &operator=(const packed_union_array_chunk<T,V,ChunkSize> &b) {
+            for(size_t j=0; j<ChunkSize; ++j) (*this)[j] = b[j];
+            return *this;
+        }
+        packed_union_array_chunk &operator=(const packed_union_array<T,ChunkSize> &b) {
+            for(size_t j=0; j<ChunkSize; ++j) (*this)[j] = b[j];
+            return *this;
+        }
+    };
+
+    template<typename T,size_t Size> template<typename U>
+    packed_union_array<T,Size> &packed_union_array<T,Size>::operator=(const packed_union_array_chunk<T,U,Size> &b) {
+        for(size_t i=0; i<Size; ++i) raw[i] = b[i];
+        return *this;
+    }
+
+    namespace detail {
+        template<typename T,size_t Size,size_t ItemSize,typename U> FORCE_INLINE auto &_at(U &x,size_t i) {
+            static_assert(ItemSize <= Size,"trying to get vector type larger than entire array");
+
+            assert(i % ItemSize == 0);
+            if constexpr(ItemSize * sizeof(T) == 64) return x.v64[i/ItemSize];
+            else if constexpr(ItemSize * sizeof(T) == 32) return x.v32[i/ItemSize];
+            else if constexpr(ItemSize * sizeof(T) == 16) return x.v16[i/ItemSize];
+            else {
+                static_assert(ItemSize == 1,"a type with this size is not defined here");
+                return x.s[i];
+            }
+        }
+    }
+
+    template<size_t ItemSize,typename T,size_t Size>
+    FORCE_INLINE v_type<T,ItemSize> &at(packed_union_array<T,Size> &x,size_t i) {
+        return detail::_at<T,Size,ItemSize>(x,i);
+    }
+    template<size_t ItemSize,typename T,size_t Size>
+    FORCE_INLINE const v_type<T,ItemSize> &at(const packed_union_array<T,Size> &x,size_t i) {
+        return detail::_at<T,Size,ItemSize>(x,i);
+    }
+    template<size_t ItemSize,typename T,typename U,size_t ChunkSize>
+    FORCE_INLINE auto &at(const packed_union_array_chunk<T,U,ChunkSize> &x,size_t i) {
+        static_assert(ItemSize <= ChunkSize);
+        return detail::_at<T,ChunkSize,ItemSize>(x.base,i+x.i);
+    }
+    template<size_t ChunkSize,typename T,size_t Size>
+    FORCE_INLINE packed_union_array_chunk<T,packed_union_array<T,Size>,ChunkSize>
+    chunk_at(packed_union_array<T,Size> &x,size_t i) {
+        static_assert(ChunkSize <= Size);
+        return {x,i};
+    }
+    template<size_t ChunkSize,typename T,size_t Size>
+    FORCE_INLINE packed_union_array_chunk<T,const packed_union_array<T,Size>,ChunkSize>
+    chunk_at(const packed_union_array<T,Size> &x,size_t i) {
+        return {x,i};
+    }
+
+    namespace detail {
+        template<typename T,typename U,size_t Size> struct _convert<packed_union_array<T,Size>,packed_union_array<U,Size>> {
+            FORCE_INLINE static packed_union_array<T,Size> go(const packed_union_array<U,Size> &x) {
+                /* TODO: check the assembly output for different compilers to
+                see if using intrinsics here would be benificial */
+                packed_union_array<T,Size> r;
+                for(size_t i=0; i<Size; ++i) r[i] = static_cast<T>(x[i]);
+                return r;
+            }
+        };
+
+        template<typename T,typename U,typename V,size_t Size> struct _convert<packed_union_array<T,Size>,packed_union_array_chunk<U,V,Size>> {
+            FORCE_INLINE static packed_union_array<T,Size> go(const packed_union_array_chunk<U,V,Size> &x) {
+                /* TODO: check the assembly output for different compilers to
+                see if using intrinsics here would be benificial */
+                packed_union_array<T,Size> r;
+                for(size_t i=0; i<Size; ++i) r[i] = static_cast<T>(x[i]);
+                return r;
+            }
+        };
+    }
 
     template<> struct v_sizes<double> {
         static constexpr auto value = detail::make_array<
@@ -1331,78 +1505,6 @@ be slow enough to outweigh the benifit of using v_type<int64_t,2> */
     template<typename T> constexpr size_t padded_size(size_t size) {
         return size > 1 ? detail::padded_size<T>(size,0) : size;
     }
-
-    inline void *aligned_alloc(size_t align,size_t size) {
-        assert(align % sizeof(void*) == 0);
-        void *dest;
-#if defined(USE_POSIX)
-        if(posix_memalign(&dest,align,size)) throw std::bad_alloc();
-#elif defined(USE_WIN)
-        if(!(dest = _aligned_malloc(size,align))) throw std::bad_alloc();
-#else
-        size_t extra = (sizeof(void*) >= align ? 0 : align - sizeof(void*)) + sizeof(void*);
-        void *original = malloc(size + extra)
-        if(!original) throw std::bad_alloc();
-        dest = (reinterpret_cast<char*>(original) + extra) / align * align;
-        reinterpret_cast<void**>(*dest)[-1] = original;
-#endif
-        return dest;
-    }
-
-    inline void aligned_free(void *m) noexcept {
-#if defined(USE_POSIX)
-        free(m);
-#elif defined(USE_WIN)
-        _aligned_free(m);
-#else
-        free(reinterpret_cast<void**>(m)[-1]);
-#endif
-    }
-
-
-    template<typename T> struct aligned_allocator {
-        static_assert(sizeof(T) % alignof(T) == 0,"The object's size needs to be a multiple of its alignment");
-
-        typedef size_t size_type;
-        typedef ptrdiff_t difference_type;
-        typedef T* pointer;
-        typedef const T* const_pointer;
-        typedef T& reference;
-        typedef const T& const_reference;
-        typedef T value_type;
-
-        template<typename U> struct rebind { typedef aligned_allocator<U> other; };
-
-        pointer address(reference x) const { return &x; }
-        const_pointer address(const_reference x) const { return &x; }
-
-        pointer allocate(size_type n,void *hint = 0) const {
-            return reinterpret_cast<pointer>(aligned_alloc(alignof(T),n * sizeof(T)));
-        }
-
-        void deallocate(pointer p,size_type) const {
-            aligned_free(p);
-        }
-
-        size_type max_size() const throw() { return size_type(-1) / sizeof(T); }
-
-        void construct(pointer p,const_reference val) { new(p) T(val); }
-
-        void destroy(pointer p) { p->~T(); }
-    };
-
-    namespace detail {
-        template<typename T,bool need_align=(alignof(T) > alignof(std::max_align_t))> struct allocator {
-            typedef std::allocator<T> type;
-        };
-        template<typename T> struct allocator<T,true> {
-            typedef aligned_allocator<T> type;
-        };
-    }
-
-    /* aliases std::allocator or aligned_allocator depending on whether T needs
-       extra alignment */
-    template<typename T> using allocator = typename detail::allocator<T>::type;
 }
 
 #endif

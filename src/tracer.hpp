@@ -54,7 +54,23 @@ public:
     vector<Store> direction;
 };
 
-//Ray operator*(const Matrix &mat,const Ray &ray);
+template<typename Store> struct flat_origin_ray_source {
+    real half_w;
+    real half_h;
+    real fovI;
+
+    void set_params(int w,int h,real fov) {
+        half_w = w/real(2);
+        half_h = h/real(2);
+        fovI = std::tan(fov/2) / half_w;
+    }
+
+    HOT_FUNC vector<Store> operator()(const camera<Store> &cam,float x,float y,geom_allocator *a=nullptr) const {
+        return {
+            (cam.forward() + cam.right() * (fovI * (x - half_w)) - cam.up() * (fovI * (y - half_h))).unit(),
+            a};
+    }
+};
 
 template<typename Store> real hypercube_intersects(const ray<Store> &target,ray<Store> &normal);
 
@@ -62,17 +78,14 @@ template<typename Store> class box_scene : public scene {
 public:
     size_t locked;
     real fov;
-    real fovI;
-    real half_w,half_h;
+    flat_origin_ray_source<Store> origin_source;
 
     camera<Store> cam;
 
     box_scene(int d) : locked(0), fov(0.8), cam(d) {}
 
     void set_view_size(int w,int h) {
-        half_w = w/real(2);
-        half_h = h/real(2);
-        fovI = (2 * std::tan(fov/2)) / w;
+        origin_source.set_params(w,h,fov);
     }
 
     geom_allocator *new_allocator() const {
@@ -82,8 +95,7 @@ public:
     color calculate_color(int x,int y,geom_allocator *a) const {
         const ray<Store> view{
             vector<Store>{cam.origin,shallow_copy},
-            (cam.forward() + cam.right() * (fovI * (x - half_w)) - cam.up() * (fovI * (y - half_h))).unit(),
-            a};
+            origin_source(cam,x,y,a)};
         ray<Store> normal{dimension(),a};
         if(hypercube_intersects<Store>(view,normal)) {
             real sine = dot(view.direction,normal.direction);
@@ -98,7 +110,7 @@ public:
     int dimension() const { return cam.dimension(); }
 
     void lock() { ++locked; }
-    void unlock() throw() {
+    void unlock() noexcept {
         assert(locked);
         --locked;
     }
@@ -562,56 +574,37 @@ template<typename T> class quick_list {
     size_t alloc_size;
 
     alignas(T) char _members[QUICK_LIST_PREALLOC * sizeof(T)];
-    T *members_extra;
-
-    T *members() {
-        return reinterpret_cast<T*>(_members);
-    }
-    const T *members() const {
-        return reinterpret_cast<const T*>(_members);
-    }
+    T *_data;
 
     void check_capacity() {
         if(_size >= alloc_size) {
-            T *new_buff = simd::allocator<T>().allocate(alloc_size*2);
-            if(members_extra) {
-                memcpy(new_buff,members_extra,alloc_size);
-                simd::allocator<T>().destroy(members_extra);
-            } else {
-                memcpy(new_buff,_members,alloc_size);
+            T *new_buff = std::allocator<T>().allocate(alloc_size*2);
+            memcpy(new_buff,_data,alloc_size);
+            if(alloc_size > QUICK_LIST_PREALLOC) {
+                std::allocator<T>().deallocate(_data,alloc_size);
             }
-            members_extra = new_buff;
+            _data = new_buff;
             alloc_size *= 2;
         }
     }
 
 public:
-    quick_list() : _size(0), alloc_size(QUICK_LIST_PREALLOC), members_extra(nullptr) {}
+    quick_list() : _size(0), alloc_size(QUICK_LIST_PREALLOC), _data(reinterpret_cast<T*>(_members)) {}
     ~quick_list() {
-        if(members_extra) {
-            for(size_t i=0; i<_size; ++i) members_extra[i].~T();
-            simd::allocator<T>().destroy(members_extra);
-        } else {
-            for(size_t i=0; i<_size; ++i) members()[i].~T();
+        clear();
+        if(alloc_size > QUICK_LIST_PREALLOC) {
+            std::allocator<T>().deallocate(_data,alloc_size);
         }
     }
 
     template<typename U=T> void add(U &&item) {
-        if(_size >= QUICK_LIST_PREALLOC) {
-            check_capacity();
-            new(&members_extra[_size]) T(std::forward<U>(item));
-        } else {
-            new(&members()[_size]) T(std::forward<U>(item));
-        }
+        check_capacity();
+        new(&_data[_size]) T(std::forward<U>(item));
         ++_size;
     }
 
     void clear() {
-        if(members_extra) {
-            for(size_t i=0; i<_size; ++i) members_extra[i].~T();
-        } else {
-            for(size_t i=0; i<_size; ++i) members()[i].~T();
-        }
+        for(size_t i=0; i<_size; ++i) _data[i].~T();
         _size = 0;
     }
 
@@ -619,12 +612,8 @@ public:
 
     operator bool() const { return _size != 0; }
 
-    T *data() {
-        return members_extra ? members_extra : members();
-    }
-    const T *data() const {
-        return members_extra ? members_extra : members();
-    }
+    T *data() { return _data; }
+    const T *data() const { return _data; }
 
     T *begin() { return data(); }
     const T *begin() const { return data(); }
@@ -632,21 +621,19 @@ public:
     const T *end() const { return data() + _size; }
 
     void sort_and_unique() {
-        T *d = data();
-        std::sort(d,d+_size);
-        size_t new_size = std::unique(d,d+_size) - d;
+        std::sort(begin(),end());
+        size_t new_size = std::unique(begin(),end()) - _data;
         while(_size > new_size) {
             --_size;
-            d[_size].~T();
+            _data[_size].~T();
         }
     }
 
     void remove_at(size_t i) {
         assert(i < _size);
-        T *d = data();
         --_size;
-        if(i != _size) d[i] = std::move(d[_size]);
-        d[_size].~T();
+        if(i != _size) _data[i] = std::move(_data[_size]);
+        _data[_size].~T();
     }
 };
 
@@ -727,7 +714,7 @@ template<typename Store> struct kd_node_deleter {
     void operator()(kd_node<Store> *ptr) const;
 };
 
-template<typename Store> using kd_node_unique_ptr = std::unique_ptr<kd_node<Store>,kd_node_deleter<Store> >;
+template<typename Store> using kd_node_unique_ptr = std::unique_ptr<kd_node<Store>,kd_node_deleter<Store>>;
 
 template<typename Store> struct kd_branch : kd_node<Store> {
     int axis;
@@ -742,7 +729,7 @@ template<typename Store> struct kd_branch : kd_node<Store> {
         kd_node<Store>(BRANCH), axis(axis), split(split), left(std::move(left)), right(std::move(right)) {}
 };
 
-template<typename Store,bool Batched=(v_real::size>1)> struct kd_leaf : kd_node<Store>, flexible_struct<kd_leaf<Store,Batched>,py::pyptr<primitive<Store> > > {
+template<typename Store,bool Batched=(v_real::size>1)> struct kd_leaf : kd_node<Store>, flexible_struct<kd_leaf<Store,Batched>,py::pyptr<primitive<Store>>> {
     typedef typename kd_leaf::flexible_struct flex_base;
 
     using flex_base::operator delete;
@@ -1274,7 +1261,7 @@ template<typename Store> struct triangle_prototype : primitive_prototype<Store>,
     }
 };
 
-template<typename Store> struct triangle_batch_prototype : primitive_prototype<Store>, flexible_struct<triangle_batch_prototype<Store>,triangle_point<Store,v_real> > {
+template<typename Store> struct triangle_batch_prototype : primitive_prototype<Store>, flexible_struct<triangle_batch_prototype<Store>,triangle_point<Store,v_real>> {
     typedef typename triangle_batch_prototype::flexible_struct flexible_struct;
 
     triangle_batch<Store> *pt() {
@@ -1584,18 +1571,17 @@ template<typename Store> struct composite_scene final : scene {
     bool shadows;
     bool camera_light;
     real fov;
-    real fovI;
-    real half_w,half_h;
+    flat_origin_ray_source<Store> origin_source;
     int max_reflect_depth;
     int bg_gradient_axis;
     color ambient, bg1, bg2, bg3;
     camera<Store> cam;
     aabb<Store> boundary;
-    std::unique_ptr<kd_node<Store>,kd_node_deleter<Store>> root;
+    kd_node_unique_ptr<Store> root;
     std::vector<point_light<Store>> point_lights;
     std::vector<global_light<Store>> global_lights;
 
-    composite_scene(const aabb<Store> &boundary,kd_node<Store> *data)
+    template<typename T> composite_scene(const aabb<Store> &boundary,T &&data)
         : locked(0),
           shadows(false),
           camera_light(true),
@@ -1608,16 +1594,14 @@ template<typename Store> struct composite_scene final : scene {
           bg3(0,1,1),
           cam(boundary.dimension()),
           boundary(boundary),
-          root(data) {}
+          root{std::forward<T>(data)} {}
 
     geom_allocator *new_allocator() const {
         return Store::new_allocator(dimension(),10);
     }
 
     void set_view_size(int w,int h) {
-        half_w = w/real(2);
-        half_h = h/real(2);
-        fovI = (2 * std::tan(fov/2)) / w;
+        origin_source.set_params(w,h,fov);
     }
 
     HOT_FUNC bool light_reaches(const ray<Store> &target,real ldistance,intersection_target<Store> skip,color &filtered,geom_allocator *a=nullptr) const {
@@ -1755,13 +1739,7 @@ template<typename Store> struct composite_scene final : scene {
     }
 
     HOT_FUNC color calculate_color(int x,int y,geom_allocator *a) const {
-        return ray_color({
-                vector<Store>{cam.origin,a},
-                (cam.forward() + cam.right() * (fovI * (x - half_w)) - cam.up() * (fovI * (y - half_h))).unit(),
-                a},
-            0,
-            {},
-            a);
+        return ray_color({vector<Store>{cam.origin,shallow_copy},origin_source(cam,x,y,a)},0,{},a);
     }
 
     HOT_FUNC real aabb_distance(const ray<Store> &target) const {
@@ -1795,12 +1773,11 @@ template<typename Store> struct composite_scene final : scene {
     int dimension() const { return cam.dimension(); }
 
     void lock() { ++locked; }
-    void unlock() throw() {
+    void unlock() noexcept {
         assert(locked);
         --locked;
     }
 };
-
 
 
 /* These values were found through experimentation, although the scenes used
@@ -2229,9 +2206,7 @@ template<typename Store> kd_node_unique_ptr<Store> create_node(
 }
 
 
-template<typename Store,bool=v_real::size==1> struct group_primitives {
-    group_primitives(proto_array<Store>&,int) {}
-};
+template<typename Store> using primitive_prototype_py_ptr = py::pyptr<wrapped_type<primitive_prototype<Store>>>;
 
 template<typename Store> real grouping_metric(const primitive_prototype<Store> *a,const primitive_prototype<Store> *b) {
     v_array<Store,real> combined = max(v_expr(a->boundary.end),v_expr(b->boundary.end)) - min(v_expr(a->boundary.start),v_expr(b->boundary.start));
@@ -2249,11 +2224,11 @@ template<typename Store> real grouping_metric(const primitive_prototype<Store> *
 }
 
 template<typename Store> struct batch_candidate {
-    typename proto_array<Store>::iterator itr;
+    typename std::vector<primitive_prototype_py_ptr<Store>>::iterator itr;
     real metric;
 };
 
-template<typename Store> void add_sorted(std::vector<batch_candidate<Store> > &batch,const batch_candidate<Store> &bc) {
+template<typename Store> void add_sorted(std::vector<batch_candidate<Store>> &batch,const batch_candidate<Store> &bc) {
     auto bitr = std::begin(batch);
     ++bitr;
     for(; bitr != std::end(batch); ++bitr) {
@@ -2269,55 +2244,55 @@ template<typename Store> void add_sorted(std::vector<batch_candidate<Store> > &b
     }
 }
 
-template<typename Store> struct group_primitives<Store,false> {
-    group_primitives(proto_array<Store> &primitives,int axis) {
-        int dimension = primitives[0]->dimension();
+template<typename Store> void group_primitives(std::vector<primitive_prototype_py_ptr<Store>> &primitives,int axis) {
+    if constexpr(v_real::size > 1) {
+        int dimension = primitives[0]->get_base().dimension();
 
-        std::sort(ITR_RANGE(primitives),[=](const primitive_prototype<Store> *a,const primitive_prototype<Store> *b){
-            return a->boundary.center()[axis] < b->boundary.center()[axis];
+        std::sort(ITR_RANGE(primitives),[=](const primitive_prototype_py_ptr<Store> &a,const primitive_prototype_py_ptr<Store> &b){
+            return a->get_base().boundary.center()[axis] < b->get_base().boundary.center()[axis];
         });
 
-        std::vector<batch_candidate<Store> > batch;
+        std::vector<batch_candidate<Store>> batch;
         batch.reserve(v_real::size);
 
         for(auto pitr = std::begin(primitives); pitr != std::end(primitives); ++pitr) {
-            if(!*pitr || (*pitr)->p.type() != triangle_obj_common::pytype()) continue;
+            if(!*pitr || (*pitr)->get_base().p.type() != triangle_obj_common::pytype()) continue;
 
             batch.push_back({pitr,0});
 
             for(auto pnitr = pitr+1; pnitr != std::end(primitives); ++pnitr) {
-                if(pnitr == pitr || !*pnitr || (*pnitr)->p.type() != triangle_obj_common::pytype()) continue;
-                add_sorted(batch,{pnitr,grouping_metric(*pitr,*pnitr)});
+                if(pnitr == pitr || !*pnitr || (*pnitr)->get_base().p.type() != triangle_obj_common::pytype()) continue;
+                add_sorted(batch,{pnitr,grouping_metric(&(*pitr)->get_base(),&(*pnitr)->get_base())});
             }
 
             if(batch.size() < v_real::size) break;
 
-            auto tb = new(dimension) wrapped_type<triangle_batch_prototype<Store> >(dimension,[&](int i){ return static_cast<triangle_prototype<Store>*>(*(batch[i].itr)); });
-            private_allocs.emplace_back(py::new_ref(tb));
-            *(batch[0].itr) = &tb->get_base();
+            batch[0].itr->reset(py::new_ref(new(dimension) wrapped_type<triangle_batch_prototype<Store>>(dimension,[&](int i){ return static_cast<triangle_prototype<Store>*>(&(*(batch[i].itr))->get_base()); })));
             for(size_t i=1; i<v_real::size; ++i) {
-                *(batch[i].itr) = nullptr;
+                *(batch[i].itr) = {};
             }
             batch.clear();
         }
 
-        primitives.resize(std::remove(ITR_RANGE(primitives),nullptr) - primitives.begin());
+        primitives.resize(std::remove(ITR_RANGE(primitives),primitive_prototype_py_ptr<Store>{}) - primitives.begin());
+    }
+}
+
+template<typename T> auto get_base_ptr(const T *x) { return &x->get_base(); }
+
+template<typename Store> std::tuple<aabb<Store>,kd_node_unique_ptr<Store>> build_kdtree(std::vector<primitive_prototype_py_ptr<Store>> &p_objs,int max_threads,const kd_tree_params &params) {
+    assert(p_objs.size());
+
+    aabb<Store> boundary = p_objs[0]->get_base().boundary;
+    for(size_t i=1; i<p_objs.size(); ++i) {
+        v_expr(boundary.start) = min(v_expr(boundary.start),v_expr(p_objs[i]->get_base().boundary.start));
+        v_expr(boundary.end) = max(v_expr(boundary.end),v_expr(p_objs[i]->get_base().boundary.end));
     }
 
-private:
-    std::vector<py::pyptr<triangle_batch_prototype<Store> > > private_allocs;
-};
-
-template<typename Store> std::tuple<aabb<Store>,kd_node<Store>*> build_kdtree(proto_array<Store> &primitives,int max_threads,const kd_tree_params &params) {
-    assert(primitives.size());
-
-    aabb<Store> boundary = primitives[0]->boundary;
-    for(size_t i=1; i<primitives.size(); ++i) {
-        v_expr(boundary.start) = min(v_expr(boundary.start),v_expr(primitives[i]->boundary.start));
-        v_expr(boundary.end) = max(v_expr(boundary.end),v_expr(primitives[i]->boundary.end));
-    }
-
-    group_primitives<Store> tmp{primitives,best_axis(boundary)};
+    group_primitives<Store>(p_objs,best_axis(boundary));
+    proto_array<Store> primitives;
+    primitives.reserve(p_objs.size());
+    for(auto &p : p_objs) primitives.push_back(&p->get_base());
 
     kd_node_unique_ptr<Store> node;
 
@@ -2328,7 +2303,7 @@ template<typename Store> std::tuple<aabb<Store>,kd_node<Store>*> build_kdtree(pr
         wpool.finish();
     }
 
-    return std::tuple<aabb<Store>,kd_node<Store>*>(boundary,node.release());
+    return std::tuple<aabb<Store>,kd_node_unique_ptr<Store>>(boundary,std::move(node));
 }
 
 #endif
