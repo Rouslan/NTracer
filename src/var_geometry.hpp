@@ -71,7 +71,7 @@ namespace var {
         simple_seg_storage vec_storage;
 
     public:
-        sss_allocator(size_t d,size_t alignment,size_t items_per_block)
+        sss_allocator(size_t d,size_t items_per_block)
             : vec_storage{sizeof(T) * d,
                 simd::largest_fit<T>(d) * sizeof(T),
                 items_per_block} {}
@@ -101,8 +101,8 @@ namespace var {
         T &back() { return begin()[_size-1]; }
         const T &back() const { return begin()[_size-1]; }
 
-        T &operator[](int i) { return begin()[i]; }
-        const T &operator[](int i) const { return begin()[i]; }
+        T &operator[](size_t i) { return begin()[i]; }
+        const T &operator[](size_t i) const { return begin()[i]; }
 
         operator T*() { return begin(); }
         operator const T*() const { return begin(); }
@@ -133,7 +133,7 @@ namespace var {
     };
 
     template<typename RealItems,typename T> struct item_array {
-        static constexpr int max_items = std::numeric_limits<int>::max();
+        static constexpr size_t max_items = std::numeric_limits<size_t>::max();
 
         template<size_t Size> FORCE_INLINE void store_vec(size_t n,simd::v_type<T,Size> val) {
             val.store(data() + n);
@@ -146,14 +146,14 @@ namespace var {
         T *data() { return reinterpret_cast<T*>(items); }
         const T *data() const { return reinterpret_cast<const T*>(items); }
 
-        explicit item_array(int d,v_array_allocator *a=&def_v_array_allocator) : size{d}, allocator{a} {
+        explicit item_array(size_t d,v_array_allocator *a=&def_v_array_allocator) : size{d}, allocator{a} {
             allocate();
         }
 
         struct assign {
             typedef T item_t;
-            static const int v_score = impl::V_SCORE_THRESHHOLD;
-            static const int max_items = item_array::max_items;
+            static constexpr int v_score = impl::V_SCORE_THRESHHOLD;
+            static constexpr size_t max_items = item_array::max_items;
 
             item_array &dest;
             const item_array &src;
@@ -218,7 +218,7 @@ namespace var {
             return *this;
         }
 
-        int dimension() const {
+        size_t dimension() const {
             return size;
         }
 
@@ -243,7 +243,7 @@ namespace var {
                 simd::largest_fit<T>(size) * sizeof(T));
         }
 
-        int size;
+        size_t size;
         v_array_allocator *allocator;
         char *items;
     };
@@ -251,18 +251,18 @@ namespace var {
     template<typename T> struct item_store {
         using item_t = T;
 
-        template<typename U=T> static int v_dimension(int d) {
+        template<typename U=T> static size_t v_dimension(size_t d) {
             return d;
         }
 
-        static const int required_d = 0;
+        static constexpr size_t required_d = 0;
 
         template<typename U> using init_array = var::init_array<U>;
         template<typename U> using smaller_init_array = var::init_array<U>;
 
         template<typename RealItems,typename U=T> using type = item_array<RealItems,U>;
 
-        static geom_allocator *new_allocator(int d,size_t items_per_block) {
+        static geom_allocator *new_allocator(size_t d,size_t items_per_block) {
             return new sss_allocator<T>(d,items_per_block);
         }
 

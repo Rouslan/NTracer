@@ -86,20 +86,20 @@ struct wrapped_solid {
 };
 
 struct tracerx_constructors {
-    wrapped_array (*vector)(int);
-    wrapped_array (*matrix)(int);
-    wrapped_arrays (*triangle)(int,material*);
+    wrapped_array (*vector)(size_t);
+    wrapped_array (*matrix)(size_t);
+    wrapped_arrays (*triangle)(size_t,material*);
     void (*triangle_extra)(PyObject*);
-    wrapped_solid (*solid)(int,int,material*);
+    wrapped_solid (*solid)(size_t,int,material*);
     void (*solid_extra)(PyObject*);
 };
 
 struct package_common {
     void (*read_color)(color&,PyObject*,PyObject*);
-    PyObject *(*vector_reduce)(int,const float*);
-    PyObject *(*matrix_reduce)(int,const float*);
-    PyObject *(*triangle_reduce)(int,const float* const*,material*);
-    PyObject *(*solid_reduce)(int,char,const float*,const float*,material*);
+    PyObject *(*vector_reduce)(size_t,const float*);
+    PyObject *(*matrix_reduce)(size_t,const float*);
+    PyObject *(*triangle_reduce)(size_t,const float* const*,material*);
+    PyObject *(*solid_reduce)(size_t,char,const float*,const float*,material*);
     void (*invalidate_reference)(PyObject*);
 };
 

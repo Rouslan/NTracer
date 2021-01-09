@@ -305,7 +305,7 @@ namespace simd {
         #endif
 
                 FORCE_INLINE operator int16_t() const {
-                    return _mm_cvtsi128_si32(data) >> 16;
+                    return static_cast<int16_t>(_mm_cvtsi128_si32(data) >> 16);
                 }
 
                 __m128i data;
@@ -326,7 +326,7 @@ namespace simd {
         #endif
 
                 FORCE_INLINE operator int8_t() const {
-                    return _mm_cvtsi128_si32(data) >> 24;
+                    return static_cast<int8_t>(_mm_cvtsi128_si32(data) >> 24);
                 }
 
                 __m128i data;
@@ -1275,11 +1275,11 @@ namespace simd {
         and array length of "N" divided by the number of elements in the SIMD type.
         If such a SIMD type is not available or the array length would be zero
         (rounded down), the type defined is an empty struct. */
-        template<int N,int Width,typename T,typename=void> struct vtype_if_available {
+        template<size_t N,size_t Width,typename T,typename=void> struct vtype_if_available {
             struct type {};
         };
 
-        template<int N,int Width,typename T>
+        template<size_t N,size_t Width,typename T>
         struct vtype_if_available<N,Width,T,std::void_t<simd::v_type<T,Width/sizeof(T)>[N*sizeof(T)/Width]>> {
             typedef v_type<T,Width/sizeof(T)> type[N*sizeof(T)/Width];
         };
@@ -1301,8 +1301,16 @@ namespace simd {
         const T &operator[](size_t i) const { return raw[i]; }
 
         packed_union_array() = default;
+        packed_union_array(const packed_union_array &b) {
+            (*this) = b;
+        }
         template<typename U> packed_union_array(const packed_union_array_chunk<T,U,Size> &b) {
             *this = b;
+        }
+
+        packed_union_array &operator=(const packed_union_array &b) {
+            for(size_t i=0; i<Size; ++i) raw[i] = b.raw[i];
+            return *this;
         }
 
         template<typename U> packed_union_array &operator=(const packed_union_array_chunk<T,U,Size> &b);

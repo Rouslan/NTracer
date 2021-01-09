@@ -51,8 +51,8 @@ const byte MAX_PIXELSIZE = 16;
 const char tracerx_capsule_name[] = "_CONSTRUCTORS";
 
 
-void encode_float_ieee754(char *str,int length,const float *data);
-py::bytes encode_float_ieee754(int length,const float *data);
+void encode_float_ieee754(char *str,size_t length,const float *data);
+py::bytes encode_float_ieee754(size_t length,const float *data);
 
 
 struct tracerx_cache_item {
@@ -148,7 +148,7 @@ PyTypeObject channel_obj_base::_pytype = make_pytype(
                         throw py_error_set();
                     } else if(bit_size < 1) THROW_PYERR_STRING(ValueError,"\"bit_size\" cannot be less than 1");
                 }
-                val.bit_size = bit_size;
+                val.bit_size = static_cast<byte>(bit_size);
 
                 ga.finished();
             } catch(...) {
@@ -162,7 +162,7 @@ PyTypeObject channel_obj_base::_pytype = make_pytype(
 
 
 struct image_format {
-    size_t width, height, pitch;
+    int width, height, pitch;
     std::vector<channel> channels;
     byte bytes_per_pixel;
     py_bool reversed;
@@ -183,7 +183,7 @@ struct obj_ChannelList : py::pyobj_subclass {
 
 void im_check_buffer_size(const image_format &im,const Py_buffer &buff) {
     if(im.pitch < im.width * im.bytes_per_pixel) THROW_PYERR_STRING(ValueError,"invalid image format: \"pitch\" must be at least \"width\" times the pixel size in bytes");
-    if(size_t(buff.len) < im.pitch * im.height) THROW_PYERR_STRING(ValueError,"the buffer is too small for an image with the given dimensions");
+    if(buff.len < im.pitch * im.height) THROW_PYERR_STRING(ValueError,"the buffer is too small for an image with the given dimensions");
 }
 
 void im_set_channels(image_format &im,PyObject *arg) {
@@ -202,7 +202,7 @@ void im_set_channels(image_format &im,PyObject *arg) {
     }
 
     im.channels = std::move(channels);
-    im.bytes_per_pixel = (bits + 7) / 8;
+    im.bytes_per_pixel = static_cast<byte>((bits + 7) / 8);
 }
 
 FIX_STACK_ALIGN PyObject *obj_ImageFormat_set_channels(wrapped_type<image_format> *self,PyObject *arg) {
@@ -226,9 +226,9 @@ PyGetSetDef obj_ImageFormat_getset[] = {
 };
 
 PyMemberDef obj_ImageFormat_members[] = {
-    {"width",member_macro<size_t>::value,offsetof(wrapped_type<image_format>,base.width),0,NULL},
-    {"height",member_macro<size_t>::value,offsetof(wrapped_type<image_format>,base.height),0,NULL},
-    {"pitch",member_macro<size_t>::value,offsetof(wrapped_type<image_format>,base.pitch),0,NULL},
+    {"width",member_macro<int>::value,offsetof(wrapped_type<image_format>,base.width),0,NULL},
+    {"height",member_macro<int>::value,offsetof(wrapped_type<image_format>,base.height),0,NULL},
+    {"pitch",member_macro<int>::value,offsetof(wrapped_type<image_format>,base.pitch),0,NULL},
     {"reversed",T_BOOL,offsetof(wrapped_type<image_format>,base.reversed),0,NULL},
     {"bytes_per_pixel",T_UBYTE,offsetof(wrapped_type<image_format>,base.bytes_per_pixel),READONLY,NULL},
     {NULL}
@@ -253,14 +253,14 @@ PyTypeObject image_format_obj_base::_pytype = make_pytype(
 
                 PyObject *names[] = {P(width),P(height),P(channels),P(pitch),P(reversed),nullptr};
                 get_arg ga(args,kwds,names,"ImageFormat.__new__");
-                val.width = from_pyobject<size_t>(ga(true));
-                val.height = from_pyobject<size_t>(ga(true));
+                val.width = from_pyobject<int>(ga(true));
+                val.height = from_pyobject<int>(ga(true));
                 auto channels = ga(true);
                 val.pitch = 0;
                 val.reversed = 0;
 
                 auto tmp = ga(false);
-                if(tmp) val.pitch = from_pyobject<size_t>(tmp);
+                if(tmp) val.pitch = from_pyobject<int>(tmp);
 
                 tmp = ga(false);
                 if(tmp) val.reversed = from_pyobject<bool>(tmp) ? 1 : 0;
@@ -268,6 +268,9 @@ PyTypeObject image_format_obj_base::_pytype = make_pytype(
                 ga.finished();
 
                 im_set_channels(val,channels);
+
+                if(val.width < 1 || val.height < 1) THROW_PYERR_STRING(ValueError,"width and height must be at least 1");
+                if(val.pitch < 0) THROW_PYERR_STRING(ValueError,"pitch cannot be negative");
 
                 if(val.pitch) {
                     if(val.pitch < val.width * val.bytes_per_pixel) THROW_PYERR_STRING(ValueError,"\"pitch\" must be at least \"width\" times the size of one pixel in bytes");
@@ -395,16 +398,16 @@ struct process_pixel {
     byte *pixels;
     renderer &r;
     geom_allocator *allocator;
-    size_t y;
+    int y;
 
     template<size_t Size> bool operator()(size_t x) {
         typedef simd::v_type<float,Size> v_float;
 
         _color<v_float> c;
 
-        for(unsigned int i=0; i<Size; ++i) {
+        for(size_t i=0; i<Size; ++i) {
             if(UNLIKELY(r.state != renderer::NORMAL)) return true;
-            color c1 = r.sc->calculate_color(x+i,y,allocator);
+            color c1 = r.sc->calculate_color(static_cast<int>(x+i),y,allocator);
             c.r()[i] = c1.r();
             c.g()[i] = c1.g();
             c.b()[i] = c1.b();
@@ -430,12 +433,12 @@ struct process_pixel {
                     ival = val.i[i];
                 } else {
                     assert(ch.bit_size < 32);
-                    ival = std::lround(val.f[i] * (0xffffffffu >> (32 - ch.bit_size)));
+                    ival = std::lround(val.f[i] * double(0xffffffffu >> (32 - ch.bit_size)));
                 }
 
                 int o = b_offset[i] / (sizeof(long)*8);
                 int rm = b_offset[i] % (sizeof(long)*8);
-                int s = sizeof(long)*8 - rm - ch.bit_size;
+                int s = static_cast<int>(sizeof(long)*8 - rm - ch.bit_size);
                 temp[i][o] |= s >= 0 ? ival << s : ival >> -s;
 
                 if(rm + ch.bit_size > int(sizeof(long)*8))
@@ -448,10 +451,10 @@ struct process_pixel {
         for(size_t i=0; i<Size; ++i) {
             if(r.format.reversed) {
                 for(int j = r.format.bytes_per_pixel-1; j >= 0; --j)
-                    *pixels++ = (temp[i][j/sizeof(long)] >> ((sizeof(long) - 1 - (j % sizeof(long))) * 8)) & 0xff;
+                    *pixels++ = static_cast<byte>(temp[i][j/sizeof(long)] >> ((sizeof(long) - 1 - (j % sizeof(long))) * 8));
             } else {
                 for(int j = 0; j < r.format.bytes_per_pixel; ++j)
-                    *pixels++ = (temp[i][j/sizeof(long)] >> ((sizeof(long) - 1 - (j % sizeof(long))) * 8)) & 0xff;
+                    *pixels++ = static_cast<byte>(temp[i][j/sizeof(long)] >> ((sizeof(long) - 1 - (j % sizeof(long))) * 8));
             }
         }
 
@@ -460,23 +463,23 @@ struct process_pixel {
 };
 
 void worker_draw(renderer &r) {
-    size_t chunks_x = (r.format.width + RENDER_CHUNK_SIZE - 1) / RENDER_CHUNK_SIZE;
-    size_t chunks_y = (r.format.height + RENDER_CHUNK_SIZE - 1) / RENDER_CHUNK_SIZE;
+    int chunks_x = (r.format.width + RENDER_CHUNK_SIZE - 1) / RENDER_CHUNK_SIZE;
+    int chunks_y = (r.format.height + RENDER_CHUNK_SIZE - 1) / RENDER_CHUNK_SIZE;
 
     std::unique_ptr<geom_allocator> allocator{r.sc->new_allocator()};
 
     for(;;) {
         int chunk = r.chunk.fetch_add(1);
-        size_t start_y = chunk/chunks_x;
-        size_t start_x = chunk%chunks_x;
+        int start_y = chunk/chunks_x;
+        int start_x = chunk%chunks_x;
         if(start_y > chunks_y) break;
         start_x *= RENDER_CHUNK_SIZE;
         start_y *= RENDER_CHUNK_SIZE;
 
-        for(size_t y = start_y; y < std::min(start_y+RENDER_CHUNK_SIZE,r.format.height); ++y) {
+        for(int y = start_y; y < std::min(start_y+RENDER_CHUNK_SIZE,r.format.height); ++y) {
             if(UNLIKELY(impl::v_rep_until(
-                start_x,
-                std::min(start_x+RENDER_CHUNK_SIZE,r.format.width),
+                static_cast<size_t>(start_x),
+                static_cast<size_t>(std::min(start_x+RENDER_CHUNK_SIZE,r.format.width)),
                 process_pixel{
                     reinterpret_cast<byte*>(r.buffer.buf) + y * r.format.pitch + start_x * r.format.bytes_per_pixel,
                     r,
@@ -676,7 +679,7 @@ FIX_STACK_ALIGN PyObject *obj_CallbackRenderer_begin_render(obj_CallbackRenderer
             r.format = format;
             r.buffer = view;
             r.callback = callback;
-            r.busy_threads = r.workers.size();
+            r.busy_threads = static_cast<unsigned int>(r.workers.size());
             r.chunk.store(0,std::memory_order_relaxed);
             r.sc = &sc;
             sc.lock();
@@ -878,7 +881,7 @@ FIX_STACK_ALIGN PyObject *obj_BlockingRenderer_render(obj_BlockingRenderer *self
                 r.format = fmt;
                 r.buffer = buff.data;
                 r.state = renderer::NORMAL;
-                r.busy_threads = r.workers.size();
+                r.busy_threads = static_cast<unsigned int>(r.workers.size());
                 r.chunk.store(0,std::memory_order_relaxed);
                 r.sc = &sc;
                 sc.lock();
@@ -1335,12 +1338,12 @@ struct held_cache_item {
     py::object mod;
 };
 
-held_cache_item get_tracerx_cache_item(PyObject *mod,int dim) {
+held_cache_item get_tracerx_cache_item(PyObject *mod,size_t dim) {
     auto &cache = get_instance_data(mod)->tracerx_cache;
 
     held_cache_item item;
 
-    auto itr = cache.find(dim);
+    auto itr = cache.find(static_cast<int>(dim));
     if(itr != cache.end()) {
         item.mod = py::borrowed_ref(std::get<1>(*itr).mod);
         item.ctrs = std::get<1>(*itr).ctrs;
@@ -1370,19 +1373,19 @@ held_cache_item get_tracerx_cache_item(PyObject *mod,int dim) {
     item.ctrs = reinterpret_cast<const tracerx_constructors*>(PyCapsule_GetPointer(static_cast<py::object>(item.mod.attr(tracerx_capsule_name)).ref(),tracerx_capsule_name));
     if(!item.ctrs) throw py_error_set();
 
-    cache[dim] = {item.ctrs,item.mod.ref()};
+    cache[static_cast<int>(dim)] = {item.ctrs,item.mod.ref()};
     return item;
 }
 
 
-int get_dimension(PyObject *o) {
-    int dim = from_pyobject<int>(o);
+size_t get_dimension(PyObject *o) {
+    size_t dim = from_pyobject<size_t>(o);
     if(dim < 3) THROW_PYERR_STRING(ValueError,"dimension cannot be less than 3");
     return dim;
 }
 
-inline void copy_byteswap_dwords(char *dest,const char *src,int length) {
-    for(int i=0; i<length; ++i) {
+inline void copy_byteswap_dwords(char *dest,const char *src,size_t length) {
+    for(size_t i=0; i<length; ++i) {
         dest[i*4] = src[i*4+3];
         dest[i*4+1] = src[i*4+2];
         dest[i*4+2] = src[i*4+1];
@@ -1390,13 +1393,13 @@ inline void copy_byteswap_dwords(char *dest,const char *src,int length) {
     }
 }
 
-void encode_float_ieee754(char *str,int length,const float *data) {
+void encode_float_ieee754(char *str,size_t length,const float *data) {
 #if FLOAT_NATIVE_FORMAT == FORMAT_IEEE_BIG
-    for(int i=0; i<length; ++i) reinterpret_cast<float*>(str)[i] = data[i];
+    for(size_t i=0; i<length; ++i) reinterpret_cast<float*>(str)[i] = data[i];
 #elif FLOAT_NATIVE_FORMAT == FORMAT_IEEE_LITTLE
     copy_byteswap_dwords(str,reinterpret_cast<const char*>(data),length);
 #else
-    for(int i=0; i<length; ++i) {
+    for(size_t i=0; i<length; ++i) {
         uint32_t buff = 0;
         if(std::signbit(data[i])) buff = 1 << 31;
 
@@ -1423,21 +1426,21 @@ void encode_float_ieee754(char *str,int length,const float *data) {
 #endif
 }
 
-py::bytes encode_float_ieee754(int length,const float *data) {
-    py::bytes encoded{length*4};
+py::bytes encode_float_ieee754(size_t length,const float *data) {
+    py::bytes encoded{static_cast<Py_ssize_t>(length*4)};
     encode_float_ieee754(encoded.data(),length,data);
     return encoded;
 }
 
-void decode_float_ieee754(const char *str,int length,float *data) {
+void decode_float_ieee754(const char *str,size_t length,float *data) {
 #if FLOAT_NATIVE_FORMAT == FORMAT_IEEE_BIG
-    for(int i=0; i<length; ++i) data[i] = reinterpret_cast<const float*>(str)[i];
+    for(size_t i=0; i<length; ++i) data[i] = reinterpret_cast<const float*>(str)[i];
 #elif FLOAT_NATIVE_FORMAT == FORMAT_IEEE_LITTLE
     copy_byteswap_dwords(reinterpret_cast<char*>(data),str,length);
 #else
     typedef std::numeric_limits<float> limits;
 
-    for(int i=0; i<length; ++i) {
+    for(size_t i=0; i<length; ++i) {
         uint32_t buff;
 
   #if NATIVE_BYTEORDER == BYTEORDER_BIG
@@ -1514,9 +1517,9 @@ namespace impl {
             auto args = from_pyobject<py::tuple>(arg);
             if(args.size() != 2) THROW_PYERR_STRING(TypeError,"_vector_unpickle takes exactly 2 arguments");
 
-            int dim = get_dimension(args[0].ref());
+            size_t dim = get_dimension(args[0].ref());
             auto str = from_pyobject<py::bytes>(args[1]);
-            if(str.size() != dim * Py_ssize_t(sizeof(float))) {
+            if(static_cast<size_t>(str.size()) != dim * Py_ssize_t(sizeof(float))) {
                 PyErr_SetString(PyExc_ValueError,"vector data is malformed");
                 return nullptr;
             }
@@ -1532,9 +1535,9 @@ namespace impl {
             auto args = from_pyobject<py::tuple>(arg);
             if(args.size() != 2) THROW_PYERR_STRING(TypeError,"_matrix_unpickle takes exactly 2 arguments");
 
-            int dim = get_dimension(args[0].ref());
+            size_t dim = get_dimension(args[0].ref());
             auto str = from_pyobject<py::bytes>(args[1]);
-            if(str.size() != dim * dim * Py_ssize_t(sizeof(float))) {
+            if(static_cast<size_t>(str.size()) != dim * dim * Py_ssize_t(sizeof(float))) {
                 PyErr_SetString(PyExc_ValueError,"matrix data is malformed");
                 return nullptr;
             }
@@ -1550,9 +1553,9 @@ namespace impl {
             auto args = from_pyobject<py::tuple>(arg);
             if(args.size() != 3) THROW_PYERR_STRING(TypeError,"_triangle_unpickle takes exactly 3 arguments");
 
-            int dim = get_dimension(args[0].ref());
+            size_t dim = get_dimension(args[0].ref());
             auto str = from_pyobject<py::bytes>(args[1]);
-            if(str.size() != dim * (dim+1) * Py_ssize_t(sizeof(float))) {
+            if(static_cast<size_t>(str.size()) != dim * (dim+1) * Py_ssize_t(sizeof(float))) {
                 PyErr_SetString(PyExc_ValueError,"triangle data is malformed");
                 return nullptr;
             }
@@ -1560,7 +1563,7 @@ namespace impl {
 
             auto item = get_tracerx_cache_item(mod,dim);
             auto objdata = item.ctrs->triangle(dim,mat);
-            for(int i=0; i<dim+1; ++i) decode_float_ieee754(str.data() + sizeof(float)*dim*i,dim,objdata.data[i]);
+            for(size_t i=0; i<dim+1; ++i) decode_float_ieee754(str.data() + sizeof(float)*dim*i,dim,objdata.data[i]);
             item.ctrs->triangle_extra(objdata.obj.ref());
 
             return objdata.obj.new_ref();
@@ -1571,9 +1574,9 @@ namespace impl {
             auto args = from_pyobject<py::tuple>(arg);
             if(args.size() != 3) THROW_PYERR_STRING(TypeError,"_solid_unpickle takes exactly 3 arguments");
 
-            int dim = get_dimension(args[0].ref());
+            size_t dim = get_dimension(args[0].ref());
             auto str = from_pyobject<py::bytes>(args[1]);
-            if(str.size() != dim * (dim + 1) * Py_ssize_t(sizeof(float)) + 1) {
+            if(static_cast<size_t>(str.size()) != dim * (dim + 1) * sizeof(float) + 1) {
                 PyErr_SetString(PyExc_ValueError,"solid data is malformed");
                 return nullptr;
             }
@@ -1634,27 +1637,27 @@ inline instance_data_t *get_instance_data() {
 
 const package_common package_common_data = {
     &read_color,
-    [](int dim,const float *data) {
+    [](size_t dim,const float *data) {
         return py::make_tuple(
             get_instance_data()->vector_unpickle,
             py::make_tuple(dim,encode_float_ieee754(dim,data))).new_ref();
     },
-    [](int dim,const float *data) {
+    [](size_t dim,const float *data) {
         return py::make_tuple(
             get_instance_data()->matrix_unpickle,
             py::make_tuple(dim,encode_float_ieee754(dim*dim,data))).new_ref();
     },
-    [](int dim,const float *const *data,material *m) -> PyObject* {
-        py::bytes values{Py_ssize_t(sizeof(float))*dim*(dim+1)};
+    [](size_t dim,const float *const *data,material *m) -> PyObject* {
+        py::bytes values{static_cast<Py_ssize_t>(sizeof(float)*dim*(dim+1))};
 
-        for(int i=0; i<dim+1; ++i) encode_float_ieee754(values.data() + sizeof(float)*dim*i,dim,data[i]);
+        for(size_t i=0; i<dim+1; ++i) encode_float_ieee754(values.data() + sizeof(float)*dim*i,dim,data[i]);
 
         return py::make_tuple(
             get_instance_data()->triangle_unpickle,
             py::make_tuple(dim,values,py::ref(m))).new_ref();
     },
-    [](int dim,char type,const float *orientation,const float *position,material *m) -> PyObject* {
-        py::bytes values{Py_ssize_t(sizeof(float))*dim*(dim+1)+1};
+    [](size_t dim,char type,const float *orientation,const float *position,material *m) -> PyObject* {
+        py::bytes values{static_cast<Py_ssize_t>(sizeof(float)*dim*(dim+1)+1)};
 
         values.data()[0] = type;
         encode_float_ieee754(values.data() + 1,dim*dim,orientation);
@@ -1689,7 +1692,7 @@ PyTypeObject *classes[] = {
     &locked_error_type};
 
 
-extern "C" FIX_STACK_ALIGN SHARED(PyObject) * PyInit_render(void) {
+extern "C" FIX_STACK_ALIGN SHARED(PyObject) * PyInit_render() {
 #if PY_VERSION_HEX < 0x03070000
     if(!PyEval_ThreadsInitialized()) PyEval_InitThreads();
 #endif

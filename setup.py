@@ -63,6 +63,11 @@ GCC_EXTRA_COMPILE_ARGS = [
     '-Wno-format-security',
     '-Wno-invalid-offsetof',
 
+    # setuptools has the equivalent to this enabled by default when compiling
+    # with MSVC, so we might as well enabling it with GCC too, to know where to
+    # add explicit casts
+    '-Wconversion',
+
     # using SIMD types in templates causes the __may_alias__ attribute to be
     # dropped, but since we do all type punning through unions, this isn't a
     # problem
@@ -370,7 +375,7 @@ class CustomBuildExt(build_ext):
 
         if self.copy_mingw_deps and (
                 self.compiler.compiler_type == 'mingw32' or
-                'mingw' in os.path.basename(self.compiler.compiler_so[0])):
+                (self.compiler.compiler_type == 'unix' and 'mingw' in os.path.basename(self.compiler.compiler_so[0]))):
             log.info('copying MinGW-specific dependencies')
             out = os.path.join(self.build_lib,'ntracer')
             link = getattr(os,'link',None) and 'hard'

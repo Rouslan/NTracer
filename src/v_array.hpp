@@ -16,10 +16,10 @@ namespace impl {
     /* This is part of a very simple heuristic for determining if something is
        worth vectorizing. A score greater than or equal to this value means yes.
      */
-    const int V_SCORE_THRESHHOLD = 2;
+    constexpr int V_SCORE_THRESHHOLD = 2;
     //const int V_SCORE_THRESHHOLD = -100;
 
-    const size_t VSIZE_MAX = std::numeric_limits<size_t>::max();
+    constexpr size_t VSIZE_MAX = std::numeric_limits<size_t>::max();
 
 
     template<typename T> struct v_expr;
@@ -36,10 +36,10 @@ namespace impl {
     template<typename F> using v_sizes = simd::v_sizes<s_item_t<F>>;
 
     template<typename F,size_t SI> void _v_rep(size_t n,size_t i,F f) {
-        constexpr int size = simd::v_sizes<typename F::item_t>::value[SI];
+        constexpr size_t size = simd::v_sizes<typename F::item_t>::value[SI];
         if constexpr(F::v_score >= V_SCORE_THRESHHOLD && size > 1) {
             if constexpr(F::max_items >= size) {
-                for(; long(i)<(long(n) - (long(size) - 1)); i+= size) f.template operator()<size>(i);
+                for(; i<(n - (size - 1)); i+= size) f.template operator()<size>(i);
             }
 
             _v_rep<F,SI+1>(n,i,f);
@@ -55,10 +55,10 @@ namespace impl {
 
 
     template<typename F,size_t SI> bool _v_rep_until(size_t n,size_t i,F f) {
-        constexpr int size = simd::v_sizes<typename F::item_t>::value[SI];
+        constexpr size_t size = simd::v_sizes<typename F::item_t>::value[SI];
         if constexpr(F::v_score >= V_SCORE_THRESHHOLD && size > 1) {
             if constexpr(F::max_items >= size) {
-                for(; long(i)<(long(n) - (long(size) - 1)); i+= size) {
+                for(; i<(n - (size - 1)); i+= size) {
                     if(f.template operator()<size>(i)) return true;
                 }
             }
@@ -274,11 +274,11 @@ namespace impl {
     template<typename Op,typename... T> struct v_op_expr : v_expr<v_op_expr<Op,T...>> {
         template<typename U> static constexpr auto _min(U x) { return x; }
         template<typename U1,typename U2,typename... U> static constexpr auto _min(U1 x1,U2 x2,U... x) {
-            return std::min(x1,x2,x...);
+            return std::min({x1,x2,x...});
         }
 
-        static const int v_score = (0 + ... + T::v_score);
-        static const int max_items = _min(T::max_items...);
+        static constexpr int v_score = (0 + ... + T::v_score);
+        static constexpr size_t max_items = _min(T::max_items...);
         static constexpr bool temporary = true;
 
         std::tuple<v_expr_store<T>...> values;
@@ -300,8 +300,8 @@ namespace impl {
         typedef simd::v_type<std::invoke_result_t<F,s_item_t<T>>,Size> type;
     };
     template<typename T,typename F> struct v_apply : v_expr<v_apply<T,F>> {
-        static const int v_score = T::v_score - 1;
-        static const int max_items = T::max_items;
+        static constexpr int v_score = T::v_score - 1;
+        static constexpr size_t max_items = T::max_items;
         static constexpr bool temporary = true;
 
         v_expr_store<T> a;
@@ -322,8 +322,8 @@ namespace impl {
         typedef simd::v_type<T,Size> type;
     };
     template<typename T> struct v_repeat : v_expr<v_repeat<T>> {
-        static const int v_score = 0;
-        static const int max_items = std::numeric_limits<int>::max();
+        static constexpr int v_score = 0;
+        static constexpr size_t max_items = std::numeric_limits<size_t>::max();
         static constexpr bool temporary = true;
 
         size_t size_;
@@ -344,25 +344,27 @@ namespace impl {
         typedef simd::v_type<T,Size> type;
     };
     struct v_item_count {
-        static constexpr int get(int d) { return d; }
+        static constexpr size_t get(size_t d) { return d; }
     };
     template<typename Store,typename T> struct v_array : v_expr<v_array<Store,T>> {
-        static const int v_score = V_SCORE_THRESHHOLD;
+        static constexpr int v_score = V_SCORE_THRESHHOLD;
         static constexpr bool temporary = false;
-        static const int max_items = Store::template type<v_item_count,T>::max_items;
+        static constexpr size_t max_items = Store::template type<v_item_count,T>::max_items;
 
-        explicit v_array(int s,v_array_allocator *a=Store::def_allocator) : store{s,a} {}
+        explicit v_array(size_t s,v_array_allocator *a=Store::def_allocator) : store{s,a} {}
 
         v_array(const v_array&) = default;
         v_array(v_array &&b) : store{std::move(b.store)} {}
 
         v_array(const v_array &b,shallow_copy_t) : store{b.store,shallow_copy} {}
 
-        template<typename F> v_array(int s,F f,v_array_allocator *a=Store::def_allocator) : store{s,a} {
+        template<typename F> v_array(size_t s,F f,v_array_allocator *a=Store::def_allocator) : store{s,a} {
             fill_with(f);
         }
 
-        template<typename B> FORCE_INLINE v_array(const v_expr<B> &b,v_array_allocator *a=Store::def_allocator) : store(b.size(),a) {
+        template<typename B> FORCE_INLINE v_array(const v_expr<B> &b,v_array_allocator *a=Store::def_allocator)
+            : store(b.size(),a)
+        {
             fill_with(b);
         }
 
@@ -390,7 +392,7 @@ namespace impl {
         template<typename Op,typename B> struct _v_compound {
             typedef typename Store::item_t item_t;
             static const int v_score = B::v_score;
-            static const int max_items = std::min(v_array::max_items,B::max_items);
+            static const size_t max_items = std::min(v_array::max_items,B::max_items);
 
             v_array<Store,T> &self;
             const B &b;
@@ -453,8 +455,8 @@ namespace impl {
 
         template<typename B> struct _v_assign {
             typedef T item_t;
-            static const int v_score = B::v_score;
-            static const int max_items = std::min(v_array::max_items,B::max_items);
+            static constexpr int v_score = B::v_score;
+            static constexpr size_t max_items = std::min(v_array::max_items,B::max_items);
 
             v_array<Store,T> &self;
             const B &b;
@@ -475,11 +477,11 @@ namespace impl {
         const T *data() const { return store.data(); }
 
         T &operator[](size_t n) {
-            assert(n < size());
+            assert(n < _size());
             return data()[n];
         }
         const T &operator[](size_t n) const {
-            assert(n < size());
+            assert(n < _size());
             return data()[n];
         }
 
@@ -499,8 +501,8 @@ namespace impl {
         typedef s_item_t<T> item_t;
         typedef v_item_t<T,simd::v_sizes<item_t>::value[0]> v_t;
 
-        static const int v_score = T::v_score - (std::is_same_v<Op,op_add> && v_t::has_vec_reduce_add ? 1 : 5);
-        static const int max_items = T::max_items;
+        static constexpr int v_score = T::v_score - (std::is_same_v<Op,op_add> && v_t::has_vec_reduce_add ? 1 : 5);
+        static constexpr size_t max_items = T::max_items;
 
         v_t &r;
         simd::scalar<item_t> &r_small;
@@ -517,14 +519,14 @@ namespace impl {
             }
         }
 
-        static constexpr size_t smallest_vec(int i=0) {
+        static constexpr size_t smallest_vec(size_t i=0) {
             typedef simd::v_sizes<item_t> sizes;
             return (sizes::value[i] == 1 || sizes::value[i+1] == 1) ? sizes::value[i] : smallest_vec(i+1);
         }
     };
     template<typename Op,typename T> inline s_item_t<T> reduce(const v_expr<T> &a) {
         auto r_small = Op::template first<v_item_t<T,1>>();
-        if(v_reduce<Op,T>::v_score < V_SCORE_THRESHHOLD || size_t(a.size()) < v_reduce<Op,T>::smallest_vec()) {
+        if(v_reduce<Op,T>::v_score < V_SCORE_THRESHHOLD || a.size() < v_reduce<Op,T>::smallest_vec()) {
             for(size_t i=0; i<a.size(); ++i) r_small = Op::op(r_small,static_cast<const T&>(a).template vec<1>(i));
             return r_small[0];
         }
@@ -544,8 +546,8 @@ namespace impl {
         typedef v_item_t<A,Size> type;
     };
     template<typename Op,typename A,typename B,typename X> struct v_comparison : v_bool_expr<v_comparison<Op,A,B,X>> {
-        static const int v_score = A::v_score + B::v_score + 1;
-        static const int max_items = std::min(A::max_items,B::max_items);
+        static constexpr int v_score = A::v_score + B::v_score + 1;
+        static constexpr size_t max_items = std::min(A::max_items,B::max_items);
 
         v_expr_store<A> a;
         v_expr_store<B> b;
@@ -568,8 +570,8 @@ namespace impl {
         typedef v_item_t<A,Size> type;
     };
     template<typename Op,typename A,typename B> struct v_l_expr : v_bool_expr<v_l_expr<Op,A,B>> {
-        static const int v_score = A::v_score + B::v_score + 1;
-        static const int max_items = std::min(A::max_items,B::max_items);
+        static constexpr int v_score = A::v_score + B::v_score + 1;
+        static constexpr size_t max_items = std::min(A::max_items,B::max_items);
 
         A a;
         B b;
@@ -588,8 +590,8 @@ namespace impl {
         typedef v_item_t<T,Size> type;
     };
     template<typename T> struct v_l_not : v_bool_expr<v_l_not<T>> {
-        static const int v_score = T::v_score + 1;
-        static const int max_items = T::max_items;
+        static constexpr int v_score = T::v_score + 1;
+        static constexpr size_t max_items = T::max_items;
 
         T a;
 
@@ -619,22 +621,22 @@ namespace impl {
         bool all() const;
 
         template<typename B> v_l_expr<op_l_and,T,B> operator&&(const v_bool_expr<B> &b) const {
-            return {*this,b};
+            return {*static_cast<const T*>(this),b};
         }
 
         template<typename B> v_l_expr<op_l_or,T,B> operator||(const v_bool_expr<B> &b) const {
-            return {*this,b};
+            return {*static_cast<const T*>(this),b};
         }
 
         v_l_not<T> operator!() const {
-            return {*this};
+            return {*static_cast<const T*>(this)};
         }
     };
 
     template<typename T> struct _v_any {
         typedef s_item_t<T> item_t;
-        static const int v_score = T::v_score;
-        static const int max_items = T::max_items;
+        static constexpr int v_score = T::v_score;
+        static constexpr size_t max_items = T::max_items;
 
         const T &self;
 
@@ -648,8 +650,8 @@ namespace impl {
 
     template<typename T> struct _v_not_all {
         typedef s_item_t<T> item_t;
-        static const int v_score = T::v_score;
-        static const int max_items = T::max_items;
+        static constexpr int v_score = T::v_score;
+        static constexpr size_t max_items = T::max_items;
 
         const T &self;
 
@@ -670,25 +672,25 @@ namespace impl {
 
         template<typename B> v_op_expr<op_add,T,B> operator+(const v_expr<B> &b) const {
             assert(size() == b.size());
-            return {*this,b};
+            return {*static_cast<const T*>(this),b};
         }
 
         template<typename B> v_op_expr<op_subtract,T,B> operator-(const v_expr<B> &b) const {
             assert(size() == b.size());
-            return {*this,b};
+            return {*static_cast<const T*>(this),b};
         }
 
         template<typename B> v_op_expr<op_multiply,T,B> operator*(const v_expr<B> &b) const {
             assert(size() == b.size());
-            return {*this,b};
+            return {*static_cast<const T*>(this),b};
         }
         v_op_expr<op_multiply,T,v_repeat<s_item_t<T>>> operator*(s_item_t<T> b) const {
-            return {*this,v_repeat<s_item_t<T>>{size(),b}};
+            return {*static_cast<const T*>(this),v_repeat<s_item_t<T>>{size(),b}};
         }
 
         template<typename B> v_op_expr<op_divide,T,B> operator/(const v_expr<B> &b) const {
             assert(size() == b.size());
-            return {*this,b};
+            return {*static_cast<const T*>(this),b};
         }
 #ifdef MULT_RECIPROCAL_INSTEAD_OF_DIV
         v_op_expr<op_multiply,T,v_repeat<s_item_t<T>>> operator/(s_item_t<T> b) const {
@@ -696,55 +698,55 @@ namespace impl {
         }
 #else
         v_op_expr<op_divide,T,v_repeat<s_item_t<T>>> operator/(s_item_t<T> b) const {
-            return {*this,v_repeat<s_item_t<T>>{size(),b}};
+            return {*static_cast<const T*>(this),v_repeat<s_item_t<T>>{size(),b}};
         }
 #endif
 
         template<typename B> v_op_expr<op_and,T,B> operator&(const v_expr<B> &b) const {
             assert(size() == b.size());
-            return {*this,b};
+            return {*static_cast<const T*>(this),b};
         }
 
         template<typename B> v_op_expr<op_or,T,B> operator|(const v_expr<B> &b) const {
             assert(size() == b.size());
-            return {*this,b};
+            return {*static_cast<const T*>(this),b};
         }
 
         template<typename B> v_op_expr<op_xor,T,B> operator^(const v_expr<B> &b) const {
             assert(size() == b.size());
-            return {*this,b};
+            return {*static_cast<const T*>(this),b};
         }
 
         v_op_expr<op_negate,T> operator-() const { return {*this}; }
 
         template<typename B> v_comparison<op_eq,T,B> operator==(const v_expr<B> &b) const {
             assert(size() == b.size());
-            return {*this,b};
+            return {*static_cast<const T*>(this),b};
         }
 
         template<typename B> v_comparison<op_neq,T,B> operator!=(const v_expr<B> &b) const {
             assert(size() == b.size());
-            return {*this,b};
+            return {*static_cast<const T*>(this),b};
         }
 
         template<typename B> v_comparison<op_gt,T,B> operator>(const v_expr<B> &b) const {
             assert(size() == b.size());
-            return {*this,b};
+            return {*static_cast<const T*>(this),b};
         }
 
         template<typename B> v_comparison<op_ge,T,B> operator>=(const v_expr<B> &b) const {
             assert(size() == b.size());
-            return {*this,b};
+            return {*static_cast<const T*>(this),b};
         }
 
         template<typename B> v_comparison<op_lt,T,B> operator<(const v_expr<B> &b) const {
             assert(size() == b.size());
-            return {*this,b};
+            return {*static_cast<const T*>(this),b};
         }
 
         template<typename B> v_comparison<op_le,T,B> operator<=(const v_expr<B> &b) const {
             assert(size() == b.size());
-            return {*this,b};
+            return {*static_cast<const T*>(this),b};
         }
 
         s_item_t<T> operator[](size_t n) const {
@@ -753,14 +755,14 @@ namespace impl {
         }
 
         template<typename F> v_apply<T,F> apply(F f) const {
-            return {*this,f};
+            return {*static_cast<const T*>(this),f};
         }
 
-        v_op_expr<op_abs,T> abs() const { return {*this}; }
+        v_op_expr<op_abs,T> abs() const { return {*static_cast<const T*>(this)}; }
 
-        s_item_t<T> reduce_add() const { return reduce<op_add,T>(*this); }
-        s_item_t<T> reduce_max() const { return reduce<op_max,T>(*this); }
-        s_item_t<T> reduce_min() const { return reduce<op_min,T>(*this); }
+        s_item_t<T> reduce_add() const { return reduce<op_add,T>(*static_cast<const T*>(this)); }
+        s_item_t<T> reduce_max() const { return reduce<op_max,T>(*static_cast<const T*>(this)); }
+        s_item_t<T> reduce_min() const { return reduce<op_min,T>(*static_cast<const T*>(this)); }
     };
 
     template<typename A,typename B> v_op_expr<op_min,A,B> min(const v_expr<A> &a,const v_expr<B> &b) {

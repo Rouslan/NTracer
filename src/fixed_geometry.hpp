@@ -23,8 +23,8 @@ namespace fixed {
         T &back() { return begin()[Size-1]; }
         const T &back() const { return begin()[Size-1]; }
 
-        T &operator[](int i) { return begin()[i]; }
-        const T &operator[](int i) const { return begin()[i]; }
+        T &operator[](size_t i) { return begin()[i]; }
+        const T &operator[](size_t i) const { return begin()[i]; }
 
         operator T*() { return begin(); }
         operator const T*() const { return begin(); }
@@ -56,17 +56,17 @@ namespace fixed {
     };
 
     // set pad items to 1 to avoid dividing 0/infinity/NaN
-    template<typename T> inline void item_array_init(T *items,int start,int end) {
+    template<typename T> inline void item_array_init(T *items,size_t start,size_t end) {
         if constexpr(std::is_arithmetic_v<T>) {
-            for(int i=start; i<end; ++i) items[i] = 1;
+            for(size_t i=start; i<end; ++i) items[i] = 1;
         }
     }
 
-    template<int N,typename RealItems,typename T> struct item_array {
-        static constexpr int _real_size = simd::padded_size<T>(RealItems::get(N));
-        static constexpr int max_items = _real_size;
+    template<size_t N,typename RealItems,typename T> struct item_array {
+        static constexpr size_t _real_size = simd::padded_size<T>(RealItems::get(N));
+        static constexpr size_t max_items = _real_size;
 
-        explicit item_array(int d,v_array_allocator* =nullptr) {
+        explicit item_array(size_t d,v_array_allocator* =nullptr) {
             assert(d == N);
             item_array_init(items.raw,RealItems::get(N),_real_size);
         }
@@ -84,11 +84,11 @@ namespace fixed {
         }
 
         item_array &operator=(const item_array &b) {
-            for(int i=0; i<_real_size; ++i) items.raw[i] = b.items.raw[i];
+            items = b.items;
             return *this;
         }
 
-        int dimension() const { return N; }
+        size_t dimension() const { return N; }
 
         simd::packed_union_array<T,_real_size> items;
 
@@ -104,14 +104,14 @@ namespace fixed {
         const T *data() const { return items.raw; }
     };
 
-    template<int N,typename T> struct item_store {
+    template<size_t N,typename T> struct item_store {
         typedef T item_t;
 
-        template<typename U=T> static int v_dimension(int d) {
+        template<typename U=T> static size_t v_dimension(size_t d) {
             return simd::padded_size<U>(d);
         }
 
-        static const int required_d = N;
+        static const size_t required_d = N;
 
         template<typename U> using init_array = fixed::init_array<U,N>;
         template<typename U> using smaller_init_array = fixed::init_array<U,N-1>;
@@ -120,7 +120,7 @@ namespace fixed {
 
         static constexpr v_array_allocator *def_allocator = nullptr;
 
-        static geom_allocator *new_allocator(int d,size_t items_per_block) {
+        static geom_allocator *new_allocator(size_t d,size_t items_per_block) {
             return nullptr;
         }
 
@@ -130,7 +130,7 @@ namespace fixed {
     };
 }
 
-template<int N,typename T> struct smaller_store<fixed::item_store<N,T> > {
+template<size_t N,typename T> struct smaller_store<fixed::item_store<N,T> > {
     static_assert(N > 1,"it can't get any smaller");
 
     typedef fixed::item_store<N-1,T> type;

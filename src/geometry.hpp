@@ -52,9 +52,9 @@ namespace impl {
         static constexpr bool temporary = true;
 
         static const int v_score = 0;
-        static const int max_items = std::numeric_limits<int>::max();
+        static const size_t max_items = std::numeric_limits<size_t>::max();
 
-        int _dimension;
+        size_t _dimension;
         size_t axis;
         item_t length;
 
@@ -67,7 +67,7 @@ namespace impl {
             return r;
         }
 
-        v_axis(int d,int axis,item_t length) : _dimension(d), axis(axis), length(length) {}
+        v_axis(size_t d,size_t axis,item_t length) : _dimension(d), axis(axis), length(length) {}
     };
 
     // T::item_t is expected to be an instantiation of simd::v_type
@@ -82,7 +82,7 @@ namespace impl {
         static constexpr bool temporary = true;
 
         static const int v_score = -5;
-        static const int max_items = T::max_items;
+        static const size_t max_items = T::max_items;
 
         v_expr_store<T> a;
         size_t index;
@@ -109,7 +109,8 @@ namespace impl {
 
         typedef simd::v_type<typename T::item_t,TSize> item_t;
         static constexpr bool temporary = true;
-        static const int v_score = 0; // the value of this doesn't matter
+        static constexpr int v_score = 0; // the value of this doesn't matter
+        static constexpr size_t max_items = std::numeric_limits<size_t>::max();
 
         v_expr_store<T> a;
 
@@ -131,7 +132,7 @@ namespace impl {
         typedef typename vector::vector_expr_adapter base_t;
         typedef T item_t;
 
-        explicit vector(int d,geom_allocator *a=nullptr) : base_t(d,Store::template allocator_for<vector>(a)) {}
+        explicit vector(size_t d,geom_allocator *a=nullptr) : base_t(d,Store::template allocator_for<vector>(a)) {}
         vector(const vector&) = default;
         vector(vector&&) = default;
 
@@ -141,7 +142,7 @@ namespace impl {
 
         vector(const vector &b,shallow_copy_t) : base_t(b,shallow_copy) {}
 
-        template<typename F> vector(int d,F f,geom_allocator *a=nullptr) : base_t(d,f,Store::template allocator_for<vector>(a)) {}
+        template<typename F> vector(size_t d,F f,geom_allocator *a=nullptr) : base_t(d,f,Store::template allocator_for<vector>(a)) {}
         template<typename B,typename Base> FORCE_INLINE vector(const vector_expr<B,Base> &b,geom_allocator *a=nullptr) : base_t(::v_expr(b),Store::template allocator_for<vector>(a)) {}
 
         vector &operator=(const vector&) = default;
@@ -167,14 +168,14 @@ namespace impl {
             return *this;
         }
 
-        int dimension() const { return this->size(); }
+        size_t dimension() const { return this->size(); }
 
         using base_t::fill_with;
         using base_t::data;
 
         void normalize() { operator/=(this->absolute()); }
 
-        static v_axis<Store,T> axis(int d,int n,T length = 1) {
+        static v_axis<Store,T> axis(size_t d,size_t n,T length = 1) {
             return {d,n,length};
         }
 
@@ -186,7 +187,7 @@ namespace impl {
     template<typename Store,typename T,typename B> struct v_deinterleave1 {
         typedef typename T::item_t item_t;
         static const int v_score = B::v_score - 5;
-        static const int max_items = B::max_items;
+        static const size_t max_items = B::max_items;
 
         vector<Store,T> &self;
         v_expr_store<B> b;
@@ -300,7 +301,7 @@ impl::v_interleave1<vector_batch<Store,Size>> interleave1(const vector_batch<Sto
 }
 
 template<typename Store,size_t Size=simd::v_sizes<typename Store::item_t>::value[0],typename F>
-vector_batch<Store,Size> deinterleave(int dimension,F f) {
+vector_batch<Store,Size> deinterleave(size_t dimension,F f) {
     vector_batch<Store,Size> r(dimension);
 
     for(size_t i=0; i<Size; ++i) {
@@ -314,7 +315,7 @@ vector_batch<Store,Size> deinterleave(int dimension,F f) {
     return r;
 }
 
-/* Equivalent to deinterleave<Store,Size>(a.dimension(),[](int){ return a; })
+/* Equivalent to deinterleave<Store,Size>(a.dimension(),[](size_t){ return a; })
 
    This function only accepts actual vectors so that a supplied vector
    expression could be vectorized (in the SIMD sense), which otherwise wouldn't
@@ -335,7 +336,7 @@ namespace impl {
     };
     template<typename Store> struct matrix_row : vector_expr<matrix_row<Store> > {
         static const int v_score = V_SCORE_THRESHHOLD;
-        static const int max_items = matrix<Store>::max_row_col_items;
+        static const size_t max_items = matrix<Store>::max_row_col_items;
         static constexpr bool temporary = true;
 
         matrix<Store> &a;
@@ -346,7 +347,7 @@ namespace impl {
         template<typename B> struct _v_assign {
             typedef typename Store::item_t item_t;
             static const int v_score = B::v_score - 1;
-            static const int max_items = matrix_row<Store>::max_items;
+            static const size_t max_items = matrix_row<Store>::max_items;
 
             matrix<Store> &a;
             const size_t row;
@@ -401,7 +402,7 @@ namespace impl {
     };
     template<typename Store> struct const_matrix_row : vector_expr<const_matrix_row<Store> > {
         static const int v_score = V_SCORE_THRESHHOLD;
-        static const int max_items = matrix<Store>::max_row_col_items;
+        static const size_t max_items = matrix<Store>::max_row_col_items;
         static constexpr bool temporary = true;
 
         const matrix<Store> &a;
@@ -441,7 +442,7 @@ namespace impl {
     };
     template<typename Store> struct matrix_column : vector_expr<matrix_column<Store> > {
         static const int v_score = -1;
-        static const int max_items = matrix<Store>::max_row_col_items;
+        static const size_t max_items = matrix<Store>::max_row_col_items;
         static constexpr bool temporary = true;
 
         matrix<Store> &a;
@@ -451,7 +452,7 @@ namespace impl {
 
         template<typename B> struct _v_assign {
             typedef typename Store::item_t item_t;
-            static const int max_items = matrix_column<Store>::max_items;
+            static const size_t max_items = matrix_column<Store>::max_items;
             static const int v_score = B::v_score - 1;
 
             matrix_column<Store> &self;
@@ -489,7 +490,7 @@ namespace impl {
     };
     template<typename Store> struct const_matrix_column : vector_expr<const_matrix_column<Store> > {
         static const int v_score = -1;
-        static const int max_items = matrix<Store>::max_row_col_items;
+        static const size_t max_items = matrix<Store>::max_row_col_items;
         static constexpr bool temporary = true;
 
         const matrix<Store> &a;
@@ -515,7 +516,7 @@ namespace impl {
     };
 
     struct matrix_item_count {
-        static constexpr int get(int d) { return d*d; }
+        static constexpr size_t get(size_t d) { return d*d; }
     };
 
     template<typename Store,size_t Size> struct _v_item_t<matrix<Store>,Size> {
@@ -527,20 +528,20 @@ template<class Store> struct matrix : private impl::v_expr<matrix<Store>> {
     friend struct impl::v_expr<matrix>;
 
     typedef typename Store::item_t item_t;
-    static const int max_row_col_items = Store::template type<impl::matrix_item_count>::max_items;
+    static const size_t max_row_col_items = Store::template type<impl::matrix_item_count>::max_items;
 
     static const int v_score = impl::V_SCORE_THRESHHOLD;
     static constexpr bool temporary = false;
-    static const int max_items = Store::template type<impl::matrix_item_count>::max_items;
+    static const size_t max_items = Store::template type<impl::matrix_item_count>::max_items;
 
     size_t _size() const { return store.dimension()*store.dimension(); }
     static constexpr bool supports_padding = true;
 
-    explicit matrix(int d) : store(d) {}
+    explicit matrix(size_t d) : store(d) {}
 
     template<typename F> void rep(F f) const {
-        for(int row=0; row<dimension(); ++row) {
-            for(int col=0; col<dimension(); ++col) f(row,col);
+        for(size_t row=0; row<dimension(); ++row) {
+            for(size_t col=0; col<dimension(); ++col) f(row,col);
         }
     }
 
@@ -555,20 +556,20 @@ template<class Store> struct matrix : private impl::v_expr<matrix<Store>> {
     void multiply(matrix<Store> &RESTRICT r,const matrix<Store> &b) const {
         assert(dimension() == r.dimension() && dimension() == b.dimension());
 
-        rep([=,&b,&r](int row,int col){
+        rep([=,&b,&r](size_t row,size_t col){
             r[row][col] = dot((*this)[row],b.column(col));
         });
     }
 
     void multiply(vector<Store> &RESTRICT r,const vector<Store> &b) const {
         assert(dimension() == b.dimension());
-        r.fill_with([&,this](int i){ return dot((*this)[i],b); });
+        r.fill_with([&,this](size_t i){ return dot((*this)[i],b); });
     }
 
     void mult_transpose_(matrix<Store> &RESTRICT r,const matrix<Store> &b) const {
         assert(dimension() == r.dimension() && dimension() == b.dimension());
 
-        rep([=,&b,&r](int row,int col){
+        rep([=,&b,&r](size_t row,size_t col){
             r[row][col] = dot((*this)[row],b[col]);
         });
     }
@@ -581,7 +582,7 @@ template<class Store> struct matrix : private impl::v_expr<matrix<Store>> {
         item_t c = std::cos(theta) - 1;
         item_t s = std::sin(theta);
 
-        r.rep([&,c,s](int row,int col){
+        r.rep([&,c,s](size_t row,size_t col){
             item_t x = a[row]*(a[col]*c - b[col]*s) + b[row]*(b[col]*c + a[col]*s);
             if(col == row) ++x;
 
@@ -591,17 +592,17 @@ template<class Store> struct matrix : private impl::v_expr<matrix<Store>> {
 
     static void scale_(matrix<Store> &r,const vector<Store> &a) {
         assert(r.dimension() == a.dimension());
-        r.rep([&](int row,int col){ r[row][col] = row == col ? a[row] : item_t(0); });
+        r.rep([&](size_t row,size_t col){ r[row][col] = row == col ? a[row] : item_t(0); });
     }
 
     static void scale_(matrix<Store> &r,item_t a) {
-        r.rep([&r,a](int row,int col){ r[row][col] = row == col ? a : item_t(0); });
+        r.rep([&r,a](size_t row,size_t col){ r[row][col] = row == col ? a : item_t(0); });
     }
 
     static void reflection_(matrix<Store> &r,const vector<Store> &a) {
         item_t square = a.square();
 
-        r.rep([&,square](int row,int col){
+        r.rep([&,square](size_t row,size_t col){
             r[row][col] = (row == col ? item_t(1) : item_t(0)) - 2 * a[row] * a[col] / square;
         });
     }
@@ -625,23 +626,23 @@ template<class Store> struct matrix : private impl::v_expr<matrix<Store>> {
        If the return value is -1, the matrix is singular and the contents of
        "lu" will be undefined.
     */
-    int decompose(matrix<Store> &RESTRICT lu,size_t *pivots) const {
+    long decompose(matrix<Store> &RESTRICT lu,size_t *pivots) const {
         assert(dimension() == lu.dimension());
 
-        int swapped = 0;
+        size_t swapped = 0;
 
-        for(int i=0; i<dimension(); ++i) pivots[i] = i;
+        for(size_t i=0; i<dimension(); ++i) pivots[i] = i;
 
-        for(int j=0; j<dimension(); ++j) {
-            for(int i=j; i<dimension(); ++i) {
+        for(size_t j=0; j<dimension(); ++j) {
+            for(size_t i=j; i<dimension(); ++i) {
                 item_t sum = 0;
-                for(int k=0; k<j; ++k) sum += lu[i][k] * lu[k][j];
+                for(size_t k=0; k<j; ++k) sum += lu[i][k] * lu[k][j];
                 lu[i][j] = (*this)[pivots[i]][j] - sum;
             }
 
-            int alt_row = j;
+            size_t alt_row = j;
             real alt_val = std::abs(lu[j][j]);
-            for(int i=j+1; i<dimension(); ++i) {
+            for(size_t i=j+1; i<dimension(); ++i) {
                 if(std::abs(lu[i][j]) > alt_val) {
                     alt_row = i;
                     alt_val = std::abs(lu[i][j]);
@@ -650,28 +651,28 @@ template<class Store> struct matrix : private impl::v_expr<matrix<Store>> {
             if(alt_row != j) {
                 std::swap(pivots[alt_row],pivots[j]);
                 ++swapped;
-                for(int i=0; i<j+1; ++i) std::swap(lu[alt_row][i],lu[j][i]);
+                for(size_t i=0; i<j+1; ++i) std::swap(lu[alt_row][i],lu[j][i]);
             } else if(alt_val == 0) return -1;
 
-            for(int i=j+1; i<dimension(); ++i) {
+            for(size_t i=j+1; i<dimension(); ++i) {
                 item_t sum = 0;
-                for(int k=0; k<j; ++k) sum += lu[j][k] * lu[k][i];
+                for(size_t k=0; k<j; ++k) sum += lu[j][k] * lu[k][i];
                 lu[j][i] = ((*this)[pivots[j]][i] - sum) / lu[j][j];
             }
         }
 
-        return swapped;
+        return static_cast<long>(swapped);
     }
 
     item_t determinant_(matrix<Store> &RESTRICT tmp) const {
         assert(dimension() == tmp.dimension());
 
         typename Store::template type<impl::v_item_count,size_t> pivot(dimension());
-        int swapped = decompose(tmp,pivot.data());
+        long swapped = decompose(tmp,pivot.data());
         if(swapped < 0) return 0;
 
-        item_t r = swapped % 2 ? -1 : 1;
-        for(int i=0; i<dimension(); ++i) r *= tmp[i][i];
+        item_t r = swapped % 2 ? real(-1) : real(1);
+        for(size_t i=0; i<dimension(); ++i) r *= tmp[i][i];
         return r;
     }
 
@@ -679,37 +680,37 @@ template<class Store> struct matrix : private impl::v_expr<matrix<Store>> {
         assert(dimension() == inv.dimension() && dimension() == tmp.dimension());
 
         typename Store::template type<impl::v_item_count,size_t> pivot(dimension());
-        int swapped = decompose(tmp,pivot.data());
+        long swapped = decompose(tmp,pivot.data());
         if(swapped < 0) throw std::domain_error("matrix is singular (uninvertible)");
 
         // forward substitution
         // store the result in the lower triangle of tmp
-        for(int c=0; c<dimension(); ++c) {
+        for(size_t c=0; c<dimension(); ++c) {
             tmp[c][c] = item_t(1) / tmp[c][c];
 
-            for(int r=c+1; r<dimension(); ++r) {
+            for(size_t r=c+1; r<dimension(); ++r) {
                 item_t sum = 0;
-                for(int i=c; i<r; ++i) sum -= tmp[r][i] * tmp[i][c];
+                for(size_t i=c; i<r; ++i) sum -= tmp[r][i] * tmp[i][c];
                 tmp[r][c] = sum / tmp[r][r];
             }
         }
 
         // back substitution
-        for(int c=0; c<dimension(); ++c) {
-            int pc = pivot.data()[c];
+        for(size_t c=0; c<dimension(); ++c) {
+            size_t pc = pivot.data()[c];
             inv[dimension()-1][pc] = tmp[dimension()-1][c];
 
-            for(int r=dimension()-2; r>-1; --r) {
+            for(long r=static_cast<long>(dimension())-2; r>-1; --r) {
                 item_t sum = 0;
-                if(r >= c) sum = tmp[r][c];
-                for(int i=r+1; i<dimension(); ++i) sum -= tmp[r][i] * inv[i][pc];
+                if(r >= static_cast<long>(c)) sum = tmp[r][c];
+                for(size_t i=r+1; i<dimension(); ++i) sum -= tmp[r][i] * inv[i][pc];
                 inv[r][pc] = sum;
             }
         }
     }
 
     void transpose_(matrix<Store> &RESTRICT t) const {
-        rep([&,this](int r,int c){ t[r][c] = (*this)[c][r]; });
+        rep([&,this](size_t r,size_t c){ t[r][c] = (*this)[c][r]; });
     }
 
     matrix<Store> operator*(const matrix<Store> &b) const {
@@ -742,7 +743,7 @@ template<class Store> struct matrix : private impl::v_expr<matrix<Store>> {
         return r;
     }
 
-    static matrix<Store> scale(int d,item_t a) {
+    static matrix<Store> scale(size_t d,item_t a) {
         matrix<Store> r(d);
         scale_(r,a);
         return r;
@@ -754,7 +755,7 @@ template<class Store> struct matrix : private impl::v_expr<matrix<Store>> {
         return r;
     }
 
-    static matrix<Store> identity(int d) {
+    static matrix<Store> identity(size_t d) {
         return scale(d,1);
     }
 
@@ -787,18 +788,18 @@ template<class Store> struct matrix : private impl::v_expr<matrix<Store>> {
        calculations. This avoids allocating space for another matrix but loses
        the original contents of this matrix. */
     item_t determinant_inplace() {
-        int swapped = 0;
+        size_t swapped = 0;
 
-        for(int j=0; j<dimension(); ++j) {
-            for(int i=j; i<dimension(); ++i) {
+        for(size_t j=0; j<dimension(); ++j) {
+            for(size_t i=j; i<dimension(); ++i) {
                 item_t sum = 0;
-                for(int k=0; k<j; ++k) sum += (*this)[i][k] * (*this)[k][j];
+                for(size_t k=0; k<j; ++k) sum += (*this)[i][k] * (*this)[k][j];
                 (*this)[i][j] = (*this)[i][j] - sum;
             }
 
-            int alt_row = j;
+            size_t alt_row = j;
             real alt_val = std::abs((*this)[j][j]);
-            for(int i=j+1; i<dimension(); ++i) {
+            for(size_t i=j+1; i<dimension(); ++i) {
                 if(std::abs((*this)[i][j]) > alt_val) {
                     alt_row = i;
                     alt_val = std::abs((*this)[i][j]);
@@ -806,18 +807,18 @@ template<class Store> struct matrix : private impl::v_expr<matrix<Store>> {
             }
             if(alt_row != j) {
                 ++swapped;
-                for(int i=0; i<dimension(); ++i) std::swap((*this)[alt_row][i],(*this)[j][i]);
+                for(size_t i=0; i<dimension(); ++i) std::swap((*this)[alt_row][i],(*this)[j][i]);
             } else if(alt_val == 0) return 0;
 
-            for(int i=j+1; i<dimension(); ++i) {
+            for(size_t i=j+1; i<dimension(); ++i) {
                 item_t sum = 0;
-                for(int k=0; k<j; ++k) sum += (*this)[j][k] * (*this)[k][i];
+                for(size_t k=0; k<j; ++k) sum += (*this)[j][k] * (*this)[k][i];
                 (*this)[j][i] = ((*this)[j][i] - sum) / (*this)[j][j];
             }
         }
 
-        item_t r = swapped % 2 ? -1 : 1;
-        for(int i=0; i<dimension(); ++i) r *= (*this)[i][i];
+        item_t r = swapped % 2 ? real(-1) : real(1);
+        for(size_t i=0; i<dimension(); ++i) r *= (*this)[i][i];
         return r;
     }
 
@@ -827,17 +828,17 @@ template<class Store> struct matrix : private impl::v_expr<matrix<Store>> {
     item_t *data() { return store.data(); }
     const item_t *data() const { return store.data(); }
 
-    item_t &get(int r,int c) {
+    item_t &get(size_t r,size_t c) {
         return store.data()[r*dimension() + c];
     }
-    item_t get(int r,int c) const {
+    item_t get(size_t r,size_t c) const {
         return store.data()[r*dimension() + c];
     }
 
     impl::matrix_column<Store> column(size_t n) { return {*this,n}; }
     impl::const_matrix_column<Store> column(size_t n) const { return {*this,n}; }
 
-    int dimension() const { return store.dimension(); }
+    size_t dimension() const { return store.dimension(); }
 
     typename Store::template type<impl::matrix_item_count> store;
 };
@@ -859,14 +860,14 @@ template<typename T> using smaller = typename _smaller<T>::type;
 template<typename Store> void cross_(vector<Store> &r,smaller<matrix<Store> > &tmp,const vector<Store> *vs) {
     assert(r.dimension() == (tmp.dimension()+1));
 
-    int f = r.dimension() % 2 ? 1 : -1;
+    typename Store::item_t f = r.dimension() % 2 ? real(1) : real(-1);
 
-    for(int i=0; i<r.dimension(); ++i) {
+    for(size_t i=0; i<r.dimension(); ++i) {
         assert(i+1 == r.dimension() || r.dimension() == vs[i].dimension());
 
-        for(int j=0; j<r.dimension()-1; ++j) {
-            for(int k=0; k<i; ++k) tmp[k][j] = vs[j][k];
-            for(int k=i+1; k<r.dimension(); ++k) tmp[k-1][j] = vs[j][k];
+        for(size_t j=0; j<r.dimension()-1; ++j) {
+            for(size_t k=0; k<i; ++k) tmp[k][j] = vs[j][k];
+            for(size_t k=i+1; k<r.dimension(); ++k) tmp[k-1][j] = vs[j][k];
         }
         r[i] = f * tmp.determinant_inplace();
         f = -f;
