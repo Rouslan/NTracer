@@ -1303,7 +1303,7 @@ can't add a tuple and a :py:class:`Vector` together).
     code, thus this class cannot be instantiated directly in Python code, not
     even as a base class for another class.
 
-    .. py:method:: intersects(origin,direction) -> tuple or None
+    .. py:method:: intersects(origin,direction) -> RayIntersection or None
 
         Tests whether a given ray intersects.
 
@@ -1323,7 +1323,7 @@ can't add a tuple and a :py:class:`Vector` together).
 
     A batch of primitives with data rearranged for faster computation.
 
-    .. py:method:: intersects(origin,direction,index) -> tuple or None
+    .. py:method:: intersects(origin,direction,index) -> RayIntersection or None
 
         Tests whether a given ray intersects.
 

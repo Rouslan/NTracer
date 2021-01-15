@@ -368,7 +368,7 @@ struct py_ray_intersection {
     py::object p;
     int index;
 
-    py_ray_intersection(real dist,const n_vector &origin,const n_vector &normal,PyObject *p,int index)
+    py_ray_intersection(real dist,const n_vector &origin,const n_vector &normal,PyObject *p,int index=-1)
         : dist(dist), origin(origin), normal(normal), p(py::borrowed_ref(p)), index(index) {}
 
     py_ray_intersection(const ray_intersection<module_store> &ri) :
@@ -997,7 +997,7 @@ FIX_STACK_ALIGN PyObject *obj_Primitive_intersects(primitive<module_store> *self
         real dist = self->intersects(target,normal);
         if(!dist) Py_RETURN_NONE;
 
-        return py::make_tuple(dist,normal.origin,normal.direction).new_ref();
+        return py::ref(new wrapped_type<py_ray_intersection>(dist,normal.origin,normal.direction,py::ref(self)));
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
@@ -1034,7 +1034,7 @@ FIX_STACK_ALIGN PyObject *obj_PrimitiveBatch_intersects(primitive_batch<module_s
         real dist = self->intersects(target,normal,index);
         if(!dist) Py_RETURN_NONE;
 
-        return py::make_tuple(dist,normal.origin,normal.direction,index).new_ref();
+        return py::ref(new wrapped_type<py_ray_intersection>(dist,normal.origin,normal.direction,py::ref(self),index));
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
@@ -1388,13 +1388,14 @@ FIX_STACK_ALIGN PyObject *kdnode_intersects(obj_KDNode *self,PyObject *args,PyOb
         auto _none = Py_None; // doing this avoids a "will never be NULL" warning on GCC
         set_target(skip,source == _none ? nullptr : source,batch_index);
 
-        ray_intersection<module_store> o_hit(origin.dimension());
+        ray_intersection<module_store> o_hit{origin.dimension()};
         ray_intersections<module_store> t_hits;
         bool did_hit;
         {
             py::allow_threads _;
             ray<module_store> target{origin,direction};
 
+            o_hit.dist = std::numeric_limits<real>::max();
             did_hit = intersects(self->_data,target,skip,o_hit,t_hits,t_near,t_far);
         }
 

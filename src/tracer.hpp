@@ -408,7 +408,7 @@ template<typename Store> struct triangle : triangle_obj_common, primitive<Store>
         if(!denom) return 0;
 
         real t = -(dot(face_normal,target.origin) + d) / denom;
-        if(t < 0) return 0;
+        if(t <= 0 || t >= cutoff) return 0;
 
         vector<Store> P{target.origin + t * target.direction,a};
         vector<Store> pside{p1 - P,a};
