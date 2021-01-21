@@ -1126,13 +1126,22 @@ namespace py {
         template<typename Item,const char* FullName,bool GC> struct array_adapter_set_item<Item,FullName,GC,true> {
             static constexpr ssizeobjargproc value = nullptr;
         };
+
+        /* this is in a seperate struct to ensure its data comes first, even if
+        empty base optimization isn't done, in obj_array_adapter */
+        struct pyobjectbase {
+            PyObject_HEAD
+        };
     }
 
     template<typename Item,const char* FullName,bool GC,bool ReadOnly>
-    struct obj_array_adapter : impl::array_adapter_alloc<Item,FullName,GC,ReadOnly>, pyobj_subclass {
+    struct ALLOW_EBO obj_array_adapter :
+            impl::pyobjectbase, // must come first
+            impl::array_adapter_alloc<Item,FullName,GC,ReadOnly>,
+            pyobj_subclass
+    {
         static PySequenceMethods seq_methods;
         CONTAINED_PYTYPE_DEF
-        PyObject_HEAD
 
         obj_array_adapter(PyObject *origin,size_t size,Item *items) : data(origin,size,items) {
             PyObject_Init(ref(this),pytype());

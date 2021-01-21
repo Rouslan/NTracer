@@ -25,8 +25,10 @@ protected:
     ~scene() = default;
 };
 
-struct obj_Scene : virtual py::pyobj_subclass {
+struct obj_Scene : py::pyobj_subclass {
+#ifdef RENDER_MODULE
     CONTAINED_PYTYPE_DEF
+#endif
     PyObject_HEAD
 
     scene &(*_get_base)(obj_Scene*);
@@ -44,6 +46,8 @@ struct color_obj_base : py::pyobj_subclass {
     static PyTypeObject *pytype() { return _pytype; }
 #endif
     PyObject_HEAD
+
+    PY_MEM_NEW_DELETE
 };
 template<> struct _wrapped_type<color> {
     typedef simple_py_wrapper<color,color_obj_base> type;

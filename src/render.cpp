@@ -27,6 +27,7 @@
 struct ROOT ## _obj_base : py::pyobj_subclass { \
     CONTAINED_PYTYPE_DEF \
     PyObject_HEAD \
+    PY_MEM_NEW_DELETE \
 }; \
 template<> struct _wrapped_type<ROOT> { \
     typedef simple_py_wrapper<ROOT,ROOT ## _obj_base> type; \
@@ -349,14 +350,14 @@ template<> struct _wrapped_type<scene> {
     typedef obj_Scene type;
 };
 
-struct callback_renderer_obj_base {
+struct callback_renderer_obj_base : py::pyobj_subclass {
     typedef callback_renderer type;
 
     CONTAINED_PYTYPE_DEF
+    PyObject_HEAD
 };
 
-template<typename Base> struct obj_Renderer : Base, py::pyobj_subclass {
-    PyObject_HEAD
+template<typename Base> struct obj_Renderer : Base {
     storage_mode mode;
 
     typename Base::type base;
@@ -770,10 +771,11 @@ struct blocking_renderer : renderer {
     ~blocking_renderer();
 };
 
-struct blocking_renderer_obj_base {
+struct blocking_renderer_obj_base : py::pyobj_subclass {
     typedef blocking_renderer type;
 
     CONTAINED_PYTYPE_DEF
+    PyObject_HEAD
 };
 
 typedef obj_Renderer<blocking_renderer_obj_base> obj_BlockingRenderer;

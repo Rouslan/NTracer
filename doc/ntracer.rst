@@ -1529,7 +1529,22 @@ can't add a tuple and a :py:class:`Vector` together).
 
     .. py:attribute:: edge_normals
 
+        The normals of the "edges" adjacent to :py:attr:`p1`.
+
+        Here, "edge" actually means a simplex of codimension 2. This attribute
+        is a list-like object containing the normals of every "edge" except for
+        the one on the opposite side of :py:attr:`p1`. Each normal has a length
+        equal to the inverse of the altitude of the "triangle", where the "edge"
+        is the base of the "triangle". The normals point away from the
+        "triangle".
+
     .. py:attribute:: face_normal
+
+        The normal of the "triangle".
+
+        If ``points`` is the list of vectors representing each point of this
+        "triangle", then ``face_normal`` is equal to
+        ``cross([p - points[0] for p in points[1:]])``.
 
     .. py:attribute:: p1
 
@@ -1880,6 +1895,10 @@ can't add a tuple and a :py:class:`Vector` together).
 
     A generalized cross product.
 
+    This returns a vector that is perpendicular to every vector in ``vectors``.
+    The magnitude is equal to the volume of the parallelotope (the generalized
+    version of the parallelepiped) that the vectors span.
+
     :param vectors: A sequence of linearly independent vectors. The number of
         vectors must be one less than their dimension.
 
@@ -1920,13 +1939,14 @@ can't add a tuple and a :py:class:`Vector` together).
     that this package was compiled for (when compiling from source, the latest
     instruction set that the current machine supports, is chosen by default).
 
-    The source code of this package supports SSE and AVX. If this package is
-    compiled for an instruction set that supports neither of these technologies,
-    ``BATCH_SIZE`` will be equal to ``1``. In such a case, :py:class:`KDLeaf`
-    won't even support instances of :py:class:`PrimitiveBatch` (passing
-    instances of :py:class:`PrimitiveBatch` to its constructor will cause and
-    exception to be raised) so that the ray tracer can be streamlined. The batch
-    classes will still exist, however, for the sake of compatibility.
+    The source code of this package supports SSE and AVX (including AVX2 and
+    AVX512). If this package is compiled for an instruction set that supports
+    neither of these technologies, ``BATCH_SIZE`` will be equal to ``1``. In
+    such a case, :py:class:`KDLeaf` won't support instances of
+    :py:class:`PrimitiveBatch` (passing instances of :py:class:`PrimitiveBatch`
+    to its constructor will cause an exception to be raised) so that the ray
+    tracer can be streamlined. The batch classes will still exist, however, for
+    the sake of compatibility.
 
     Most users will not have to worry about the value of ``BATCH_SIZE`` or batch
     objects since :py:func:`build_composite_scene` (and :py:func:`build_kdtree`)
@@ -1984,11 +2004,11 @@ can't add a tuple and a :py:class:`Vector` together).
 
 Depending on how this package was built, there will be one or more modules
 that start with "tracer" and end in a number (by default, one for every number
-between 3 and 8).  These have an interface identical to :py:mod:`.tracern`,
-including the ``dimension`` parameter of certain functions, but are
-specialized for the dimensionality corresponding to the number in its name.
-For functions that require a ``dimension`` parameter, passing a number other
-than the one its specialized for, will raise an exception.
+between 3 and 8 inclusive). These have an interface identical to
+:py:mod:`.tracern`, including the ``dimension`` parameter of certain functions,
+but are specialized for the dimensionality corresponding to the number in its
+name. For functions that require a ``dimension`` parameter, passing a number
+other than the one its specialized for, will raise an exception.
 
 By only supporting a single dimensionality, these specialized modules avoid the
 looping and heap-allocation that the generic version requires and thus perform

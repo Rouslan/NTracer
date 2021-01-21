@@ -226,7 +226,10 @@ struct solid_obj_common {
     CONTAINED_PYTYPE_DEF
 };
 
-template<typename Store> struct solid : solid_obj_common, primitive<Store> {
+template<typename Store> struct ALLOW_EBO solid :
+        primitive<Store>, // must be first
+        solid_obj_common
+{
     solid_type type;
 
     matrix<Store> orientation;
@@ -312,7 +315,7 @@ template<typename T,typename Item> struct flexible_struct {
         // a template so there is no ambiguity with "operator item_t*"
         template<typename V> item_t &operator[](V i) const { return begin()[i]; }
 
-        size_t size() const { return static_cast<const T*>(self)->_item_size(); }
+        size_t size() const { return self->_item_size(); }
 
         operator item_t*() const { return begin(); }
 
@@ -320,8 +323,8 @@ template<typename T,typename Item> struct flexible_struct {
         U *self;
     };
 
-    item_array<flexible_struct<T,Item>> items() { return this; }
-    item_array<const flexible_struct<T,Item>> items() const { return this; }
+    item_array<T> items() { return static_cast<T*>(this); }
+    item_array<const T> items() const { return static_cast<const T*>(this); }
 
 #if defined(__GNUC__) && !defined(NDEBUG)
     // a simpler version of "items" that GDB can evaluate
@@ -366,6 +369,7 @@ template<typename T,typename Item> void flexible_struct<T,Item>::operator delete
 
 template<typename T,typename Item> template<typename U>
 typename flexible_struct<T,Item>::item_array<U>::item_t *flexible_struct<T,Item>::item_array<U>::begin() const {
+    static_assert(std::is_same_v<T,std::remove_cv_t<U>>,"item_offset is relative to T, not flexible_struct");
     return reinterpret_cast<item_t*>(reinterpret_cast<byte_t*>(self) + item_offset);
 }
 
@@ -383,7 +387,11 @@ struct triangle_obj_common {
 /* Despite being named triangle, this is actually a simplex with a dimension
    that is always one less than the dimension of the scene. This is only a
    triangle when the scene has a dimension of three. */
-template<typename Store> struct triangle : triangle_obj_common, primitive<Store>, flexible_struct<triangle<Store>,vector<Store> > {
+template<typename Store> struct ALLOW_EBO triangle :
+        primitive<Store>, // must be first
+        triangle_obj_common,
+        flexible_struct<triangle<Store>,vector<Store>>
+{
     typedef typename triangle::flexible_struct flex_base;
 
     real d;
@@ -500,7 +508,11 @@ struct triangle_batch_obj_common {
     CONTAINED_PYTYPE_DEF
 };
 
-template<typename Store> struct triangle_batch : triangle_batch_obj_common, primitive_batch<Store>, flexible_struct<triangle_batch<Store>,vector<Store,v_real> > {
+template<typename Store> struct ALLOW_EBO triangle_batch :
+        primitive_batch<Store>, // must be first
+        triangle_batch_obj_common,
+        flexible_struct<triangle_batch<Store>,vector<Store,v_real>>
+{
     typedef typename triangle_batch::flexible_struct flex_base;
 
     v_real d;

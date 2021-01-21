@@ -14,15 +14,16 @@ def load_obj(file,nt=None):
         nt = wrapper.NTracer(3)
     elif nt.dimension != 3:
         raise ValueError('Wavefront .obj files only support 3-dimensional geometry')
-    
+
     m = render.Material((1,1,1))
-        
+
     vertices = []
     triangles = []
-    
+
     with open(file,'r') as input:
         for line in input:
             parts = line.split()
+            if len(parts) == 0: continue
             if parts[0] == 'v':
                 try:
                     coords = [float(p) for p in parts[1:4]]
@@ -37,8 +38,8 @@ def load_obj(file,nt=None):
                     coords = [vertices[index1(int(i.partition('/')[0],10))] for i in parts[1:]]
                 except (ValueError,IndexError):
                     raise FileFormatError()
-            
+
                 for i in range(1,len(coords)-1):
                     triangles.append(nt.TrianglePrototype([coords[0],coords[i],coords[i+1]],m))
-                
+
     return triangles

@@ -48,6 +48,15 @@
   #endif
 #endif
 
+#if defined(_MSC_VER)
+/* As of MSVC 2019, the MSVC compiler does not perform empty base class
+optimization on classes that use multiple-inheritance, unless this attribute is
+used. */
+  #define ALLOW_EBO __declspec(empty_bases)
+#else
+  #define ALLOW_EBO
+#endif
+
 
 #if defined(_WIN32) || defined(__CYGWIN__) || defined(__BEOS__)
   #define SHARED(RET) __declspec(dllexport) RET

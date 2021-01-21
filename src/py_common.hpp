@@ -358,7 +358,7 @@ template<typename T> int clear_idict(PyObject *self) {
 
 template<typename T,typename Base,bool AllowIndirect=false,bool InPlace=(alignof(T) <= PYOBJECT_ALIGNMENT)> struct simple_py_wrapper : Base {
     T base;
-    PY_MEM_NEW_DELETE
+
     template<typename... Args> simple_py_wrapper(Args&&... args) : base(std::forward<Args>(args)...) {
         PyObject_Init(reinterpret_cast<PyObject*>(this),Base::pytype());
     }
@@ -369,6 +369,9 @@ template<typename T,typename Base,bool AllowIndirect=false,bool InPlace=(alignof
 
     T &cast_base() { return base; }
     T &get_base() { return base; }
+
+    using Base::operator new;
+    using Base::operator delete;
 };
 
 template<typename T> T *alloc_uninitialized() {
@@ -389,7 +392,7 @@ template<typename T> void dealloc_uninitialized(T *x) {
 
 template<typename T,typename Base> struct simple_py_wrapper<T,Base,false,false> : Base {
     T *base;
-    PY_MEM_NEW_DELETE
+
     template<typename... Args> simple_py_wrapper(Args&&... args) : base(nullptr) {
         PyObject_Init(reinterpret_cast<PyObject*>(this),Base::pytype());
         new(&alloc_base()) T(std::forward<Args>(args)...);
@@ -406,6 +409,9 @@ template<typename T,typename Base> struct simple_py_wrapper<T,Base,false,false> 
 
     T &cast_base() { return *base; }
     T &get_base() { return *base; }
+
+    using Base::operator new;
+    using Base::operator delete;
 };
 
 template<typename T,typename Base> struct simple_py_wrapper<T,Base,true,true> : Base {
@@ -420,8 +426,6 @@ template<typename T,typename Base> struct simple_py_wrapper<T,Base,true,true> : 
         direct_indirect_data() {}
         ~direct_indirect_data() {}
     } base;
-
-    PY_MEM_NEW_DELETE
 
     template<typename... Args> simple_py_wrapper(Args&&... args) {
         PyObject_Init(reinterpret_cast<PyObject*>(this),Base::pytype());
@@ -457,14 +461,15 @@ template<typename T,typename Base> struct simple_py_wrapper<T,Base,true,true> : 
         return *base.indirect.ptr;
     }
     T &get_base() { return cast_base(); }
+
+    using Base::operator new;
+    using Base::operator delete;
 };
 
 template<typename T,typename Base> struct simple_py_wrapper<T,Base,true,false> : Base {
     storage_mode mode;
     T *base;
     PyObject *owner;
-
-    PY_MEM_NEW_DELETE
 
     template<typename... Args> simple_py_wrapper(Args&&... args) {
         PyObject_Init(reinterpret_cast<PyObject*>(this),Base::pytype());
@@ -494,6 +499,9 @@ template<typename T,typename Base> struct simple_py_wrapper<T,Base,true,false> :
 
     T &cast_base() { return *base; }
     T &get_base() { return *base; }
+
+    using Base::operator new;
+    using Base::operator delete;
 };
 
 #define CONTAINED_PYTYPE_DEF \

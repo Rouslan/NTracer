@@ -139,6 +139,7 @@ PyTypeObject *material::_pytype = nullptr;
 struct ROOT ## _obj_base : py::pyobj_subclass { \
     CONTAINED_PYTYPE_DEF \
     PyObject_HEAD \
+    PY_MEM_NEW_DELETE \
 }; \
 template<> struct _wrapped_type<n_ ## ROOT> { \
     typedef simple_py_wrapper<n_ ## ROOT,ROOT ## _obj_base> type; \
@@ -202,33 +203,30 @@ struct obj_CameraAxes : py::pyobj_subclass {
     }
 };
 
-
-struct obj_CompositeScene;
-struct composite_scene_obj_base : obj_Scene{
+struct composite_scene_base : obj_Scene {
     CONTAINED_PYTYPE_DEF
-};
-struct obj_CompositeScene : private simple_py_wrapper<composite_scene<module_store>,composite_scene_obj_base>, virtual py::pyobj_subclass {
-    friend PyObject *obj_CompositeScene_new(PyTypeObject*,PyObject*,PyObject*);
 
     PyObject *idict;
     PyObject *weaklist;
     PY_MEM_GC_NEW_DELETE
 
-    template<typename... T> obj_CompositeScene(T&&... x) : simple_py_wrapper(std::forward<T>(x)...), idict(nullptr), weaklist(nullptr) {
-        _get_base = &obj_CompositeScene::scene_get_base;
+    composite_scene_base() : idict{nullptr}, weaklist{nullptr} {
+        _get_base = &scene_get_base;
     }
 
-    ~obj_CompositeScene() {
+    ~composite_scene_base() {
         Py_XDECREF(idict);
         if(weaklist) PyObject_ClearWeakRefs(py::ref(this));
     }
 
-    using simple_py_wrapper::get_base;
-    using simple_py_wrapper::cast_base;
-    using composite_scene_obj_base::pytype;
-
-    static scene &scene_get_base(obj_Scene *self) { return static_cast<obj_CompositeScene*>(self)->get_base(); }
+    static scene &scene_get_base(obj_Scene *self);
 };
+
+typedef simple_py_wrapper<composite_scene<module_store>,composite_scene_base> obj_CompositeScene;
+
+scene &composite_scene_base::scene_get_base(obj_Scene *self) {
+    return static_cast<obj_CompositeScene*>(self)->get_base();
+}
 
 template<> struct _wrapped_type<composite_scene<module_store>> {
     typedef obj_CompositeScene type;
@@ -381,6 +379,7 @@ struct py_ray_intersection {
 struct py_ray_intersection_obj_base : py::pyobj_subclass {
     CONTAINED_PYTYPE_DEF
     PyObject_HEAD
+    PY_MEM_NEW_DELETE
 };
 template<> struct _wrapped_type<py_ray_intersection> {
     typedef simple_py_wrapper<py_ray_intersection,py_ray_intersection_obj_base> type;
@@ -391,6 +390,7 @@ template<> struct _wrapped_type<py_ray_intersection> {
 struct aabb_obj_base : py::pyobj_subclass {
     CONTAINED_PYTYPE_DEF
     PyObject_HEAD
+    PY_MEM_NEW_DELETE
 };
 
 template<> struct _wrapped_type<n_aabb> {
@@ -435,7 +435,7 @@ template<typename T,bool Var,bool InPlace=(alignof(typename T::actual) <= PYOBJE
     actual base;
 
     static void *operator new(size_t,size_t dimension) {
-        void *ptr = PyObject_Malloc(base_size);
+        void *ptr = PyObject_Malloc(base_size());
         if(!ptr) throw std::bad_alloc();
         return ptr;
     }
@@ -451,16 +451,16 @@ template<typename T,bool Var,bool InPlace=(alignof(typename T::actual) <= PYOBJE
         return base;
     }
 
-    static const size_t base_size;
-    static const size_t item_size = 0;
+    // these need to be functions to avoid static initialization order issues
+    static const size_t base_size();
+    static const size_t item_size() { return 0; }
 };
 
-#define COMMA_WORKAROUND tproto_base<T,Var,InPlace>
-template<typename T,bool Var,bool InPlace> const size_t tproto_base<T,Var,InPlace>::base_size =
-    T::actual::item_offset
-    + sizeof(typename T::point_t)*module_store::required_d
-    + offsetof(COMMA_WORKAROUND,base);
-#undef COMMA_WORKAROUND
+template<typename T,bool Var,bool InPlace> const size_t tproto_base<T,Var,InPlace>::base_size() {
+    return actual::item_offset
+        + sizeof(typename T::point_t)*module_store::required_d
+        + offsetof(tproto_base,base);
+}
 
 template<typename T,bool Var> struct tproto_base<T,Var,false> : T {
     typedef typename T::actual actual;
@@ -469,7 +469,7 @@ template<typename T,bool Var> struct tproto_base<T,Var,false> : T {
     std::unique_ptr<actual> base;
 
     static void *operator new(size_t,size_t) {
-        void *ptr = PyObject_Malloc(base_size);
+        void *ptr = PyObject_Malloc(base_size());
         if(!ptr) throw std::bad_alloc();
         return ptr;
     }
@@ -487,10 +487,13 @@ template<typename T,bool Var> struct tproto_base<T,Var,false> : T {
         return *base;
     }
 
-    static const size_t base_size;
-    static const size_t item_size = 0;
+    // these need to be functions to avoid static initialization order issues
+    static const size_t base_size();
+    static const size_t item_size() { return 0; }
 };
-template<typename T,bool Var> const size_t tproto_base<T,Var,false>::base_size = sizeof(tproto_base<T,Var,false>);
+template<typename T,bool Var> const size_t tproto_base<T,Var,false>::base_size() {
+    return sizeof(tproto_base);
+}
 
 template<typename T> struct tproto_base<T,true,true> : T {
     typedef typename T::actual actual;
@@ -499,7 +502,7 @@ template<typename T> struct tproto_base<T,true,true> : T {
     actual base;
 
     static void *operator new(size_t,size_t dimension) {
-        void *ptr = PyObject_Malloc(base_size + item_size * dimension);
+        void *ptr = PyObject_Malloc(base_size() + item_size() * dimension);
         if(!ptr) throw std::bad_alloc();
         return ptr;
     }
@@ -515,13 +518,16 @@ template<typename T> struct tproto_base<T,true,true> : T {
         return base;
     }
 
-    static const size_t base_size;
-    static const size_t item_size;
+    // these need to be functions to avoid static initialization order issues
+    static const size_t base_size();
+    static const size_t item_size();
 };
-#define COMMA_WORKAROUND tproto_base<T,true,true>
-template<typename T> const size_t tproto_base<T,true,true>::base_size = T::actual::item_offset + offsetof(COMMA_WORKAROUND,base);
-#undef COMMA_WORKAROUND
-template<typename T> const size_t tproto_base<T,true,true>::item_size = T::actual::item_size;
+template<typename T> const size_t tproto_base<T,true,true>::base_size() {
+    return T::actual::item_offset + offsetof(tproto_base,base);
+}
+template<typename T> const size_t tproto_base<T,true,true>::item_size() {
+    return T::actual::item_size;
+}
 
 typedef tproto_base<triangle_prototype_obj_base,!module_store::required_d> obj_TrianglePrototype;
 template<> struct _wrapped_type<n_triangle_prototype> {
@@ -544,15 +550,16 @@ template<typename T> struct n_detatched_triangle_point {
 template<typename T> struct detatched_triangle_point_obj_base : py::pyobj_subclass {
     CONTAINED_PYTYPE_DEF
     PyObject_HEAD
+    PY_MEM_NEW_DELETE
 
     static PyGetSetDef getset[];
 };
-template<typename T> struct _wrapped_type<n_detatched_triangle_point<T> > {
-    typedef simple_py_wrapper<n_detatched_triangle_point<T>,detatched_triangle_point_obj_base<T> > type;
+template<typename T> struct _wrapped_type<n_detatched_triangle_point<T>> {
+    typedef simple_py_wrapper<n_detatched_triangle_point<T>,detatched_triangle_point_obj_base<T>> type;
 };
 
 template<typename T> PyObject *to_pyobject(const triangle_point<module_store,T> &tp) {
-    return py::ref(new wrapped_type<n_detatched_triangle_point<T> >(tp));
+    return py::ref(new wrapped_type<n_detatched_triangle_point<T>>(tp));
 }
 
 constexpr char triangle_point_data_name[] = FULL_MODULE_STR ".TrianglePointData";
@@ -578,7 +585,7 @@ primitive_prototype<module_store> &obj_PrimitivePrototype::get_base() {
 SIMPLE_WRAPPER(point_light);
 SIMPLE_WRAPPER(global_light);
 
-template<typename T> struct cs_light_list : T, py::pyobj_subclass {
+template<typename T> struct ALLOW_EBO cs_light_list : T, py::pyobj_subclass {
     static PySequenceMethods sequence_methods;
     static PyMethodDef methods[];
 
@@ -915,7 +922,7 @@ PyGetSetDef obj_CompositeScene_getset[] = {
     {NULL}
 };
 
-PyTypeObject composite_scene_obj_base::_pytype = make_pytype(
+PyTypeObject composite_scene_base::_pytype = make_pytype(
     FULL_MODULE_STR ".CompositeScene",
     sizeof(obj_CompositeScene),
     {
@@ -2553,7 +2560,7 @@ FIX_STACK_ALIGN PyObject *obj_TrianglePrototype_new(PyTypeObject *type,PyObject 
         auto points = points_for_triangle(points_obj);
         size_t dim = points[0].dimension();
 
-        auto ptr = py::check_obj(type->tp_alloc(type,obj_TrianglePrototype::item_size ? dim : 0));
+        auto ptr = py::check_obj(type->tp_alloc(type,obj_TrianglePrototype::item_size() ? dim : 0));
 
         try {
             auto &base = reinterpret_cast<obj_TrianglePrototype*>(ptr)->alloc_base(dim);
@@ -2606,9 +2613,9 @@ PyGetSetDef obj_TrianglePrototype_getset[] = {
 
 PyTypeObject triangle_prototype_obj_base::_pytype = make_pytype(
     FULL_MODULE_STR ".TrianglePrototype",
-    obj_TrianglePrototype::base_size,
+    obj_TrianglePrototype::base_size(),
     {
-    .tp_itemsize = static_cast<Py_ssize_t>(obj_TrianglePrototype::item_size),
+    .tp_itemsize = static_cast<Py_ssize_t>(obj_TrianglePrototype::item_size()),
     .tp_dealloc = destructor_dealloc<obj_TrianglePrototype>::value,
     .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE,
     .tp_getset = obj_TrianglePrototype_getset,
@@ -2642,7 +2649,7 @@ FIX_STACK_ALIGN PyObject *obj_TriangleBatchPrototype_new(PyTypeObject *type,PyOb
             }
         }
 
-        auto ptr = py::check_obj(type->tp_alloc(type,obj_TriangleBatchPrototype::item_size ? dimension : 0));
+        auto ptr = py::check_obj(type->tp_alloc(type,obj_TriangleBatchPrototype::item_size() ? dimension : 0));
         try {
             new(&reinterpret_cast<obj_TriangleBatchPrototype*>(ptr)->alloc_base(dimension))
                 n_triangle_batch_prototype(dimension,[&](size_t i){ return &vals[i]->get_base(); });
@@ -2678,9 +2685,9 @@ PyGetSetDef obj_TriangleBatchPrototype_getset[] = {
 
 PyTypeObject triangle_batch_prototype_obj_base::_pytype = make_pytype(
     FULL_MODULE_STR ".TriangleBatchPrototype",
-    obj_TriangleBatchPrototype::base_size,
+    obj_TriangleBatchPrototype::base_size(),
     {
-    .tp_itemsize = static_cast<Py_ssize_t>(obj_TriangleBatchPrototype::item_size),
+    .tp_itemsize = static_cast<Py_ssize_t>(obj_TriangleBatchPrototype::item_size()),
     .tp_dealloc = destructor_dealloc<obj_TriangleBatchPrototype>::value,
     .tp_getset = obj_TriangleBatchPrototype_getset,
     .tp_base = obj_PrimitivePrototype::pytype(),
