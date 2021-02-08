@@ -190,16 +190,20 @@ namespace var {
             items = b.items;
             b.items = nullptr;
             b.allocator = nullptr;
+            b.size = 0;
         }
 
         ~item_array() {
-            deallocate();
+            if(allocator) deallocate();
         }
 
-        // this only works if allocator is not null or the sizes are the same
         item_array &operator=(const item_array &b) {
             if(size != b.size) {
-                deallocate();
+                if(allocator) deallocate();
+                else {
+                    assert(b.allocator);
+                    allocator = b.allocator;
+                }
                 size = b.size;
                 allocate();
             }
@@ -209,12 +213,13 @@ namespace var {
         }
 
         item_array &operator=(item_array &&b) noexcept {
-            deallocate();
+            if(allocator) deallocate();
             size = b.size;
             items = b.items;
             allocator = b.allocator;
             b.items = nullptr;
             b.allocator = nullptr;
+            b.size = 0;
             return *this;
         }
 
@@ -237,7 +242,7 @@ namespace var {
         }
 
         void deallocate() {
-            if(allocator) allocator->dealloc(
+            allocator->dealloc(
                 items,
                 RealItems::get(size) * sizeof(T),
                 simd::largest_fit<T>(size) * sizeof(T));

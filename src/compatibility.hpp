@@ -6,6 +6,10 @@
 #define __has_builtin(X) 0
 #endif
 
+/* needed for MSVC to allow std::aligned_storage to have alignment greater than
+alignof(max_align_t) */
+#define _ENABLE_EXTENDED_ALIGNED_STORAGE
+
 #ifdef __GNUC__
   #define LIKELY(X) __builtin_expect(static_cast<bool>(X),1)
   #define UNLIKELY(X) __builtin_expect(static_cast<bool>(X),0)

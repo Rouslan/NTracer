@@ -1,4 +1,4 @@
 include *.txt *.rst
 #recursive-include doc conf.py Makefile make.bat _static *.rst
-recursive-include src *.hpp *.hpp.in *.json
+recursive-include src *.hpp *.hpp.in *.json feature_test.c
 recursive-include support *.py

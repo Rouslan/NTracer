@@ -2,6 +2,8 @@
 #ifndef py_common_hpp
 #define py_common_hpp
 
+#include "compatibility.hpp"
+
 /* needs to be included before Python.h to prevent an erroneous redefinition
    under MinGW */
 #include <cmath>
@@ -13,7 +15,6 @@
 #include <utility>
 #include <tuple>
 
-#include "compatibility.hpp"
 #include "simd.hpp"
 
 

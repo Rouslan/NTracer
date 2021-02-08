@@ -26,7 +26,9 @@ fewer dimensions), the library uses specialized routines with the number of
 dimensions hard-coded, which offer better performance by avoiding the looping
 and heap allocation that the generic versions require.
 
-The main goal is to aid in the visualization of higher-dimensional space.
+The main goal is to aid in the visualization of higher-dimensional space. Note
+that this ray-tracer has a very limited feature-set and is not as efficient as
+it could be for 3D.
 
 There is special support for Pygame, but it is not a requirement. However, the
 included example scripts, hypercube.py and polytope.py, depend on it.

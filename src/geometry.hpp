@@ -12,7 +12,7 @@ typedef float real;
 
 
 namespace impl {
-    template<typename T,typename Base=v_expr<T> > struct vector_expr;
+    template<typename T,typename Base=v_expr<T>> struct vector_expr;
 }
 
 template<typename T,typename Base> constexpr Base &v_expr(impl::vector_expr<T,Base> &e) {
@@ -38,14 +38,14 @@ namespace impl {
     };
     template<typename VExpr,size_t Size> struct _v_item_t<vector_expr_adapter<VExpr>,Size> : _v_item_t<VExpr,Size> {};
 
-    template<typename Op,typename... T> using vector_op_expr = vector_expr_adapter<v_op_expr<Op,T...> >;
+    template<typename Op,typename... T> using vector_op_expr = vector_expr_adapter<v_op_expr<Op,T...>>;
 
 
     template<typename Store,typename T=typename Store::item_t> struct v_axis;
     template<typename Store,typename T,size_t Size> struct _v_item_t<v_axis<Store,T>,Size> {
         typedef simd::v_type<typename Store::item_t,Size> type;
     };
-    template<typename Store,typename T> struct v_axis : vector_expr<v_axis<Store,T> > {
+    template<typename Store,typename T> struct v_axis : vector_expr<v_axis<Store,T>> {
         friend struct v_expr<v_axis>;
 
         typedef T item_t;
@@ -75,7 +75,7 @@ namespace impl {
     template<typename T,size_t Size> struct _v_item_t<v_interleave1<T>,Size> {
         typedef simd::v_type<typename T::item_t::item_t,Size> type;
     };
-    template<typename T> struct v_interleave1 : vector_expr<v_interleave1<T> > {
+    template<typename T> struct v_interleave1 : vector_expr<v_interleave1<T>> {
         friend struct v_expr<v_interleave1>;
 
         typedef typename T::item_t::item_t item_t;
@@ -102,7 +102,7 @@ namespace impl {
     template<typename T,size_t TSize> struct v_broadcast;
     template<typename T,size_t TSize,size_t Size> struct _v_item_t<v_broadcast<T,TSize>,Size> {
         static_assert(Size == 1,"vectorized elements cannot be further vectorized");
-        typedef simd::scalar<simd::v_type<typename T::item_t,TSize> > type;
+        typedef simd::scalar<simd::v_type<typename T::item_t,TSize>> type;
     };
     template<typename T,size_t TSize> struct v_broadcast : vector_expr<v_broadcast<T,TSize> > {
         friend struct v_expr<v_broadcast>;
@@ -128,7 +128,7 @@ namespace impl {
 
     template<typename Store,typename T=typename Store::item_t> struct vector;
     template<typename Store,typename T,size_t Size> struct _v_item_t<vector<Store,T>,Size> : _v_item_t<v_array<Store,T>,Size> {};
-    template<typename Store,typename T> struct vector : vector_expr_adapter<v_array<Store,T> > {
+    template<typename Store,typename T> struct vector : vector_expr_adapter<v_array<Store,T>> {
         typedef typename vector::vector_expr_adapter base_t;
         typedef T item_t;
 
@@ -199,15 +199,15 @@ namespace impl {
         }
     };
 
-    template<typename T> using vector_multiply = vector_op_expr<op_multiply,T,v_repeat<s_item_t<T> > >;
+    template<typename T> using vector_multiply = vector_op_expr<op_multiply,T,v_repeat<s_item_t<T>>>;
     template<typename T> using vector_divide = vector_op_expr<
 #ifdef MULT_RECIPROCAL_INSTEAD_OF_DIV
         op_multiply
 #else
         op_divide
 #endif
-        ,T,v_repeat<s_item_t<T> > >;
-    template<typename T> using vector_rdivide = vector_op_expr<op_divide,v_repeat<s_item_t<T> >,T>;
+        ,T,v_repeat<s_item_t<T>>>;
+    template<typename T> using vector_rdivide = vector_op_expr<op_divide,v_repeat<s_item_t<T>>,T>;
 
     template<typename T,typename Base> struct vector_expr : protected Base {
         friend Base;
@@ -233,11 +233,11 @@ namespace impl {
         }
 
         vector_multiply<T> operator*(s_item_t<T> b) const {
-            return {*this,v_repeat<s_item_t<T> >(this->size(),b)};
+            return {*this,v_repeat<s_item_t<T>>(this->size(),b)};
         }
 
         vector_divide<T> operator/(s_item_t<T> b) const {
-            return {*this,v_repeat<s_item_t<T> >(this->size(),
+            return {*this,v_repeat<s_item_t<T>>(this->size(),
 #ifdef MULT_RECIPROCAL_INSTEAD_OF_DIV
                 1/b
 #else
@@ -260,7 +260,7 @@ namespace impl {
             return operator/(absolute());
         }
 
-        template<typename F> vector_expr_adapter<v_apply<T,F> > apply(F f) const {
+        template<typename F> vector_expr_adapter<v_apply<T,F>> apply(F f) const {
             return {*this,f};
         }
 
@@ -276,7 +276,7 @@ namespace impl {
         return {v_repeat<s_item_t<T> >{b.size(),a},b};
     }
 
-    template<typename A,typename BaseA,typename B,typename BaseB> s_item_t<v_op_expr<op_multiply,A,B> >
+    template<typename A,typename BaseA,typename B,typename BaseB> s_item_t<v_op_expr<op_multiply,A,B>>
     dot(const vector_expr<A,BaseA> &a,const vector_expr<B,BaseB> &b) {
         return (::v_expr(a) * ::v_expr(b)).reduce_add();
     }
@@ -290,7 +290,7 @@ template<typename Store,typename T> void swap(vector<Store,T> &a,vector<Store,T>
 }
 
 template<typename Store,size_t Size=simd::v_sizes<typename Store::item_t>::value[0]>
-using vector_batch = vector<Store,simd::v_type<typename Store::item_t,Size> >;
+using vector_batch = vector<Store,simd::v_type<typename Store::item_t,Size>>;
 
 /* This function only accepts actual vectors because using a batch vector
    expression to compute a single vector is wasteful. It is better to call
@@ -849,29 +849,36 @@ template<typename T> struct smaller_store {
 };
 
 template<typename T> struct _smaller;
-template<typename Store> struct _smaller<matrix<Store> > {
+template<typename Store> struct _smaller<matrix<Store>> {
     typedef matrix<typename smaller_store<Store>::type> type;
 };
 
 template<typename T> using smaller = typename _smaller<T>::type;
 
+namespace impl {
+    template<typename Store,typename Fr,typename Fs>
+    void cross_(size_t dimension,Fr r,smaller<matrix<Store>> &tmp,Fs vs) {
+        real f = dimension % 2 ? real(1) : real(-1);
+
+        for(size_t i=0; i<dimension; ++i) {
+            for(size_t j=0; j<dimension-1; ++j) {
+                for(size_t k=0; k<i; ++k) tmp[k][j] = vs(j,k);
+                for(size_t k=i+1; k<dimension; ++k) tmp[k-1][j] = vs(j,k);
+            }
+            r(i,f * tmp.determinant_inplace());
+            f = -f;
+        }
+    }
+}
 
 // generalized cross product
-template<typename Store> void cross_(vector<Store> &r,smaller<matrix<Store> > &tmp,const vector<Store> *vs) {
+template<typename Store> void cross_(vector<Store> &r,smaller<matrix<Store>> &tmp,const vector<Store> *vs) {
     assert(r.dimension() == (tmp.dimension()+1));
-
-    typename Store::item_t f = r.dimension() % 2 ? real(1) : real(-1);
-
-    for(size_t i=0; i<r.dimension(); ++i) {
-        assert(i+1 == r.dimension() || r.dimension() == vs[i].dimension());
-
-        for(size_t j=0; j<r.dimension()-1; ++j) {
-            for(size_t k=0; k<i; ++k) tmp[k][j] = vs[j][k];
-            for(size_t k=i+1; k<r.dimension(); ++k) tmp[k-1][j] = vs[j][k];
-        }
-        r[i] = f * tmp.determinant_inplace();
-        f = -f;
-    }
+    impl::cross_<Store>(
+        r.dimension(),
+        [&](size_t i,real val) { r[i] = val; },
+        tmp,
+        [=](size_t i,size_t j) { return vs[i][j]; });
 }
 
 // generalized cross product
@@ -883,6 +890,19 @@ template<typename Store> vector<Store> cross(const vector<Store> *vs) {
     cross_(r,tmp,vs);
 
     return r;
+}
+
+// generalized cross product
+template<typename Store,size_t Size=simd::v_sizes<typename Store::item_t>::value[0]>
+void cross_(vector_batch<Store,Size> &r,smaller<matrix<Store>> &tmp,const vector_batch<Store,Size> *vs) {
+    assert(r.dimension() == (tmp.dimension()+1));
+    for(size_t k=0; k<Size; ++k) {
+        impl::cross_<Store>(
+            r.dimension(),
+            [&,k](size_t i,real val) { r[i][k] = val; },
+            tmp,
+            [=](size_t i,size_t j) { return vs[i][j][k]; });
+    }
 }
 
 #endif

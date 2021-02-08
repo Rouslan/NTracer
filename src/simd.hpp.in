@@ -18,41 +18,66 @@
 //     #define SUPPORT_FMA
 // #endif
 
-#if defined(__AVX512BW__)
+#if defined(__AVX512BW__) && !defined(SUPPORT_AVX512BW)
     #define SUPPORT_AVX512BW
 #endif
 
-#if defined(__AVX512CD__)
+#if defined(__AVX512CD__) && !defined(SUPPORT_AVX512CD)
     #define SUPPORT_AVX512CD
 #endif
 
-#if defined(__AVX512DQ__)
+#if defined(__AVX512DQ__) && !defined(SUPPORT_AVX512DQ)
     #define SUPPORT_AVX512DQ
 #endif
 
-#if defined(__AVX512ER__)
+#if defined(__AVX512ER__) && !defined(SUPPORT_AVX512ER)
     #define SUPPORT_AVX512ER
 #endif
 
-#if defined(__AVX512F__)
+#if defined(__AVX512F__) && !defined(SUPPORT_AVX512F)
     #define SUPPORT_AVX512F
 #endif
 
-#if defined(__AVX512PF__)
+#if defined(__AVX512PF__) && !defined(SUPPORT_AVX512PF)
     #define SUPPORT_AVX512PF
 #endif
 
-#if defined(__AVX512VL__)
+#if defined(__AVX512VL__) && !defined(SUPPORT_AVX512VL)
     #define SUPPORT_AVX512VL
 #endif
 
-#if defined(__AVX2__)
+#if (defined(__AVX512F__) || defined(__AVX2__)) && !defined(SUPPORT_AVX2)
     #define SUPPORT_AVX2
 #endif
 
-#if defined(SUPPORT_AVX2) || defined(__AVX__)
+#if (defined(SUPPORT_AVX2) || defined(__AVX__)) && !defined(SUPPORT_AVX)
     #define SUPPORT_AVX
 #endif
+
+#if (defined(SUPPORT_AVX) || defined(__SSE4_2__)) && !defined(SUPPORT_SSE4_2)
+    #define SUPPORT_SSE4_2
+#endif
+
+#if (defined(SUPPORT_SSE4_2) || defined(__SSE4_1__)) && !defined(SUPPORT_SSE4_1)
+    #define SUPPORT_SSE4_1
+#endif
+
+#if (defined(SUPPORT_SSE4_1) || defined(__SSSE3__)) && !defined(SUPPORT_SSSE3)
+    #define SUPPORT_SSSE3
+#endif
+
+#if (defined(SUPPORT_SSSE3) || defined(__SSE3__)) && !defined(SUPPORT_SSE3)
+    #define SUPPORT_SSE3
+#endif
+
+#if (defined(SUPPORT_SSE3) || defined(__SSE2__) || defined(_M_AMD64) || (defined(_M_IX86_FP) && _M_IX86_FP >= 2)) && !defined(SUPPORT_SSE2)
+    #define SUPPORT_SSE2
+#endif
+
+#if (defined(SUPPORT_SSE2) || defined(__SSE__) || (defined(_M_IX86_FP) && _M_IX86_FP >= 1)) && !defined(SUPPORT_SSE)
+    #define SUPPORT_SSE
+#endif
+
 
 #if defined(SUPPORT_AVX512BW) || \
     defined(SUPPORT_AVX512CD) || \
@@ -65,36 +90,29 @@
     #include <immintrin.h>
 #endif
 
-#if defined(SUPPORT_AVX) || defined(__SSE4_2__)
-    #define SUPPORT_SSE4_2
+#ifdef SUPPORT_SSE4_2
     #include <nmmintrin.h>
 #endif
 
-#if defined(SUPPORT_SSE4_2) || defined(__SSE4_1__)
-    #define SUPPORT_SSE4_1
+#ifdef SUPPORT_SSE4_1
     #include <smmintrin.h>
 #endif
 
-#if defined(SUPPORT_SSE4_1) || defined(__SSSE3__)
-    #define SUPPORT_SSSE3
+#ifdef SUPPORT_SSSE3
     #include <tmmintrin.h>
 #endif
 
-#if defined(SUPPORT_SSSE3) || defined(__SSE3__)
-    #define SUPPORT_SSE3
+#ifdef SUPPORT_SSE3
     #include <pmmintrin.h>
 #endif
 
-#if defined(SUPPORT_SSE3) || defined(__SSE2__) || (defined(_M_IX86_FP) && _M_IX86_FP >= 2)
-    #define SUPPORT_SSE2
+#ifdef SUPPORT_SSE2
     #include <emmintrin.h>
 #endif
 
-#if defined(SUPPORT_SSE2) || defined(__SSE__) || (defined(_M_IX86_FP) && _M_IX86_FP >= 1)
-    #define SUPPORT_SSE
+#ifdef SUPPORT_SSE
     #include <xmmintrin.h>
 #endif
-
 
 #endif
 
@@ -451,6 +469,9 @@ namespace simd {
             assert(i==0);
             return data;
         }
+
+        item_t* array() { return &data; }
+        const item_t* array() const { return &data; }
     };
 
     FORCE_INLINE s_mask operator&&(s_mask a,s_mask b) {
@@ -545,14 +566,6 @@ namespace simd {
     OPERATOR_CMP(<=)
     OPERATOR_CMP(>=)
     #undef OPERATOR_CMP
-
-    template<typename T,typename F> FORCE_INLINE scalar<T> apply(F f,scalar<T> a) {
-        return scalar<T>(f(a.data));
-    }
-
-    template<typename T,typename F> FORCE_INLINE scalar<T> apply(F f,scalar<T> a,scalar<T> b) {
-        return scalar<T>(f(a.data,b.data));
-    }
 
     template<typename T,typename F> FORCE_INLINE T reduce(F f,scalar<T> x) { return x.data; }
 
@@ -652,6 +665,14 @@ namespace simd {
     template<typename T> constexpr bool is_v_type = detail::_is_v_type<T>::value;
     template<typename T> using single = typename detail::_single<T>::type;
     template<typename T,size_t Size=v_sizes<T>::value[0]> constexpr bool has_v_type = detail::_v_type<T,Size>::defined;
+
+    template<typename F,typename T1,typename... Tn>
+    v_type<std::decay_t<std::invoke_result_t<F,typename T1::item_t,typename Tn::item_t...>>,T1::size> apply(F f,const T1 &a,const Tn&... b) {
+        static_assert(((T1::size == Tn::size) && ...),"all inputs must have the same size");
+        v_type<std::decay_t<std::invoke_result_t<F,typename T1::item_t,typename Tn::item_t...>>,T1::size> r;
+        for(size_t i=0; i<T1::size; ++i) r[i] = f(a[i],b[i]...);
+        return r;
+    }
 
 //$ for type,size in V_CONFIGS
 //$ if min_support(type,size)
@@ -763,6 +784,9 @@ namespace simd {
         item_t operator[](size_t i) const {
             return data.s[i];
         }
+
+        item_t* array() { return data.s; }
+        const item_t* array() const { return data.s; }
 
 //$ if supported(reduce_add,type,size)
         static constexpr bool has_vec_reduce_add = true;
@@ -964,18 +988,6 @@ namespace simd {
 
     FORCE_INLINE $v_type operator-($v_type a) {
         return $v_type{${sub(type,size)}(${setzero(raw_type(type,size))}(),a.data.p)};
-    }
-
-    template<typename F> $v_type apply(F f,$v_type x) {
-        $v_type r;
-        for(size_t i=0; i<$size; ++i) r[i] = f(x[i]);
-        return r;
-    }
-
-    template<typename F> $v_type apply(F f,$v_type a,$v_type b) {
-        $v_type r;
-        for(size_t i=0; i<$size; ++i) r[i] = f(a[i],b[i]);
-        return r;
     }
 
     template<typename F> $type reduce(F f,$v_type x) {
@@ -1204,7 +1216,7 @@ namespace simd {
 //$ if have_avx512_mask(type,size)
         return $v_type{${mask_blend(type,size)}(m.data,a.data.p,b.data.p)};
 //$ elif supported(blendv,type,size)
-        return $v_type{${blendv(type,size)}(a.data.p,b.data.p,m.data)};
+        return $v_type{${blendv(type,size)}(b.data.p,a.data.p,m.data)};
 //$ else
         return $v_type{${or_(raw_type(type,size))}(
             ${and_(raw_type(type,size))}(m.data,a.data.p),
@@ -1214,9 +1226,9 @@ namespace simd {
 
     FORCE_INLINE $v_type &mask_set($v_type &a,$v_mask m,$v_type b) {
 //$ if have_avx512_mask(type,size)
-        a.data = ${mask_mov(type,size)}(a.data.p,m.data,b.data.p);
+        a.data.p = ${mask_mov(type,size)}(a.data.p,m.data,b.data.p);
 //$ else
-        a = mask_blend(m,a,b);
+        a = mask_blend(m,b,a);
 //$ endif
         return a;
     }
@@ -1256,17 +1268,19 @@ namespace simd {
 
 //$ AGGREGATE_START()
 //$ for type1,size1 in V_CONFIGS
-//$     v_type1 = "v_type" + suffix(type1,size1)
-//$     for type2,size2 in V_CONFIGS
-//$         v_type2 = "v_type" + suffix(type2,size2)
-//$         if type1 is not type2 and size1 == size2
-//$             if cvt_supported(type1,size1,type2,size2)
+//$     if min_support(type1,size1)
+//$         v_type1 = "v_type" + suffix(type1,size1)
+//$         for type2,size2 in V_CONFIGS
+//$             if min_support(type2,size2)
+//$                 v_type2 = "v_type" + suffix(type2,size2)
+//$                 if req_and(type1 is not type2,size1 == size2,cvt_supported(type1,size1,type2,size2))
     template<> FORCE_INLINE $v_type2 convert<$v_type2,$v_type1>($v_type1 x) {
         return $v_type2{${cvt(type1,size1,type2,size2)}(x.data.p)};
     }
+//$                 endif
 //$             endif
-//$         endif
-//$     endfor
+//$         endfor
+//$     endif
 //$ endfor
 //$ AGGREGATE_END()
 

@@ -639,6 +639,7 @@ class TmplState:
             'types': types,
             'cvt_supported': self._cvt_supported,
             'cvt': self._cvt,
+            'req_and': self._req_and,
             'AGGREGATE_START': self._aggregate_start,
             'AGGREGATE_END': self._aggregate_end}
         for name in intr_names:
@@ -648,6 +649,23 @@ class TmplState:
         self.outfile = outfile
         self._aggregate_output = None
         self._agg_f_stack_size = 0
+
+    @staticmethod
+    def _req_and(a,*bs):
+        while bs:
+            b,*bs = bs
+            a_set = isinstance(a,(set,frozenset))
+            b_set = isinstance(b,(set,frozenset))
+            if a_set:
+                if b_set:
+                    a = a.union(b)
+                else:
+                    a = a if b else False
+            elif b_set:
+                a = b if a else False
+            else:
+                a = a and b
+        return a
 
     def _check_agg_stack_exit(self):
         if self._aggregate_output is not None and self._agg_f_stack_size == len(self.implied_flag_stack):

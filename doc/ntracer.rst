@@ -1514,6 +1514,15 @@ can't add a tuple and a :py:class:`Vector` together).
         :param material: A material to apply to the simplex.
         :type material: :py:class:`.render.Material`
 
+    .. py:method:: to_points() -> tuple
+
+        Calculate the vertices of the simplex.
+
+        If the simplex was created from vertices, it's better to save those
+        vertices than to recalculate them with this method. The values returned
+        by this method will not be exactly the same as those supplied to
+        :py:method:`from_points`, do to limited precision.
+
     .. py:attribute:: d
 
         A value that equals :math:`-\text{face\_normal} \cdot \text{p1}`
@@ -1619,7 +1628,9 @@ can't add a tuple and a :py:class:`Vector` together).
     Instances of this class are read-only.
 
     :param t_prototypes: An iterable yielding exactly :py:const:`BATCH_SIZE`
-        instances of :py:class:`TrianglePrototype`.
+        instances of :py:class:`TrianglePrototype`. Alternatively, this can be
+        an instance of :py:class:`TriangleBatch` but this is not the recommended
+        way of creating instanced of this class.
 
     .. py:attribute:: dimension
 
@@ -1661,7 +1672,7 @@ can't add a tuple and a :py:class:`Vector` together).
         A simplex vertex.
 
 
-.. py:class:: TrianglePrototype(points,material)
+.. py:class:: TrianglePrototype(points[,material])
 
     Bases: :py:class:`PrimitivePrototype`
 
@@ -1673,8 +1684,12 @@ can't add a tuple and a :py:class:`Vector` together).
     Instances of this class are read-only.
 
     :param points: A sequence of vectors specifying the vertices of the simplex.
-        The number of vectors must equal their dimension.
-    :param material: A material to apply to the simplex.
+        The number of vectors must equal their dimension. Alternatively, this
+        can be an instance of :py:class:`Triangle` but this is not the
+        recommended way of creating instanced of this class.
+    :param material: A material to apply to the simplex. If ``points`` is an
+        instance of :py:class:`Triangle`, this parameter must be ``None`` or
+        omitted. Otherwise it is required.
     :type material: :py:class:`.render.Material`
 
     .. py:attribute:: dimension

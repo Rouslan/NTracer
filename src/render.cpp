@@ -71,7 +71,9 @@ struct instance_data_t {
     PyObject *vector_unpickle;
     PyObject *matrix_unpickle;
     PyObject *triangle_unpickle;
+    PyObject *triangle_batch_unpickle;
     PyObject *solid_unpickle;
+    PyObject *aabb_unpickle;
     interned_strings istrings;
 };
 
@@ -1527,7 +1529,7 @@ namespace impl {
             }
 
             auto item = get_tracerx_cache_item(mod,dim);
-            auto objdata = item.ctrs->vector(dim);
+            auto objdata = (*item.ctrs->vector)(dim);
             decode_float_ieee754(str.data(),dim,objdata.data);
             return objdata.obj.new_ref();
         } PY_EXCEPT_HANDLERS(nullptr)
@@ -1545,28 +1547,61 @@ namespace impl {
             }
 
             auto item = get_tracerx_cache_item(mod,dim);
-            auto objdata = item.ctrs->matrix(dim);
+            auto objdata = (*item.ctrs->matrix)(dim);
             decode_float_ieee754(str.data(),dim*dim,objdata.data);
             return objdata.obj.new_ref();
         } PY_EXCEPT_HANDLERS(nullptr)
     }
-    FIX_STACK_ALIGN PyObject *_triangle_unpickle(PyObject *mod,PyObject *arg) {
+    FIX_STACK_ALIGN PyObject *_triangle_unpickle(PyObject *mod,PyObject *arg) noexcept {
         try {
             auto args = from_pyobject<py::tuple>(arg);
             if(args.size() != 3) THROW_PYERR_STRING(TypeError,"_triangle_unpickle takes exactly 3 arguments");
 
             size_t dim = get_dimension(args[0].ref());
+            auto item = get_tracerx_cache_item(mod,dim);
+
             auto str = from_pyobject<py::bytes>(args[1]);
-            if(static_cast<size_t>(str.size()) != dim * (dim+1) * Py_ssize_t(sizeof(float))) {
+            if(static_cast<size_t>(str.size()) != dim * (dim+1) * sizeof(float)) {
                 PyErr_SetString(PyExc_ValueError,"triangle data is malformed");
                 return nullptr;
             }
             auto mat = checked_py_cast<material>(args[2].ref());
 
-            auto item = get_tracerx_cache_item(mod,dim);
-            auto objdata = item.ctrs->triangle(dim,mat);
+            auto objdata = (*item.ctrs->triangle)(dim,mat);
+
             for(size_t i=0; i<dim+1; ++i) decode_float_ieee754(str.data() + sizeof(float)*dim*i,dim,objdata.data[i]);
-            item.ctrs->triangle_extra(objdata.obj.ref());
+            (*item.ctrs->triangle_extra)(objdata.obj.ref());
+
+            return objdata.obj.new_ref();
+        } PY_EXCEPT_HANDLERS(nullptr)
+    }
+    FIX_STACK_ALIGN PyObject *_triangle_batch_unpickle(PyObject *mod,PyObject *arg) noexcept {
+        try {
+            auto args = from_pyobject<py::tuple>(arg);
+            if(args.size() < 3) THROW_PYERR_STRING(TypeError,"wrong number of arguments");
+
+            size_t dim = get_dimension(args[1].ref());
+            auto item = get_tracerx_cache_item(mod,dim);
+
+            size_t width = dim * item.ctrs->batch_size;
+
+            if(from_pyobject<size_t>(args[0]) != item.ctrs->batch_size) THROW_PYERR_STRING(
+                TypeError,
+                "The TriangleBatch instance was pickled with a different batch size. It cannot be loaded here.");
+
+            if(args.size() != 3+item.ctrs->batch_size) THROW_PYERR_STRING(TypeError,"wrong number of arguments");
+
+            auto str = from_pyobject<py::bytes>(args[2]);
+            if(static_cast<size_t>(str.size()) != width * (dim+1) * sizeof(float)) {
+                PyErr_SetString(PyExc_ValueError,"triangle batch data is malformed");
+                return nullptr;
+            }
+            for(size_t i=3; i<item.ctrs->batch_size+3; ++i) checked_py_cast<material>(args[i].ref());
+
+            auto objdata = (*item.ctrs->triangle_batch)(dim,reinterpret_cast<material**>(args.data()+3));
+
+            for(size_t i=0; i<dim+1; ++i) decode_float_ieee754(str.data() + sizeof(float)*width*i,width,objdata.data[i]);
+            (*item.ctrs->triangle_batch_extra)(objdata.obj.ref());
 
             return objdata.obj.new_ref();
         } PY_EXCEPT_HANDLERS(nullptr)
@@ -1589,10 +1624,30 @@ namespace impl {
             auto mat = checked_py_cast<material>(args[2].ref());
 
             auto item = get_tracerx_cache_item(mod,dim);
-            auto objdata = item.ctrs->solid(dim,str.data()[0],mat);
+            auto objdata = (*item.ctrs->solid)(dim,str.data()[0],mat);
             decode_float_ieee754(str.data() + 1,dim*dim,objdata.orientation);
             decode_float_ieee754(str.data() + dim*dim*sizeof(float) + 1,dim,objdata.position);
             item.ctrs->solid_extra(objdata.obj.ref());
+
+            return objdata.obj.new_ref();
+        } PY_EXCEPT_HANDLERS(nullptr)
+    }
+    FIX_STACK_ALIGN PyObject *_aabb_unpickle(PyObject *mod,PyObject *arg) {
+        try {
+            auto args = from_pyobject<py::tuple>(arg);
+            if(args.size() != 2) THROW_PYERR_STRING(TypeError,"_aabb_unpickle takes exactly 2 arguments");
+
+            size_t dim = get_dimension(args[0].ref());
+            auto str = from_pyobject<py::bytes>(args[1]);
+            if(static_cast<size_t>(str.size()) != dim * 2 * sizeof(float)) {
+                PyErr_SetString(PyExc_ValueError,"AABB data is malformed");
+                return nullptr;
+            }
+
+            auto item = get_tracerx_cache_item(mod,dim);
+            auto objdata = (*item.ctrs->aabb)(dim);
+            decode_float_ieee754(str.data(),dim,objdata.start);
+            decode_float_ieee754(str.data() + dim*sizeof(float),dim,objdata.end);
 
             return objdata.obj.new_ref();
         } PY_EXCEPT_HANDLERS(nullptr)
@@ -1610,7 +1665,9 @@ PyMethodDef func_table[] = {
     {"_vector_unpickle",&impl::_vector_unpickle,METH_VARARGS,NULL},
     {"_matrix_unpickle",&impl::_matrix_unpickle,METH_VARARGS,NULL},
     {"_triangle_unpickle",&impl::_triangle_unpickle,METH_VARARGS,NULL},
+    {"_triangle_batch_unpickle",&impl::_triangle_batch_unpickle,METH_VARARGS,NULL},
     {"_solid_unpickle",&impl::_solid_unpickle,METH_VARARGS,NULL},
+    {"_aabb_unpickle",&impl::_aabb_unpickle,METH_VARARGS,NULL},
     {NULL}
 };
 
@@ -1636,6 +1693,11 @@ inline instance_data_t *get_instance_data() {
     return get_instance_data(m);
 }
 
+py::bytes reduce_triangle_values(size_t width,size_t dim,const float *const *data) {
+    py::bytes values{static_cast<Py_ssize_t>(sizeof(float)*width*(dim+1))};
+    for(size_t i=0; i<dim+1; ++i) encode_float_ieee754(values.data() + sizeof(float)*width*i,width,data[i]);
+    return values;
+}
 
 const package_common package_common_data = {
     &read_color,
@@ -1650,13 +1712,22 @@ const package_common package_common_data = {
             py::make_tuple(dim,encode_float_ieee754(dim*dim,data))).new_ref();
     },
     [](size_t dim,const float *const *data,material *m) -> PyObject* {
-        py::bytes values{static_cast<Py_ssize_t>(sizeof(float)*dim*(dim+1))};
-
-        for(size_t i=0; i<dim+1; ++i) encode_float_ieee754(values.data() + sizeof(float)*dim*i,dim,data[i]);
-
         return py::make_tuple(
             get_instance_data()->triangle_unpickle,
-            py::make_tuple(dim,values,py::ref(m))).new_ref();
+            py::make_tuple(
+                dim,
+                reduce_triangle_values(dim,dim,data),
+                py::ref(m))).new_ref();
+    },
+    [](size_t batch_size,size_t dim,const float *const *data,py::pyptr<material> *m) -> PyObject* {
+        py::tuple vals{static_cast<Py_ssize_t>(3+batch_size)};
+        vals.set_unsafe(0,to_pyobject(batch_size));
+        vals.set_unsafe(1,to_pyobject(dim));
+        vals.set_unsafe(2,reduce_triangle_values(batch_size*dim,dim,data).new_ref());
+        for(size_t i=0; i<batch_size; ++i) vals.set_unsafe(i+3,py::incref(m[i].ref()));
+        return py::make_tuple(
+            get_instance_data()->triangle_batch_unpickle,
+            vals).new_ref();
     },
     [](size_t dim,char type,const float *orientation,const float *position,material *m) -> PyObject* {
         py::bytes values{static_cast<Py_ssize_t>(sizeof(float)*dim*(dim+1)+1)};
@@ -1668,6 +1739,14 @@ const package_common package_common_data = {
         return py::make_tuple(
             get_instance_data()->solid_unpickle,
             py::make_tuple(dim,values,py::ref(m))).new_ref();
+    },
+    [](size_t dim,const float *start,const float *end) {
+        py::bytes values{static_cast<Py_ssize_t>(sizeof(float)*dim*2)};
+        encode_float_ieee754(values.data(),dim,start);
+        encode_float_ieee754(values.data() + sizeof(float)*dim,dim,end);
+        return py::make_tuple(
+            get_instance_data()->aabb_unpickle,
+            py::make_tuple(dim,values)).new_ref();
     },
     [](PyObject *mod) -> void {
         assert(mod);
@@ -1732,7 +1811,9 @@ extern "C" FIX_STACK_ALIGN SHARED(PyObject) * PyInit_render() {
     LOAD_IDATA(vector_unpickle);
     LOAD_IDATA(matrix_unpickle);
     LOAD_IDATA(triangle_unpickle);
+    LOAD_IDATA(triangle_batch_unpickle);
     LOAD_IDATA(solid_unpickle);
+    LOAD_IDATA(aabb_unpickle);
 
     for(auto cls : classes) {
         add_class(m,cls->tp_name + sizeof(FULL_MODULE_STR),cls);

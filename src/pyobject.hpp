@@ -589,6 +589,8 @@ namespace py {
         tuple_iterator end() const {
             return tuple_iterator(&PyTuple_GET_ITEM(_ptr,size()));
         }
+
+        PyObject **data() const { return &PyTuple_GET_ITEM(_ptr,0); }
     };
 
     template<typename... Args> tuple make_tuple(Args&&... args) {
@@ -914,10 +916,10 @@ namespace py {
 
     public:
         pyptr() = default;
-        explicit pyptr(new_ref r) : _obj(r) {}
+        explicit pyptr(_new_ref r) : _obj(r) {}
         explicit pyptr(borrowed_ref r) : _obj(r) {}
         explicit pyptr(object o) : _obj(o) {}
-        explicit pyptr(T *o) : _obj(new_ref(reinterpret_cast<PyObject*>(o))) {}
+        explicit pyptr(T *o) : _obj(_new_ref(reinterpret_cast<PyObject*>(o))) {}
 
         template<typename U,typename=typename std::enable_if<std::is_convertible<U*,T*>::value>::type> pyptr(const pyptr<U> &b) : _obj(b._obj) {}
 
@@ -925,7 +927,7 @@ namespace py {
             _obj = b._obj;
         }
 
-        pyptr &operator=(new_ref r) {
+        pyptr &operator=(_new_ref r) {
             _obj = r;
             return *this;
         }
@@ -934,12 +936,12 @@ namespace py {
             return *this;
         }
 
-        void reset(new_ref r) { _obj = r; }
+        void reset(_new_ref r) { _obj = r; }
         void reset(borrowed_ref r) { _obj = r; }
         void reset(object o) { _obj = o; }
-        void reset(T *o) { _obj = new_ref(reinterpret_cast<PyObject*>(o)); }
+        void reset(T *o) { _obj = _new_ref(reinterpret_cast<PyObject*>(o)); }
         template<typename U,typename=typename std::enable_if<std::is_convertible<U*,T*>::value>::type> void reset(U *o) {
-            _obj = new_ref(reinterpret_cast<PyObject*>(o));
+            _obj = _new_ref(reinterpret_cast<PyObject*>(o));
         }
 
         T &operator*() const { return *get(); }

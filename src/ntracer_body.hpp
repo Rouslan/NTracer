@@ -468,10 +468,15 @@ template<typename T,bool Var> struct tproto_base<T,Var,false> : T {
     PyObject_HEAD
     std::unique_ptr<actual> base;
 
-    static void *operator new(size_t,size_t) {
+    /* an extra int parameter is used to distinguish the placement delete from
+    C++14 sized deallocation, which would otherwise cause an error with MSVC */
+    static void *operator new(size_t,size_t,int=0) {
         void *ptr = PyObject_Malloc(base_size());
         if(!ptr) throw std::bad_alloc();
         return ptr;
+    }
+    static void operator delete(void *ptr,size_t,int) {
+        PyObject_Free(ptr);
     }
 
     template<typename... Args> tproto_base(size_t dimension,Args&&... args) : base(new(dimension) actual(dimension,std::forward<Args>(args)...)) {
@@ -501,10 +506,15 @@ template<typename T> struct tproto_base<T,true,true> : T {
     PyObject_VAR_HEAD
     actual base;
 
-    static void *operator new(size_t,size_t dimension) {
+    /* an extra int parameter is used to distinguish the placement delete from
+    C++14 sized deallocation, which would otherwise cause an error with MSVC */
+    static void *operator new(size_t,size_t dimension,int=0) {
         void *ptr = PyObject_Malloc(base_size() + item_size() * dimension);
         if(!ptr) throw std::bad_alloc();
         return ptr;
+    }
+    static void operator delete(void *ptr,size_t,int) {
+        PyObject_Free(ptr);
     }
 
     template<typename... Args> tproto_base(Args&&... args) : base(std::forward<Args>(args)...) {
@@ -1031,7 +1041,7 @@ FIX_STACK_ALIGN PyObject *obj_PrimitiveBatch_intersects(primitive_batch<module_s
         auto [origin,direction,index] = get_arg::get_args("PrimitiveBatch.intersects",args,kwds,
             param<n_vector>(P(origin)),
             param<n_vector>(P(direction)),
-            param<int>(P(index)));
+            param<int>(P(index),-1));
 
         check_origin_dir_compat(origin,direction);
 
@@ -1185,24 +1195,48 @@ FIX_STACK_ALIGN PyObject *obj_Triangle_from_points(PyObject*,PyObject *args,PyOb
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
-FIX_STACK_ALIGN PyObject *obj_Triangle_reduce(obj_Triangle *self,PyObject*) {
+FIX_STACK_ALIGN PyObject *obj_Triangle_to_points(obj_Triangle *self,PyObject*) {
+    try {
+        size_t d = self->dimension();
+        module_store::smaller_init_array<n_vector> points(
+            d-1,
+            [=](size_t i) { return d; });
+        to_points(self,static_cast<n_vector*>(points));
+
+        py::tuple r{static_cast<Py_ssize_t>(d)};
+        r.set_unsafe(0,to_pyobject(self->p1));
+        for(size_t i=1; i<d; ++i) r.set_unsafe(i,to_pyobject(points[i-1]));
+
+        return r.new_ref();
+    } PY_EXCEPT_HANDLERS(nullptr)
+}
+
+real *to_real_array(real *x) { return x; }
+real *to_real_array(v_real *x) { return x[0].array(); }
+
+template<typename T> FIX_STACK_ALIGN PyObject *obj_Triangle_reduce(T *self,PyObject*) {
     try {
         struct item_size {
             static constexpr size_t get(size_t d) { return d+1; }
         };
 
         module_store::type<item_size,const real*> values(self->dimension());
-        values.data()[0] = self->p1.data();
-        values.data()[1] = self->face_normal.data();
-        for(size_t i=0; i<self->dimension()-1; ++i) values.data()[i+2] = self->items()[i].data();
+        values.data()[0] = to_real_array(self->p1.data());
+        values.data()[1] = to_real_array(self->face_normal.data());
+        for(size_t i=0; i<self->dimension()-1; ++i) values.data()[i+2] = to_real_array(self->items()[i].data());
 
-        return (*package_common_data.triangle_reduce)(self->dimension(),values.data(),self->m.get());
+        if constexpr(std::is_same_v<T,obj_TriangleBatch>) {
+            return (*package_common_data.triangle_batch_reduce)(v_real::size,self->dimension(),values.data(),self->m);
+        } else {
+            return (*package_common_data.triangle_reduce)(self->dimension(),values.data(),self->m.get());
+        }
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
 PyMethodDef obj_Triangle_methods[] = {
     {"from_points",reinterpret_cast<PyCFunction>(&obj_Triangle_from_points),METH_VARARGS|METH_KEYWORDS|METH_STATIC,NULL},
-    {"__reduce__",reinterpret_cast<PyCFunction>(&obj_Triangle_reduce),METH_NOARGS,NULL},
+    {"to_points",reinterpret_cast<PyCFunction>(&obj_Triangle_to_points),METH_NOARGS,NULL},
+    {"__reduce__",reinterpret_cast<PyCFunction>(&obj_Triangle_reduce<obj_Triangle>),METH_NOARGS,NULL},
     immutable_copy,
     immutable_deepcopy,
     {NULL}
@@ -1328,7 +1362,7 @@ FIX_STACK_ALIGN PyObject *obj_TriangleBatch_new(PyTypeObject *type,PyObject *arg
 }
 
 PyMethodDef obj_TriangleBatch_methods[] = {
-    //{"__reduce__",reinterpret_cast<PyCFunction>(&obj_TriangleBatch_reduce),METH_NOARGS,NULL},
+    {"__reduce__",reinterpret_cast<PyCFunction>(&obj_Triangle_reduce<obj_TriangleBatch>),METH_NOARGS,NULL},
     immutable_copy,
     immutable_deepcopy,
     {NULL}
@@ -1519,7 +1553,7 @@ inline kd_leaf<module_store,true> *create_kd_leaf(Py_ssize_t size,py::tuple prim
         });
 }
 
-FIX_STACK_ALIGN PyObject *obj_KDLeaf_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
+FIX_STACK_ALIGN PyObject *obj_KDLeaf_new(PyTypeObject *type,PyObject *args,PyObject *kwds) noexcept {
     auto idata = get_instance_data();
     auto ptr = reinterpret_cast<obj_KDLeaf*>(type->tp_alloc(type,0));
     if(!ptr) return nullptr;
@@ -1557,6 +1591,38 @@ PyGetSetDef obj_KDLeaf_getset[] = {
     {NULL}
 };
 
+PyObject *obj_KDLeaf_getnewargs(obj_KDLeaf *self,PyObject*) noexcept {
+    PyObject *r = PyTuple_New(1);
+    if(UNLIKELY(!r)) return nullptr;
+    PyObject *items_obj = PyTuple_New(self->data()->size);
+    if(UNLIKELY(!items_obj)) {
+        Py_DECREF(r);
+        return nullptr;
+    }
+    PyTuple_SET_ITEM(r,0,items_obj);
+
+    for(size_t i=0; i<self->data()->size; ++i) {
+        auto item = py::incref(self->data()->items()[i].ref());
+        PyTuple_SET_ITEM(items_obj,i,item);
+    }
+    return r;
+}
+
+PyObject *obj_KDLeaf_copy(obj_KDLeaf *self,PyObject*) noexcept {
+    try {
+        return py::ref(new obj_KDLeaf({},self->data()->clone()));
+    } PY_EXCEPT_HANDLERS(nullptr)
+}
+
+PyMethodDef obj_KDLeaf_methods[] = {
+    {"__getnewargs__",reinterpret_cast<PyCFunction>(&obj_KDLeaf_getnewargs),METH_NOARGS,NULL},
+    {"__copy__",reinterpret_cast<PyCFunction>(&obj_KDLeaf_copy),METH_NOARGS,NULL},
+
+    // primitives are immutable, thus deepcopy is the same as copy
+    {"__deepcopy__",reinterpret_cast<PyCFunction>(&obj_KDLeaf_copy),METH_O,NULL},
+    {NULL}
+};
+
 PyTypeObject obj_KDLeaf::_pytype = make_pytype(
     FULL_MODULE_STR ".KDLeaf",
     sizeof(obj_KDLeaf),
@@ -1566,6 +1632,7 @@ PyTypeObject obj_KDLeaf::_pytype = make_pytype(
     .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_HAVE_GC,
     .tp_traverse = &kd_tree_item_traverse<obj_KDLeaf>,
     .tp_clear = &kd_tree_item_clear<obj_KDLeaf>,
+    .tp_methods = obj_KDLeaf_methods,
     .tp_getset = obj_KDLeaf_getset,
     .tp_base = obj_KDNode::pytype(),
     .tp_new = &obj_KDLeaf_new});
@@ -1623,7 +1690,7 @@ PyObject *obj_KDBranch_get_child(obj_KDBranch *self,void *index) {
     assert(&self->data()->right == (&self->data()->left + 1));
 
     try {
-        return new_obj_node(py::ref(self),(&self->data()->left)[reinterpret_cast<size_t>(index)].get(),self->dimension);
+        return new_obj_node(py::ref(self),(&self->data()->left)[reinterpret_cast<intptr_t>(index)].get(),self->dimension);
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
@@ -1636,6 +1703,33 @@ PyGetSetDef obj_KDBranch_getset[] = {
     {NULL}
 };
 
+PyObject *obj_KDBranch_getnewargs(obj_KDBranch *self,PyObject*) noexcept {
+    try {
+        auto n = self->data();
+        return py::make_tuple(
+            n->axis,
+            n->split,
+            new_obj_node(py::ref(self),n->left.get(),self->dimension),
+            new_obj_node(py::ref(self),n->right.get(),self->dimension)).new_ref();
+    } PY_EXCEPT_HANDLERS(nullptr)
+}
+
+PyObject *obj_KDBranch_copy(obj_KDBranch *self,PyObject*) noexcept {
+    try {
+        return py::ref(new obj_KDBranch({},self->data()->clone(),self->dimension));
+    } PY_EXCEPT_HANDLERS(nullptr)
+}
+
+PyMethodDef obj_KDBranch_methods[] = {
+    {"__getnewargs__",reinterpret_cast<PyCFunction>(&obj_KDBranch_getnewargs),METH_NOARGS,NULL},
+    {"__copy__",reinterpret_cast<PyCFunction>(&obj_KDBranch_copy),METH_NOARGS,NULL},
+
+    /* child nodes have to be copied anyway (a node cannot have more than one
+    parent) thus deepcopy is the same as copy */
+    {"__deepcopy__",reinterpret_cast<PyCFunction>(&obj_KDBranch_copy),METH_O,NULL},
+    {NULL}
+};
+
 PyTypeObject obj_KDBranch::_pytype = make_pytype(
     FULL_MODULE_STR ".KDBranch",
     sizeof(obj_KDBranch),
@@ -1644,6 +1738,7 @@ PyTypeObject obj_KDBranch::_pytype = make_pytype(
     .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_HAVE_GC,
     .tp_traverse = &kd_tree_item_traverse<obj_KDBranch>,
     .tp_clear = &kd_tree_item_clear<obj_KDBranch>,
+    .tp_methods = obj_KDBranch_methods,
     .tp_getset = obj_KDBranch_getset,
     .tp_base = obj_KDNode::pytype(),
     .tp_new = &obj_KDBranch_new});
@@ -2461,11 +2556,21 @@ FIX_STACK_ALIGN PyObject *obj_AABB_intersects_flat(wrapped_type<n_aabb> *self,NT
     } PY_EXCEPT_HANDLERS(nullptr)
 }
 
+FIX_STACK_ALIGN PyObject *obj_AABB_reduce(wrapped_type<n_aabb> *self,PyObject*) {
+    try {
+        auto &aabb = self->get_base();
+        return (*package_common_data.aabb_reduce)(aabb.dimension(),aabb.start.data(),aabb.end.data());
+    } PY_EXCEPT_HANDLERS(nullptr)
+}
+
 PyMethodDef obj_AABB_methods[] = {
     {"left",reinterpret_cast<PyCFunction>(&obj_AABB_left),NTRACER_COMPAT_METH_FASTCALL|METH_KEYWORDS,NULL},
     {"right",reinterpret_cast<PyCFunction>(&obj_AABB_right),NTRACER_COMPAT_METH_FASTCALL|METH_KEYWORDS,NULL},
     {"intersects",reinterpret_cast<PyCFunction>(&obj_AABB_intersects),METH_O,NULL},
     {"intersects_flat",reinterpret_cast<PyCFunction>(&obj_AABB_intersects_flat),NTRACER_COMPAT_METH_FASTCALL|METH_KEYWORDS,NULL},
+    {"__reduce__",reinterpret_cast<PyCFunction>(&obj_AABB_reduce),METH_NOARGS,NULL},
+    immutable_copy,
+    immutable_deepcopy,
     {NULL}
 };
 
@@ -2553,11 +2658,28 @@ PyTypeObject obj_PrimitivePrototype::_pytype = make_pytype(
 FIX_STACK_ALIGN PyObject *obj_TrianglePrototype_new(PyTypeObject *type,PyObject *args,PyObject *kwds) {
     auto idata = get_instance_data();
     try {
-        auto&& [points_obj,m] = get_arg::get_args("TrianglePrototype.__new__",args,kwds,
+        auto&& [points_obj,m_obj] = get_arg::get_args("TrianglePrototype.__new__",args,kwds,
             param(P(points)),
-            param<material*>(P(material)));
+            param(P(material),Py_None));
 
-        auto points = points_for_triangle(points_obj);
+        std::vector<n_vector> points;
+        bool points_is_tri = Py_TYPE(points_obj) == obj_Triangle::pytype();
+
+        if(points_is_tri) {
+            if(m_obj != Py_None) THROW_PYERR_STRING(
+                TypeError,
+                "if \"points\" is an instance of Triangle, \"material\" must be None");
+            auto *tri = reinterpret_cast<obj_Triangle*>(points_obj);
+            points.reserve(tri->dimension());
+            points.push_back(tri->p1);
+            for(size_t i=0; i<tri->dimension()-1; ++i) points.emplace_back(tri->dimension());
+            to_points(tri,points.data()+1);
+        } else {
+            if(m_obj == Py_None) THROW_PYERR_STRING(
+                TypeError,
+                "if \"points\" is not an instance of Triangle, \"material\" cannot be None");
+            points = points_for_triangle(points_obj);
+        }
         size_t dim = points[0].dimension();
 
         auto ptr = py::check_obj(type->tp_alloc(type,obj_TrianglePrototype::item_size() ? dim : 0));
@@ -2565,16 +2687,22 @@ FIX_STACK_ALIGN PyObject *obj_TrianglePrototype_new(PyTypeObject *type,PyObject 
         try {
             auto &base = reinterpret_cast<obj_TrianglePrototype*>(ptr)->alloc_base(dim);
 
-            new(&base.boundary) n_aabb(n_vector(dim,std::numeric_limits<real>::max()),n_vector(dim,std::numeric_limits<real>::lowest()));
+            new(&base.boundary) n_aabb(points[0],points[0]);
 
-            for(size_t i=0; i<dim; ++i) {
+            for(size_t i=1; i<dim; ++i) {
                 for(size_t j=0; j<dim; ++j) {
                     if(points[i][j] > base.boundary.end[j]) base.boundary.end[j] = points[i][j];
                     if(points[i][j] < base.boundary.start[j]) base.boundary.start[j] = points[i][j];
                 }
             }
 
-            new(&base.p) py::pyptr<obj_Primitive>(py::new_ref(obj_Triangle::from_points(points.data(),m)));
+            if(points_is_tri) {
+                new(&base.p) py::pyptr<obj_Primitive>(py::borrowed_ref(points_obj));
+            } else {
+                new(&base.p) py::pyptr<obj_Primitive>(py::new_ref(obj_Triangle::from_points(
+                    points.data(),
+                    from_pyobject<material*>(m_obj))));
+            }
             new(&base.first_edge_normal) n_vector(dim,real(0));
             new(&base.items()[0]) triangle_point<module_store,real>(points[0],base.first_edge_normal);
 
@@ -2629,34 +2757,75 @@ FIX_STACK_ALIGN PyObject *obj_TriangleBatchPrototype_new(PyTypeObject *type,PyOb
         auto [arg] = get_arg::get_args("TriangleBatchPrototype.__new__",args,kwds,
             param(P(t_prototypes)));
 
-        py::pyptr<obj_TrianglePrototype> vals[v_real::size];
-        sized_iter itr{py::borrowed_ref(arg),v_real::size};
-        for(size_t i=0; i<v_real::size; ++i) {
-            auto val = itr.next();
-            if(!PyObject_TypeCheck(val.ref(),obj_TrianglePrototype::pytype())) {
-                PyErr_SetString(PyExc_TypeError,"items must be instances of TrianglePrototype");
-                return nullptr;
-            }
-            vals[i] = py::pyptr<obj_TrianglePrototype>(val);
-        }
-        itr.finished();
+        if(Py_TYPE(arg) == obj_TriangleBatch::pytype()) {
+            std::vector<vector_batch<module_store>> points;
+            auto *tri = reinterpret_cast<obj_TriangleBatch*>(arg);
+            size_t dim = tri->dimension();
+            points.reserve(dim-1);
+            for(size_t i=0; i<tri->dimension()-1; ++i) points.emplace_back(tri->dimension());
+            to_points(tri,points.data());
 
-        size_t dimension = vals[0]->get_base().dimension();
-        for(size_t i=1; i<v_real::size; ++i) {
-            if(vals[i]->get_base().dimension() != dimension) {
-                PyErr_SetString(PyExc_TypeError,"the items must all have the same dimension");
-                return nullptr;
-            }
-        }
+            auto ptr = py::check_obj(type->tp_alloc(type,obj_TriangleBatchPrototype::item_size() ? dim : 0));
 
-        auto ptr = py::check_obj(type->tp_alloc(type,obj_TriangleBatchPrototype::item_size() ? dimension : 0));
-        try {
-            new(&reinterpret_cast<obj_TriangleBatchPrototype*>(ptr)->alloc_base(dimension))
-                n_triangle_batch_prototype(dimension,[&](size_t i){ return &vals[i]->get_base(); });
-            return ptr;
-        } catch(...) {
-            Py_DECREF(ptr);
-            throw;
+            try {
+                auto &base = reinterpret_cast<obj_TriangleBatchPrototype*>(ptr)->alloc_base(dim);
+
+                new(&base.boundary) n_aabb(
+                    tri->p1.apply(static_cast<real (*)(v_real)>(&simd::reduce_min)),
+                    tri->p1.apply(static_cast<real (*)(v_real)>(&simd::reduce_max)));
+
+                for(size_t i=0; i<dim-1; ++i) {
+                    for(size_t j=0; j<dim; ++j) {
+                        base.boundary.end[j] = simd::max(base.boundary.end[j],simd::reduce_max(points[i][j]));
+                        base.boundary.start[j] = simd::min(base.boundary.end[j],simd::reduce_min(points[i][j]));
+                    }
+                }
+
+                new(&base.p) py::pyptr<obj_Primitive>(py::borrowed_ref(arg));
+
+                new(&base.first_edge_normal) vector_batch<module_store>(dim,v_real::zeros());
+                new(&base.items()[0]) triangle_point<module_store,v_real>(tri->p1,base.first_edge_normal);
+
+                for(size_t i=0; i<dim-1; ++i) {
+                    new(&base.items()[i+1]) triangle_point<module_store,v_real>(points[i],base.pt()->items()[i]);
+                    base.first_edge_normal -= base.pt()->items()[i];
+                }
+
+                return ptr;
+            } catch(...) {
+                Py_DECREF(ptr);
+                throw;
+            }
+        } else {
+            py::pyptr<obj_TrianglePrototype> vals[v_real::size];
+            sized_iter itr{py::borrowed_ref(arg),v_real::size};
+            for(size_t i=0; i<v_real::size; ++i) {
+                auto val = itr.next();
+                if(!PyObject_TypeCheck(val.ref(),obj_TrianglePrototype::pytype())) {
+                    PyErr_SetString(PyExc_TypeError,"items must be instances of TrianglePrototype");
+                    return nullptr;
+                }
+                vals[i] = py::pyptr<obj_TrianglePrototype>(val);
+            }
+            itr.finished();
+
+            size_t dimension = vals[0]->get_base().dimension();
+            for(size_t i=1; i<v_real::size; ++i) {
+                if(vals[i]->get_base().dimension() != dimension) {
+                    PyErr_SetString(PyExc_TypeError,"the items must all have the same dimension");
+                    return nullptr;
+                }
+            }
+
+            auto ptr = py::check_obj(type->tp_alloc(type,obj_TriangleBatchPrototype::item_size() ? dimension : 0));
+            try {
+                new(&reinterpret_cast<obj_TriangleBatchPrototype*>(ptr)->alloc_base(dimension))
+                    n_triangle_batch_prototype(dimension,[&](size_t i){ return &vals[i]->get_base(); });
+                return ptr;
+            } catch(...) {
+                Py_DECREF(ptr);
+                throw;
+            }
         }
     } PY_EXCEPT_HANDLERS(nullptr)
 }
@@ -3203,25 +3372,34 @@ template<typename T> wrapped_array get_wrapped_array(size_t dimension) {
     return {py::new_ref(obj),obj->cast_base().data()};
 }
 
+template<typename T,typename MT> wrapped_arrays triangle_constructor(size_t dimension,MT *mat) {
+    wrapped_arrays r;
+    r.data.reset(new float*[dimension+1]);
+
+    auto tri = T::create(dimension,mat);
+    r.obj = py::new_ref(tri);
+
+    r.data[0] = to_real_array(tri->p1.data());
+    r.data[1] = to_real_array(tri->face_normal.data());
+    for(size_t i=0; i<dimension-1; ++i) r.data[i+2] = to_real_array(tri->items()[i].data());
+
+    return r;
+}
+
+template<typename T> void triangle_extra(PyObject *tri) {
+    reinterpret_cast<T*>(tri)->recalculate_d();
+}
+
 /* TODO: do something so that changing "real" to something other than float
    won't cause compile errors */
 tracerx_constructors module_constructors = {
+    v_real::size,
     &get_wrapped_array<n_vector>,
     &get_wrapped_array<n_matrix>,
-    [](size_t dimension,material *mat) -> wrapped_arrays {
-        wrapped_arrays r;
-        r.data.reset(new float*[dimension+1]);
-
-        auto tri = obj_Triangle::create(dimension,mat);
-        r.obj = py::new_ref(tri);
-
-        r.data[0] = tri->p1.data();
-        r.data[1] = tri->face_normal.data();
-        for(size_t i=0; i<dimension-1; ++i) r.data[i+2] = tri->items()[i].data();
-
-        return r;
-    },
-    [](PyObject *tri) { reinterpret_cast<obj_Triangle*>(tri)->recalculate_d(); },
+    &triangle_constructor<obj_Triangle,material>,
+    &triangle_constructor<obj_TriangleBatch,material*>,
+    &triangle_extra<obj_Triangle>,
+    &triangle_extra<obj_TriangleBatch>,
     [](size_t dimension,int type,material *mat) -> wrapped_solid {
         wrapped_solid r;
 
@@ -3230,6 +3408,14 @@ tracerx_constructors module_constructors = {
         r.orientation = s->orientation.data();
         r.position = s->position.data();
 
+        return r;
+    },
+    [](size_t dimension) -> wrapped_aabb {
+        wrapped_aabb r;
+        auto a = new wrapped_type<n_aabb>{dimension};
+        r.obj = py::new_ref(a);
+        r.start = a->cast_base().start.data();
+        r.end = a->cast_base().end.data();
         return r;
     },
     [](PyObject *sobj) -> void {

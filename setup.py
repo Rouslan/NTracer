@@ -14,7 +14,7 @@ from setuptools.command.build_ext import build_ext
 from distutils.errors import DistutilsSetupError
 from distutils.dir_util import mkpath
 from distutils import log
-from distutils.util import split_quoted, strtobool
+from distutils.util import split_quoted, strtobool, get_platform
 from distutils.spawn import find_executable
 from distutils.file_util import copy_file
 
@@ -64,7 +64,7 @@ GCC_EXTRA_COMPILE_ARGS = [
     '-Wno-invalid-offsetof',
 
     # setuptools has the equivalent to this enabled by default when compiling
-    # with MSVC, so we might as well enabling it with GCC too, to know where to
+    # with MSVC, so we might as well enable it with GCC too, to know where to
     # add explicit casts
     '-Wconversion',
 
@@ -159,7 +159,11 @@ extra_user_options = [
     ('cpp-opts=',None,
      'extra command line arguments for the compiler'),
     ('copy-mingw-deps=',None,
-     'when the compiler type is "mingw32", copy the dependent MinGW DLLs to the built package (default true)')]
+     'when the compiler type is "mingw32", copy the dependent MinGW DLLs to the built package (default true)'),
+    ('test-cpu-flags',None,
+     'if compiling with MSVC, determine SSE/AVX support from current CPU and add corresponding compile flags (default true)'),
+    ('emu-cmd=',None,
+     'if specified, and get-cpu-flags is true, use this command to run SSE/AVX test executable')]
 
 class CustomBuild(build):
     user_options = build.user_options + extra_user_options
@@ -169,6 +173,8 @@ class CustomBuild(build):
         self.optimize_dimensions = None
         self.cpp_opts = ''
         self.copy_mingw_deps = None
+        self.test_cpu_flags = None
+        self.emu_cmd = None
 
     def finalize_options(self):
         build.finalize_options(self)
@@ -179,6 +185,8 @@ class CustomBuild(build):
 
         self.cpp_opts = split_quoted(self.cpp_opts)
         self.copy_mingw_deps = strtobool(self.copy_mingw_deps) if self.copy_mingw_deps is not None else True
+        self.test_cpu_flags = strtobool(self.test_cpu_flags) if self.test_cpu_flags is not None else True
+        if self.emu_cmd: self.emu_cmd = split_quoted(self.emu_cmd)
 
 
 def get_dll_list(f):
@@ -199,6 +207,8 @@ class CustomBuildExt(build_ext):
         self.optimize_dimensions = None
         self.cpp_opts = None
         self.copy_mingw_deps = None
+        self.test_cpu_flags = None
+        self.emu_cmd = None
 
     def special_tracer_file(self,n):
         return os.path.join(self.build_temp,'tracer{0}.cpp'.format(n))
@@ -220,7 +230,9 @@ class CustomBuildExt(build_ext):
         self.set_undefined_options('build',
             ('optimize_dimensions',)*2,
             ('cpp_opts',)*2,
-            ('copy_mingw_deps',)*2)
+            ('copy_mingw_deps',)*2,
+            ('test_cpu_flags',)*2,
+            ('emu_cmd',)*2)
 
         # we can't add to self.extensions after running
         # build_ext.finalize_options because the items are modified by it
@@ -247,8 +259,13 @@ class CustomBuildExt(build_ext):
     def add_optimization(self):
         c = self.compiler.compiler_type
         if c == 'msvc':
+            args = MSVC_OPTIMIZE_COMPILE_ARGS
+            if self.test_cpu_flags and get_platform() in ('win32','win-amd64'):
+                args = args + simd_test.msvc_flags(
+                    simd_test.get_cpuid_flags(self,simd_test.basic_compiler(self,'msvc')))
+
             for e in self.extensions:
-                e.extra_compile_args = MSVC_OPTIMIZE_COMPILE_ARGS
+                e.extra_compile_args = args
             return True
         if c in {'unix','cygwin','mingw32'}:
             if c == 'unix':
@@ -446,4 +463,8 @@ setup(name='ntracer',
         'Topic :: Multimedia :: Graphics :: 3D Rendering',
         'Topic :: Scientific/Engineering :: Mathematics'],
     zip_safe=True,
-    cmdclass={'build' : CustomBuild,'build_ext' : CustomBuildExt,'test_simd' : simd_test.test_simd})
+    cmdclass={
+        'build' : CustomBuild,
+        'build_ext' : CustomBuildExt,
+        'test_simd' : simd_test.test_simd,
+        'cpu_features' : simd_test.cpu_features})

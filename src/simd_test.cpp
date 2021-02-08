@@ -4,6 +4,7 @@
 #include <type_traits>
 #include <algorithm>
 #include <numeric>
+#include <limits>
 
 #include "simd.hpp"
 
@@ -70,6 +71,9 @@ template<typename T,size_t Size> struct tester {
         }
     }
 
+    static T sub_50(T x) { return T(std::max<decltype(x-50)>(x-50,std::numeric_limits<T>::lowest())); }
+    static T add_50(T x) { return T(std::min<decltype(x+50)>(x+50,std::numeric_limits<T>::max())); }
+
     static void tests() {
         const T *ra = rand_a<T>;
         const T *rb = rand_b<T>;
@@ -97,8 +101,8 @@ template<typename T,size_t Size> struct tester {
         MUST_EQUAL(simd::l_xor(a > v_type::zeros(),b < v_type::zeros()), (ra[i] > 0) != (rb[i] < 0));
         MUST_EQUAL(simd::l_xnor(a > v_type::zeros(),b < v_type::zeros()), (ra[i] > 0) == (rb[i] < 0));
 
-        MUST_EQUAL(simd::apply([](auto x) { return x/2; },a), ra[i] / 2);
-        MUST_EQUAL(simd::apply([](auto x,auto y) { return (x+y)/2; },a,b), (ra[i] + rb[i]) / 2);
+        MUST_EQUAL(simd::apply([](auto x) -> T { return x/2; },a), ra[i] / 2);
+        MUST_EQUAL(simd::apply([](auto x,auto y) -> T { return (x+y)/2; },a,b), (ra[i] + rb[i]) / 2);
         auto op1 = [](auto x,auto y) { return x*y/2; };
         MUST_EQUAL_BARE(simd::reduce(op1,a), std::accumulate(ra+1,ra+Size,ra[0],op1));
         MUST_EQUAL_BARE(simd::reduce_add(a), std::accumulate(ra+1,ra+Size,ra[0]));
@@ -108,6 +112,17 @@ template<typename T,size_t Size> struct tester {
         MUST_EQUAL(simd::max(a,b), std::max(ra[i],rb[i]));
         MUST_EQUAL(simd::min(a,b), std::min(ra[i],rb[i]));
         MUST_EQUAL(simd::abs(a), std::abs(ra[i]));
+
+        MUST_EQUAL(simd::mask_blend(a > v_type::zeros(),a,b), ra[i] > 0 ? ra[i] : rb[i]);
+        MUST_EQUAL(simd::zfilter(a < v_type::zeros(),b), ra[i] < 0 ? rb[i] : 0);
+
+        MUST_EQUAL(simd::clamp(a,T(-10),T(100)), simd::clamp(ra[i],T(-10),T(100)));
+        MUST_EQUAL(simd::clamp(a,simd::apply(&sub_50,b),simd::apply(&add_50,b)),
+            simd::clamp(ra[i],sub_50(rb[i]),add_50(rb[i])));
+
+        v_type tmp = a;
+        simd::mask_set(tmp,b>a,b);
+        MUST_EQUAL(tmp, std::max(ra[i],rb[i]));
 
         if constexpr(std::is_floating_point_v<T>) {
             MUST_EQUAL(a * b, ra[i] * rb[i]);

@@ -311,7 +311,7 @@ namespace impl {
         static constexpr bool supports_padding = T::supports_padding;
 
         template<size_t Size> FORCE_INLINE v_item_t<v_apply,Size> vec(size_t n) const {
-            return a.template vec<Size>(n).apply(f);
+            return simd::apply(f,a.template vec<Size>(n));
         }
 
         v_apply(const T &a,F f) : a(a), f(f) {}
@@ -390,7 +390,7 @@ namespace impl {
         }
 
         template<typename Op,typename B> struct _v_compound {
-            typedef typename Store::item_t item_t;
+            typedef T item_t;
             static const int v_score = B::v_score;
             static const size_t max_items = std::min(v_array::max_items,B::max_items);
 

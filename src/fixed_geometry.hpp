@@ -1,6 +1,8 @@
 #ifndef fixed_geometry_hpp
 #define fixed_geometry_hpp
 
+#include "compatibility.hpp"
+
 #include <type_traits>
 
 #include "geometry.hpp"

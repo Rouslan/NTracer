@@ -48,7 +48,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = u'NTracer'
-copyright = u'2013-2020, Rouslan Korneychuk'
+copyright = u'2013-2021, Rouslan Korneychuk'
 
 
 # The version info for the project you're documenting, acts as replacement for

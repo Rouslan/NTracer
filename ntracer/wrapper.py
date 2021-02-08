@@ -13,8 +13,8 @@ def vector_wrapper(mod,dim):
         __slots__ = ()
 
         def __new__(cls,*values):
-            if len(values) > 1: return base.__new__(cls,dim,values)
-            return base.__new__(cls,dim,*values)
+            if len(values) > 1: return base(dim,values)
+            return base(dim,*values)
 
         @staticmethod
         def axis(axis,length=1):
@@ -28,8 +28,8 @@ def matrix_wrapper(mod,dim):
         __slots__ = ()
 
         def __new__(cls,*values):
-            if len(values) > 1: return base.__new__(cls,dim,values)
-            return base.__new__(cls,dim,*values)
+            if len(values) > 1: return base(dim,values)
+            return base(dim,*values)
 
         @staticmethod
         def scale(factor):
@@ -47,10 +47,7 @@ def camera_wrapper(mod,dim):
     base = mod.Camera
     class Camera(base):
         def __new__(cls):
-            return base.__new__(cls,dim)
-
-        def __init__(self):
-            base.__init__(self,dim)
+            return base(dim)
 
     return Camera
 
@@ -58,7 +55,7 @@ def boxscene_wrapper(mod,dim):
     base = mod.BoxScene
     class BoxScene(base):
         def __new__(cls):
-            return base.__new__(cls,dim)
+            return base(dim)
 
     return BoxScene
 
@@ -66,12 +63,12 @@ def aabb_wrapper(mod,dim):
     base = mod.AABB
     class AABB(base):
         def __new__(cls,*args,**kwds):
-            return base.__new__(cls,dim,*args,**kwds)
+            return base(dim,*args,**kwds)
 
     return AABB
 
 
-class NTracer(object):
+class NTracer:
     """A helper class that simplifies the creation of multiple objects with
     the same dimension.
 
@@ -113,6 +110,7 @@ class NTracer(object):
             mod = ntracer.render.get_optimized_tracern(dimension)
 
         obj.dimension = dimension
+        obj.base = mod
         obj.Vector = vector_wrapper(mod,dimension)
         obj.Matrix = matrix_wrapper(mod,dimension)
         obj.Camera = camera_wrapper(mod,dimension)

@@ -89,12 +89,22 @@ struct wrapped_solid {
     float *position;
 };
 
+struct wrapped_aabb {
+    py::object obj;
+    float *start;
+    float *end;
+};
+
 struct tracerx_constructors {
+    unsigned int batch_size;
     wrapped_array (*vector)(size_t);
     wrapped_array (*matrix)(size_t);
     wrapped_arrays (*triangle)(size_t,material*);
+    wrapped_arrays (*triangle_batch)(size_t,material**);
     void (*triangle_extra)(PyObject*);
+    void (*triangle_batch_extra)(PyObject*);
     wrapped_solid (*solid)(size_t,int,material*);
+    wrapped_aabb (*aabb)(size_t);
     void (*solid_extra)(PyObject*);
 };
 
@@ -103,7 +113,9 @@ struct package_common {
     PyObject *(*vector_reduce)(size_t,const float*);
     PyObject *(*matrix_reduce)(size_t,const float*);
     PyObject *(*triangle_reduce)(size_t,const float* const*,material*);
+    PyObject *(*triangle_batch_reduce)(size_t,size_t,const float* const*,py::pyptr<material> *m);
     PyObject *(*solid_reduce)(size_t,char,const float*,const float*,material*);
+    PyObject *(*aabb_reduce)(size_t dim,const float *start,const float *end);
     void (*invalidate_reference)(PyObject*);
 };
 

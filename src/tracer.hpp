@@ -8,6 +8,7 @@
 #include <future>
 #include <deque>
 #include <new>
+#include <utility>
 
 #include "geometry.hpp"
 #include "light.hpp"
@@ -437,32 +438,33 @@ template<typename Store> struct ALLOW_EBO triangle :
         return 0;
     }
 
-    static triangle<Store> *from_points(const vector<Store> *points,material *mat) {
+    static triangle *from_points(const vector<Store> *points,material *mat) {
         const vector<Store> &P1 = points[0];
         size_t n = P1.dimension();
         smaller<matrix<Store>> tmp(n-1);
 
-        typename Store::template smaller_init_array<vector<Store>> vsides(n-1,[&P1,points](size_t i) -> vector<Store> { return points[i+1] - P1; });
+        typename Store::template smaller_init_array<vector<Store>> vsides(
+            n-1,
+            [&P1,points](size_t i) -> vector<Store> { return points[i+1] - P1; });
         vector<Store> N(n);
         cross_(N,tmp,static_cast<vector<Store>*>(vsides));
         real square = N.square();
 
         return create(P1,N,[&,square](size_t i) {
-            vector<Store> old = vsides[i];
-            vsides[i] = N;
+            vector<Store> old = std::exchange(vsides[i],N);
             vector<Store> r(N.dimension());
             cross_(r,tmp,static_cast<vector<Store>*>(vsides));
-            vsides[i] = old;
+            vsides[i] = std::move(old);
             r /= square;
             return r;
         },mat);
     }
 
-    static triangle<Store> *create(size_t dimension,material *m) {
-        return new(dimension-1) triangle<Store>(dimension,m);
+    static triangle *create(size_t dimension,material *m) {
+        return new(dimension-1) triangle(dimension,m);
     }
 
-    template<typename F> static triangle<Store> *create(const vector<Store> &p1,const vector<Store> &face_normal,F edge_normals,material *m) {
+    template<typename F> static triangle *create(const vector<Store> &p1,const vector<Store> &face_normal,F edge_normals,material *m) {
         return new(p1.dimension()-1) triangle<Store>(p1,face_normal,edge_normals,m);
     }
 
@@ -483,6 +485,24 @@ private:
         recalculate_d();
     }
 };
+
+template<typename Store,template<typename> typename T>
+void to_points(T<Store> *triangle,decltype(std::declval<T<Store>>().p1) *points) {
+    using vec = decltype(triangle->p1);
+
+    smaller<matrix<Store>> tmp(triangle->dimension()-1);
+    auto items_ = triangle->items();
+    typename Store::template smaller_init_array<vec> enorms(
+        triangle->dimension()-1,
+        [=](size_t i) { return items_[i]; });
+
+    for(size_t i=0; i<triangle->dimension()-1; ++i) {
+        vec old = std::exchange(enorms[i],triangle->face_normal);
+        cross_(points[i],tmp,static_cast<vec*>(enorms));
+        enorms[i] = std::move(old);
+        points[i] += triangle->p1;
+    }
+}
 
 template<typename Store> HOT_FUNC real primitive<Store>::intersects(const ray<Store> &target,ray<Store> &normal,real cutoff,geom_allocator *a) const {
     if(Py_TYPE(this) == triangle_obj_common::pytype()) {
@@ -577,6 +597,14 @@ template<typename Store> struct ALLOW_EBO triangle_batch :
         return min_t;
     }
 
+    template<typename Fm> static triangle_batch *create(size_t dimension,Fm m) {
+        return new(dimension-1) triangle_batch(dimension,m);
+    }
+
+    static triangle_batch *create(size_t dimension,material **m) {
+        return new(dimension-1) triangle_batch(dimension,[=](size_t i) { return py::borrowed_ref{m[i]}; });
+    }
+
     /* NOTE: multiple invocations of "triangles" with the same argument must
        return the same instance */
     template<typename F> static triangle_batch *from_triangles(F triangles) {
@@ -598,6 +626,9 @@ template<typename Store> struct ALLOW_EBO triangle_batch :
     }
 
 private:
+    template<typename Fm> triangle_batch(size_t dimension,Fm m)
+        : primitive_batch<Store>(m,pytype()), flex_base(dimension-1,[=](size_t i) { return dimension; }), p1(dimension), face_normal(dimension) {}
+
     template<typename Fe,typename Fm> triangle_batch(const vector<Store,v_real> &p1,const vector<Store,v_real> &face_normal,Fe edge_normals,Fm m)
         : primitive_batch<Store>(m,pytype()), flex_base(p1.dimension()-1,edge_normals), p1(p1), face_normal(face_normal) {
         assert(p1.dimension() == face_normal.dimension() &&
@@ -764,6 +795,8 @@ template<typename Store> struct kd_node {
        manually */
     node_type type;
 
+    kd_node *clone() const;
+
 protected:
     kd_node(node_type type) : type(type) {}
     ~kd_node() = default;
@@ -787,6 +820,12 @@ template<typename Store> struct kd_branch : kd_node<Store> {
 
     kd_branch(size_t axis,real split,kd_node_unique_ptr<Store> &&left,kd_node_unique_ptr<Store> &&right) :
         kd_node<Store>(BRANCH), axis(axis), split(split), left(std::move(left)), right(std::move(right)) {}
+
+    kd_branch *clone() const {
+        kd_node_unique_ptr<Store> lcopy{left ? left->clone() : nullptr};
+        kd_node_unique_ptr<Store> rcopy{right ? right->clone() : nullptr};
+        return new kd_branch{axis,split,std::move(lcopy),std::move(rcopy)};
+    }
 };
 
 bool has(const prim_list &hits,void *item) {
@@ -807,6 +846,12 @@ template<typename Store,bool Batched=(v_real::size>1)> struct kd_leaf : kd_node<
 
     template<typename F> static kd_leaf *create(size_t size,F f) {
         return new(size) kd_leaf(size,f);
+    }
+
+    kd_leaf *clone() const {
+        return kd_leaf::create(
+            size,
+            [&](size_t i) { return this->items()[i]; });
     }
 
     HOT_FUNC bool intersects(
@@ -919,6 +964,13 @@ template<typename Store> struct kd_leaf<Store,true> : kd_node<Store>, flexible_s
     }
     template<typename F> static kd_leaf *create(size_t size,F f) {
         return new(size) kd_leaf(size,f);
+    }
+
+    kd_leaf *clone() const {
+        return kd_leaf::create(
+            size,
+            batches,
+            [&](size_t i) { return this->items()[i]; });
     }
 
     HOT_FUNC bool intersects(
@@ -1096,6 +1148,12 @@ private:
         batches = std::partition(ITR_RANGE(this->items()),is_batch) - this->items().begin();
     }
 };
+
+template<typename Store> kd_node<Store> *kd_node<Store>::clone() const {
+    if(type == LEAF) return static_cast<const kd_leaf<Store>*>(this)->clone();
+    assert(type == BRANCH);
+    return static_cast<const kd_branch<Store>*>(this)->clone();
+}
 
 template<typename Store> struct kd_node_intersection {
     const ray<Store> &target;
