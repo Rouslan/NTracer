@@ -717,7 +717,7 @@ PyMemberDef obj_BoxScene_members[] = {
 PyTypeObject obj_BoxScene::_pytype = make_pytype(
     FULL_MODULE_STR ".BoxScene",
     sizeof(obj_BoxScene),
-    {
+    PyTypeObject{
     .tp_dealloc = destructor_dealloc<obj_BoxScene>::value,
     .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE|Py_TPFLAGS_HAVE_GC,
     .tp_traverse = &traverse_idict<obj_BoxScene>,
@@ -935,7 +935,7 @@ PyGetSetDef obj_CompositeScene_getset[] = {
 PyTypeObject composite_scene_base::_pytype = make_pytype(
     FULL_MODULE_STR ".CompositeScene",
     sizeof(obj_CompositeScene),
-    {
+    PyTypeObject{
     .tp_dealloc = destructor_dealloc<obj_CompositeScene>::value,
     .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE|Py_TPFLAGS_HAVE_GC,
     .tp_traverse = &traverse_idict<obj_CompositeScene>,
@@ -984,7 +984,7 @@ PySequenceMethods obj_CameraAxes_sequence_methods = {
 PyTypeObject obj_CameraAxes::_pytype = make_pytype(
     FULL_MODULE_STR ".CameraAxes",
     sizeof(obj_BoxScene),
-    {
+    PyTypeObject{
     .tp_dealloc = destructor_dealloc<obj_CameraAxes>::value,
     .tp_as_sequence = &obj_CameraAxes_sequence_methods,
     .tp_flags = Py_TPFLAGS_DEFAULT,
@@ -1026,7 +1026,7 @@ PyMethodDef obj_Primitive_methods[] = {
 PyTypeObject obj_Primitive::_pytype = make_pytype(
     FULL_MODULE_STR ".Primitive",
     sizeof(obj_Primitive),
-    {
+    PyTypeObject{
     .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE,
     .tp_methods = obj_Primitive_methods,
     .tp_new = [](PyTypeObject*,PyObject*,PyObject*) -> PyObject* {
@@ -1063,7 +1063,7 @@ PyMethodDef obj_PrimitiveBatch_methods[] = {
 PyTypeObject obj_PrimitiveBatch::_pytype = make_pytype(
     FULL_MODULE_STR ".PrimitiveBatch",
     sizeof(obj_PrimitiveBatch),
-    {
+    PyTypeObject{
     .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE,
     .tp_methods = obj_PrimitiveBatch_methods,
     .tp_new = [](PyTypeObject*,PyObject*,PyObject*) -> PyObject* {
@@ -1159,7 +1159,7 @@ PyMemberDef obj_Solid_members[] = {
 PyTypeObject solid_obj_common::_pytype = make_pytype(
     FULL_MODULE_STR ".Solid",
     sizeof(obj_Solid),
-    {
+    PyTypeObject{
     .tp_dealloc = destructor_dealloc<obj_Solid>::value,
     .tp_flags = Py_TPFLAGS_DEFAULT,
     .tp_methods = obj_Solid_methods,
@@ -1310,7 +1310,7 @@ PyMemberDef obj_Triangle_members[] = {
 PyTypeObject triangle_obj_common::_pytype = make_pytype(
     FULL_MODULE_STR ".Triangle",
     obj_Triangle::base_size,
-    {
+    PyTypeObject{
     .tp_itemsize = static_cast<Py_ssize_t>(obj_Triangle::item_size),
     .tp_dealloc = destructor_dealloc<obj_Triangle>::value,
     .tp_flags = Py_TPFLAGS_DEFAULT,
@@ -1371,7 +1371,7 @@ PyMethodDef obj_TriangleBatch_methods[] = {
 PyTypeObject triangle_batch_obj_common::_pytype = make_pytype(
     FULL_MODULE_STR ".TriangleBatch",
     obj_TriangleBatch::base_size,
-    {
+    PyTypeObject{
     .tp_itemsize = static_cast<Py_ssize_t>(obj_TriangleBatch::item_size),
     .tp_dealloc = destructor_dealloc<obj_TriangleBatch>::value,
     .tp_as_sequence = &obj_TriangleBatch_sequence_methods,
@@ -1504,7 +1504,7 @@ PyMethodDef obj_KDNode_methods[] = {
 PyTypeObject obj_KDNode::_pytype = make_pytype(
     FULL_MODULE_STR ".KDNode",
     sizeof(obj_KDNode),
-    {
+    PyTypeObject{
     .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE,
     .tp_methods = obj_KDNode_methods,
     .tp_new = [](PyTypeObject *type,PyObject *args,PyObject *kwds) -> PyObject* {
@@ -1626,7 +1626,7 @@ PyMethodDef obj_KDLeaf_methods[] = {
 PyTypeObject obj_KDLeaf::_pytype = make_pytype(
     FULL_MODULE_STR ".KDLeaf",
     sizeof(obj_KDLeaf),
-    {
+    PyTypeObject{
     .tp_dealloc = destructor_dealloc<obj_KDLeaf>::value,
     .tp_as_sequence = &obj_KDLeaf_sequence_methods,
     .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_HAVE_GC,
@@ -1733,7 +1733,7 @@ PyMethodDef obj_KDBranch_methods[] = {
 PyTypeObject obj_KDBranch::_pytype = make_pytype(
     FULL_MODULE_STR ".KDBranch",
     sizeof(obj_KDBranch),
-    {
+    PyTypeObject{
     .tp_dealloc = destructor_dealloc<obj_KDBranch>::value,
     .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_HAVE_GC,
     .tp_traverse = &kd_tree_item_traverse<obj_KDBranch>,
@@ -1812,7 +1812,7 @@ FIX_STACK_ALIGN PyObject *obj_RayIntersection_new(PyTypeObject *type,PyObject *a
 PyTypeObject py_ray_intersection_obj_base::_pytype = make_pytype(
     FULL_MODULE_STR ".RayIntersection",
     sizeof(wrapped_type<py_ray_intersection>),
-    {
+    PyTypeObject{
     .tp_dealloc = destructor_dealloc<wrapped_type<py_ray_intersection> >::value,
     .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE,
     .tp_getset = obj_RayIntersection_getset,
@@ -2082,7 +2082,7 @@ PyBufferProcs obj_Vector_buffer = {
 PyTypeObject vector_obj_base::_pytype = make_pytype(
     FULL_MODULE_STR ".Vector",
     sizeof(wrapped_type<n_vector>),
-    {
+    PyTypeObject{
     .tp_dealloc = destructor_dealloc<wrapped_type<n_vector>>::value,
     .tp_repr = reinterpret_cast<reprfunc>(&obj_Vector_repr),
     .tp_as_number = &obj_Vector_number_methods,
@@ -2114,7 +2114,7 @@ PySequenceMethods obj_VectorBatch_sequence_methods = {
 PyTypeObject vector_batch_obj_base::_pytype = make_pytype(
     FULL_MODULE_STR ".VectorBatch",
     sizeof(wrapped_type<n_vector_batch>),
-    {
+    PyTypeObject{
     .tp_dealloc = destructor_dealloc<wrapped_type<n_vector_batch>>::value,
     .tp_as_sequence = &obj_VectorBatch_sequence_methods,
     .tp_new = [](PyTypeObject*,PyObject*,PyObject*) -> PyObject* {
@@ -2198,7 +2198,7 @@ FIX_STACK_ALIGN int obj_Camera_init(wrapped_type<n_camera> *self,PyObject *args,
 PyTypeObject camera_obj_base::_pytype = make_pytype(
     FULL_MODULE_STR ".Camera",
     sizeof(wrapped_type<n_camera>),
-    {
+    PyTypeObject{
     .tp_dealloc = destructor_dealloc<wrapped_type<n_camera>>::value,
     .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE,
     .tp_methods = obj_Camera_methods,
@@ -2428,7 +2428,7 @@ PyGetSetDef obj_Matrix_getset[] = {
 PyTypeObject matrix_obj_base::_pytype = make_pytype(
     FULL_MODULE_STR ".Matrix",
     sizeof(wrapped_type<n_matrix>),
-    {
+    PyTypeObject{
     .tp_dealloc = destructor_dealloc<wrapped_type<n_matrix>>::value,
     .tp_as_number = &obj_Matrix_number_methods,
     .tp_as_sequence = &obj_Matrix_sequence_methods,
@@ -2636,7 +2636,7 @@ PyGetSetDef obj_AABB_getset[] = {
 PyTypeObject aabb_obj_base::_pytype = make_pytype(
     FULL_MODULE_STR ".AABB",
     sizeof(wrapped_type<n_aabb>),
-    {
+    PyTypeObject{
     .tp_dealloc = destructor_dealloc<wrapped_type<n_aabb>>::value,
     .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE,
     .tp_methods = obj_AABB_methods,
@@ -2647,7 +2647,7 @@ PyTypeObject aabb_obj_base::_pytype = make_pytype(
 PyTypeObject obj_PrimitivePrototype::_pytype = make_pytype(
     FULL_MODULE_STR ".PrimitivePrototype",
     sizeof(obj_PrimitivePrototype),
-    {
+    PyTypeObject{
     .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE,
     .tp_new = [](PyTypeObject*,PyObject*,PyObject*) -> PyObject* {
         PyErr_SetString(PyExc_TypeError,"the PrimitivePrototype type cannot be instantiated directly");
@@ -2742,7 +2742,7 @@ PyGetSetDef obj_TrianglePrototype_getset[] = {
 PyTypeObject triangle_prototype_obj_base::_pytype = make_pytype(
     FULL_MODULE_STR ".TrianglePrototype",
     obj_TrianglePrototype::base_size(),
-    {
+    PyTypeObject{
     .tp_itemsize = static_cast<Py_ssize_t>(obj_TrianglePrototype::item_size()),
     .tp_dealloc = destructor_dealloc<obj_TrianglePrototype>::value,
     .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE,
@@ -2855,7 +2855,7 @@ PyGetSetDef obj_TriangleBatchPrototype_getset[] = {
 PyTypeObject triangle_batch_prototype_obj_base::_pytype = make_pytype(
     FULL_MODULE_STR ".TriangleBatchPrototype",
     obj_TriangleBatchPrototype::base_size(),
-    {
+    PyTypeObject{
     .tp_itemsize = static_cast<Py_ssize_t>(obj_TriangleBatchPrototype::item_size()),
     .tp_dealloc = destructor_dealloc<obj_TriangleBatchPrototype>::value,
     .tp_getset = obj_TriangleBatchPrototype_getset,
@@ -2902,7 +2902,7 @@ template<typename T> PyGetSetDef detatched_triangle_point_obj_base<T>::getset[] 
 template<typename T> PyTypeObject detatched_triangle_point_obj_base<T>::_pytype = make_pytype(
     obj_TrianglePointDatum_strings<real>::mod_name,
     sizeof(wrapped_type<n_detatched_triangle_point<T>>),
-    {
+    PyTypeObject{
     .tp_dealloc = destructor_dealloc<wrapped_type<n_detatched_triangle_point<T> > >::value,
     .tp_flags = Py_TPFLAGS_DEFAULT,
     .tp_getset = detatched_triangle_point_obj_base<T>::getset,
@@ -2995,7 +2995,7 @@ PyGetSetDef obj_SolidPrototype_getset[] = {
 PyTypeObject solid_prototype_obj_base::_pytype = make_pytype(
     FULL_MODULE_STR ".SolidPrototype",
     sizeof(wrapped_type<n_solid_prototype>),
-    {
+    PyTypeObject{
     .tp_dealloc = destructor_dealloc<wrapped_type<n_solid_prototype>>::value,
     .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE,
     .tp_getset = obj_SolidPrototype_getset,
@@ -3051,7 +3051,7 @@ PyGetSetDef obj_PointLight_getset[] = {
 PyTypeObject point_light_obj_base::_pytype = make_pytype(
     FULL_MODULE_STR ".PointLight",
     sizeof(wrapped_type<n_point_light>),
-    {
+    PyTypeObject{
     .tp_dealloc = destructor_dealloc<wrapped_type<n_point_light>>::value,
 //    .tp_repr = &obj_PointLight_repr,
     .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE,
@@ -3105,7 +3105,7 @@ PyGetSetDef obj_GlobalLight_getset[] = {
 PyTypeObject global_light_obj_base::_pytype = make_pytype(
     FULL_MODULE_STR ".GlobalLight",
     sizeof(wrapped_type<n_global_light>),
-    {
+    PyTypeObject{
     .tp_dealloc = destructor_dealloc<wrapped_type<n_global_light>>::value,
 //    .tp_repr = &obj_GlobalLight_repr,
     .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE,
@@ -3187,7 +3187,7 @@ template<typename T> PyMethodDef cs_light_list<T>::methods[] = {
 template<typename T> PyTypeObject cs_light_list<T>::_pytype = make_pytype(
     T::name,
     sizeof(cs_light_list<T>),
-    {
+    PyTypeObject{
     .tp_dealloc = destructor_dealloc<cs_light_list<T>>::value,
     .tp_as_sequence = &cs_light_list<T>::sequence_methods,
     .tp_flags = Py_TPFLAGS_DEFAULT,

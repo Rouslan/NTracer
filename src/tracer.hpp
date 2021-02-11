@@ -7,6 +7,7 @@
 #include <condition_variable>
 #include <future>
 #include <deque>
+#include <vector>
 #include <new>
 #include <utility>
 
@@ -369,7 +370,7 @@ template<typename T,typename Item> void flexible_struct<T,Item>::operator delete
 }
 
 template<typename T,typename Item> template<typename U>
-typename flexible_struct<T,Item>::item_array<U>::item_t *flexible_struct<T,Item>::item_array<U>::begin() const {
+typename flexible_struct<T,Item>::template item_array<U>::item_t *flexible_struct<T,Item>::item_array<U>::begin() const {
     static_assert(std::is_same_v<T,std::remove_cv_t<U>>,"item_offset is relative to T, not flexible_struct");
     return reinterpret_cast<item_t*>(reinterpret_cast<byte_t*>(self) + item_offset);
 }

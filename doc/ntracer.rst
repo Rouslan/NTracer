@@ -333,7 +333,7 @@ ntracer Package
 
     .. py:attribute:: channels
 
-        An read-only list-like object containing one or more instances of
+        A read-only list-like object containing one or more instances of
         :py:class:`Channel`, describing the bit layout of a pixel.
 
     .. py:attribute:: pitch
@@ -575,7 +575,7 @@ can't add a tuple and a :py:class:`Vector` together).
 
         :param fov: The new field of vision in radians.
 
-    .. py:atrribute:: dimension
+    .. py:attribute:: dimension
 
         The dimension of the scene.
 
@@ -839,7 +839,7 @@ can't add a tuple and a :py:class:`Vector` together).
         This attribute is read-only. To modify the value, use
         :py:meth:`set_camera_light`.
 
-    .. py:atrribute:: dimension
+    .. py:attribute:: dimension
 
         The dimension of the scene.
 
@@ -1521,7 +1521,7 @@ can't add a tuple and a :py:class:`Vector` together).
         If the simplex was created from vertices, it's better to save those
         vertices than to recalculate them with this method. The values returned
         by this method will not be exactly the same as those supplied to
-        :py:method:`from_points`, do to limited precision.
+        :py:meth:`from_points`, do to limited precision.
 
     .. py:attribute:: d
 
@@ -1869,9 +1869,9 @@ can't add a tuple and a :py:class:`Vector` together).
     :param integer extra_threads: How many extra threads to use or -1 to use as
         many extra threads as there are extra processing cores.
     :param boolean update_primitives: If true, primitives must be an instance of
-        ``list`` and will be updated to contain the actual primtive prototypes
-        used, with the :py:class:`TrianglePrototype` instances added and with
-        their un-batched counterparts removed.
+        ``list`` and will be updated to contain the actual primitive prototypes
+        used, with the :py:class:`TriangleBatchPrototype` instances added and
+        with their un-batched counterparts removed.
 
 
 .. py:function:: build_kdtree(primitives[,extra_threads=-1,*,update_primitives=False]) -> tuple
@@ -1902,8 +1902,8 @@ can't add a tuple and a :py:class:`Vector` together).
         many extra threads as there are extra processing cores.
     :param boolean update_primitives: If true, primitives must be an instance of
         ``list`` and will be updated to contain the actual primtive prototypes
-        used, with the :py:class:`TrianglePrototype` instances added and with
-        their un-batched counterparts removed.
+        used, with the :py:class:`TriangleBatchPrototype` instances added and
+        with their un-batched counterparts removed.
 
 
 .. py:function:: cross(vectors) -> Vector

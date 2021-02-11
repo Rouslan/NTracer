@@ -1173,7 +1173,7 @@ namespace py {
     PyTypeObject obj_array_adapter<Item,FullName,GC,ReadOnly>::_pytype = make_pytype(
         FullName,
         sizeof(obj_array_adapter<Item,FullName,GC,ReadOnly>),
-        {
+        PyTypeObject{
         .tp_dealloc = [](PyObject *self) -> void {
             typedef obj_array_adapter<Item,FullName,GC,ReadOnly> self_t;
 

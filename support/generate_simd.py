@@ -889,11 +889,14 @@ def parse_line(line,linenum,filename):
         return ParsedLine('endif',None,linenum,filename)
     if line == 'endfor':
         return ParsedLine('endfor',None,linenum,filename)
-    if m := re_cfor.match(line):
+    m = re_cfor.match(line)
+    if m:
         return ParsedLine('cfor',m.group(1,2,3),linenum,filename)
-    if m := re_for.match(line):
+    m = re_for.match(line)
+    if m:
         return ParsedLine('for',m.group(1,2),linenum,filename)
-    if m := re_if.match(line):
+    m = re_if.match(line)
+    if m:
         return ParsedLine('elif' if m.group(1) else 'if',m.group(2),linenum,filename)
 
     return ParsedLine('py',line,linenum,filename)

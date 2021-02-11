@@ -7,4 +7,3 @@
 
 from ntracer.render import Color,Material,Channel,ImageFormat,CallbackRenderer,BlockingRenderer
 from ntracer.wrapper import NTracer,CUBE,SPHERE
-

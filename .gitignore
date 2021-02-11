@@ -1,7 +1,9 @@
-build
+build*
 _build
 *~
 __pycache__
 *.py[cod]
 dist
 MANIFEST
+.tox
+ntracer.egg-info

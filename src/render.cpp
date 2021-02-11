@@ -113,7 +113,7 @@ PyMemberDef obj_Channel_members[] = {
 PyTypeObject channel_obj_base::_pytype = make_pytype(
     FULL_MODULE_STR ".Channel",
     sizeof(wrapped_type<channel>),
-    {
+    PyTypeObject{
     .tp_dealloc = destructor_dealloc<wrapped_type<channel>>::value,
     .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE,
     .tp_members = obj_Channel_members,
@@ -240,7 +240,7 @@ PyMemberDef obj_ImageFormat_members[] = {
 PyTypeObject image_format_obj_base::_pytype = make_pytype(
     FULL_MODULE_STR ".ImageFormat",
     sizeof(wrapped_type<image_format>),
-    {
+    PyTypeObject{
     .tp_dealloc = destructor_dealloc<wrapped_type<image_format> >::value,
     .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE,
     .tp_methods = obj_ImageFormat_methods,
@@ -311,7 +311,7 @@ PySequenceMethods obj_ChannelList_sequence_methods = {
 PyTypeObject obj_ChannelList::_pytype = make_pytype(
     FULL_MODULE_STR ".ChannelList",
     sizeof(obj_ChannelList),
-    {
+    PyTypeObject{
     .tp_dealloc = destructor_dealloc<obj_ChannelList>::value,
     .tp_as_sequence = &obj_ChannelList_sequence_methods,
     .tp_flags = Py_TPFLAGS_DEFAULT,
@@ -439,12 +439,12 @@ struct process_pixel {
                     ival = std::lround(val.f[i] * double(0xffffffffu >> (32 - ch.bit_size)));
                 }
 
-                int o = b_offset[i] / (sizeof(long)*8);
-                int rm = b_offset[i] % (sizeof(long)*8);
+                int o = b_offset[i] / static_cast<int>(sizeof(long)*8);
+                int rm = b_offset[i] % static_cast<int>(sizeof(long)*8);
                 int s = static_cast<int>(sizeof(long)*8 - rm - ch.bit_size);
                 temp[i][o] |= s >= 0 ? ival << s : ival >> -s;
 
-                if(rm + ch.bit_size > int(sizeof(long)*8))
+                if(rm + ch.bit_size > static_cast<int>(sizeof(long)*8))
                     temp[i][o+1] = ival << (sizeof(long)*16 - rm - ch.bit_size);
 
                 b_offset[i] += ch.bit_size;
@@ -621,7 +621,7 @@ PyMethodDef obj_Scene_methods[] = {
 PyTypeObject obj_Scene::_pytype = make_pytype(
     FULL_MODULE_STR ".Scene",
     sizeof(obj_Scene),
-    {
+    PyTypeObject{
     .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE,
     .tp_methods = obj_Scene_methods,
     .tp_new = [](PyTypeObject *type,PyObject *args,PyObject *kwds) -> PyObject* {
@@ -755,7 +755,7 @@ FIX_STACK_ALIGN int obj_CallbackRenderer_init(obj_CallbackRenderer *self,PyObjec
 PyTypeObject callback_renderer_obj_base::_pytype = make_pytype(
     FULL_MODULE_STR ".CallbackRenderer",
     sizeof(obj_CallbackRenderer),
-    {
+    PyTypeObject{
     .tp_dealloc = reinterpret_cast<destructor>(&obj_Renderer_dealloc<callback_renderer>),
     .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE|Py_TPFLAGS_HAVE_GC,
     .tp_traverse = &traverse_idict<obj_CallbackRenderer>,
@@ -955,7 +955,7 @@ FIX_STACK_ALIGN int obj_BlockingRenderer_init(obj_BlockingRenderer *self,PyObjec
 PyTypeObject blocking_renderer_obj_base::_pytype = make_pytype(
     FULL_MODULE_STR ".BlockingRenderer",
     sizeof(obj_BlockingRenderer),
-    {
+    PyTypeObject{
     .tp_dealloc = reinterpret_cast<destructor>(&obj_Renderer_dealloc<blocking_renderer>),
     .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE|Py_TPFLAGS_HAVE_GC,
     .tp_traverse = &traverse_idict<obj_BlockingRenderer>,
@@ -1139,7 +1139,7 @@ PyBufferProcs obj_Color_buffer = {
 PyTypeObject color_obj_base::_pytype = make_pytype(
     FULL_MODULE_STR ".Color",
     sizeof(wrapped_type<color>),
-    {
+    PyTypeObject{
     .tp_dealloc = destructor_dealloc<wrapped_type<color> >::value,
     .tp_repr = reinterpret_cast<reprfunc>(&obj_Color_repr),
     .tp_as_number = &obj_Color_number_methods,
@@ -1313,7 +1313,7 @@ PyMemberDef obj_Material_members[] = {
 PyTypeObject material::_pytype = make_pytype(
     FULL_MODULE_STR ".Material",
     sizeof(material),
-    {
+    PyTypeObject{
     .tp_dealloc = destructor_dealloc<material>::value,
     .tp_repr = reinterpret_cast<reprfunc>(&obj_Material_repr),
     .tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE,
@@ -1326,7 +1326,7 @@ PyTypeObject material::_pytype = make_pytype(
 PyTypeObject locked_error_type = make_pytype(
     FULL_MODULE_STR ".LockedError",
     0,
-    {
+    PyTypeObject{
     .tp_str = [](PyObject *self) -> PyObject* {
         if(PyTuple_GET_SIZE(reinterpret_cast<PyBaseExceptionObject*>(self)->args) == 0) {
             return PyUnicode_FromString("scene is locked");

@@ -39,7 +39,8 @@ Documentation is available at https://rouslan.github.io/NTracer/doc.
 Building and Installing from Source
 ==========================================
 
-Building from source requires a compiler with C++17 support.
+Building from source requires a compiler with C++17 plus designated initializer
+support.
 
 Unix-like systems
 ..........................................
@@ -54,10 +55,15 @@ to download, build and install this package in one step.
 Windows
 ..........................................
 
-At the time of this writing, the default windows compiler (Microsoft Visual C++)
-doesn't support enough C++11 features to build this package and MinGW lacks the
-C++ thread library. Instead, `MinGW-w64 <http://mingw-w64.sourceforge.net>`_ can
-be used (despite the name, it doesn't require a 64-bit version of Windows).
+To compile with the default windows compiler (Microsoft Visual C++), you need at
+least the 2019 version. However, the 2019 version (the latest version at the
+time of this writing) produces a significantly slower binary. To compile with
+MSVC anyway, follow the steps described in "Unix-like systems" above.
+
+The recommended way to compile is with
+`MinGW-w64 <https://sourceforge.net/projects/mingw-w64>`_ (MinGW32 lacks the
+needed C++ thread library). Despite the name, it doesn't require a 64-bit
+version of Windows. It doesn't matter how Python itself was compiled.
 
 To build with MinGW-w64, execute the following commands in the package source
 directory (where setup.py is located):
@@ -83,6 +89,19 @@ When compiling under GCC or Clang, the setup script will use the
 current CPU supports. To override this or for any other customization, the
 ``build`` command supports the flag ``--cpp-opts=<options>`` which will add the
 specified options to the end of the argument list when invoking the compiler.
+
+Building Documentation
+..........................................
+
+Note that you must first build the package and it must be made importable
+(either by installing it or by setting the ``PYTHONPATH`` environment variable
+to where it was built), because some of the documentation is pulled from the
+doc-strings.
+
+To generate the documentation, run ``python setup.py build_sphinx``. `Sphinx
+<https://www.sphinx-doc.org>`_,
+`LaTex <https://www.latex-project.org>`_ and `dvipng
+<https://savannah.nongnu.org/projects/dvipng>`_ are required.
 
 
 Dealing with Higher-Dimensional Space

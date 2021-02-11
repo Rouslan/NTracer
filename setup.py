@@ -19,21 +19,20 @@ from distutils.spawn import find_executable
 from distutils.file_util import copy_file
 
 try:
-    from distutils.cygwinccompiler import Mingw32CCompiler
+    import distutils.cygwinccompiler
 except ImportError:
     pass
 else:
     # Mingw32CCompiler will link with the MSVC runtime library, which is not
-    # just unnecessary, but will cause the libraries to fail to run
+    # just unnecessary, but will cause the libraries to fail to run. It also
+    # doesn't recognize the latest versions anyway, and throws an exception.
 
-    Mingw32CCompiler_init_old = Mingw32CCompiler.__init__
+    distutils.cygwinccompiler.get_msvcr = lambda: []
 
-    def __init__(self,*args,**kwds):
-        Mingw32CCompiler_init_old(self,*args,**kwds)
-        self.dll_libraries = []
-
-    Mingw32CCompiler.__init__ = __init__
-
+try:
+    from sphinx.setup_command import BuildDoc
+except ImportError:
+    BuildDoc = None
 
 
 base_dir = os.path.dirname(os.path.realpath(__file__))
@@ -163,7 +162,7 @@ extra_user_options = [
     ('test-cpu-flags',None,
      'if compiling with MSVC, determine SSE/AVX support from current CPU and add corresponding compile flags (default true)'),
     ('emu-cmd=',None,
-     'if specified, and get-cpu-flags is true, use this command to run SSE/AVX test executable')]
+     'if specified, and test-cpu-flags is true, use this command to run SSE/AVX test executable')]
 
 class CustomBuild(build):
     user_options = build.user_options + extra_user_options
@@ -412,6 +411,7 @@ class CustomBuildExt(build_ext):
 with open('README.rst') as readme:
     long_description = readme.read()
 
+version = version.get_version(base_dir)
 
 float_format = {
     'unknown' : '0',
@@ -419,11 +419,25 @@ float_format = {
     'IEEE, big-endian' : '2'}[float.__getformat__('float')]
 byteorder = {'little' : '1','big' : '2'}[sys.byteorder]
 
+cmdclass = {
+    'build' : CustomBuild,
+    'build_ext' : CustomBuildExt,
+    'test_simd' : simd_test.test_simd,
+    'cpu_features' : simd_test.cpu_features}
+command_options = {}
+
+if BuildDoc is not None:
+    cmdclass['build_sphinx'] = BuildDoc
+    command_options['build_sphinx'] = {
+        'version': ('setup.py', '.'.join(version.split('.')[0:2]) if version else ''),
+        'release': ('setup.py', version or ''),
+        'source_dir': ('setup.py', 'doc')}
+
 setup(name='ntracer',
     author='Rouslan Korneychuk',
     author_email='rouslank@msn.com',
     url='https://github.com/Rouslan/NTracer',
-    version=version.get_version(base_dir) or 'unversioned',
+    version=version or 'unversioned',
     packages=['ntracer','ntracer.tests'],
     scripts=['scripts/hypercube.py','scripts/polytope.py'],
     ext_package='ntracer',
@@ -459,12 +473,12 @@ setup(name='ntracer',
         'Programming Language :: C++',
         'Programming Language :: Python',
         'Programming Language :: Python :: 3',
+        'Programming Language :: Python :: 3.5',
+        'Programming Language :: Python :: 3.6',
+        'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: 3.9',
         'Topic :: Multimedia :: Graphics :: 3D Rendering',
         'Topic :: Scientific/Engineering :: Mathematics'],
     zip_safe=True,
-    cmdclass={
-        'build' : CustomBuild,
-        'build_ext' : CustomBuildExt,
-        'test_simd' : simd_test.test_simd,
-        'cpu_features' : simd_test.cpu_features})
+    cmdclass=cmdclass)
