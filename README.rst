@@ -42,6 +42,11 @@ Building and Installing from Source
 Building from source requires a compiler with C++17 plus designated initializer
 support.
 
+If building on a machine with multiple CPU cores, it is recommended you use the
+``-j`` flag with the number of available cores, up to 7 (there are 7 extension
+modules to compile), e.g.: "``python setup.py build -j 7 install``". This will
+reduce the amount of time needed to compile.
+
 Unix-like systems
 ..........................................
 
