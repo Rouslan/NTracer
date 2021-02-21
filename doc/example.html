@@ -1,0 +1,201 @@
+
+<!DOCTYPE html>
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta charset="utf-8" />
+    <title>Basic Usage &#8212; NTracer  documentation</title>
+    <link rel="stylesheet" href="_static/nature.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <script type="text/javascript" src="_static/language_data.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Using without Pygame" href="nonpygame_example.html" />
+    <link rel="prev" title="Welcome to NTracer’s documentation!" href="index.html" /> 
+  </head><body>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="nonpygame_example.html" title="Using without Pygame"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="index.html" title="Welcome to NTracer’s documentation!"
+             accesskey="P">previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">NTracer  documentation</a> &#187;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <div class="section" id="basic-usage">
+<h1>Basic Usage<a class="headerlink" href="#basic-usage" title="Permalink to this headline">¶</a></h1>
+<p>The following code will load a 3D mesh and display it.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">pygame</span>
+<span class="kn">from</span> <span class="nn">ntracer</span> <span class="kn">import</span> <span class="n">NTracer</span>
+<span class="kn">from</span> <span class="nn">ntracer.pygame_render</span> <span class="kn">import</span> <span class="n">PygameRenderer</span>
+<span class="kn">from</span> <span class="nn">ntracer</span> <span class="kn">import</span> <span class="n">wavefront_obj</span>
+
+<span class="n">ntracer</span> <span class="o">=</span> <span class="n">NTracer</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
+
+<span class="n">data</span> <span class="o">=</span> <span class="n">wavefront_obj</span><span class="o">.</span><span class="n">load_obj</span><span class="p">(</span><span class="s1">&#39;monkey.obj&#39;</span><span class="p">)</span>
+<span class="n">scene</span> <span class="o">=</span> <span class="n">ntracer</span><span class="o">.</span><span class="n">build_composite_scene</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+
+<span class="n">camera</span> <span class="o">=</span> <span class="n">ntracer</span><span class="o">.</span><span class="n">Camera</span><span class="p">()</span>
+<span class="n">camera</span><span class="o">.</span><span class="n">translate</span><span class="p">(</span><span class="n">ntracer</span><span class="o">.</span><span class="n">Vector</span><span class="o">.</span><span class="n">axis</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span><span class="o">-</span><span class="mi">5</span><span class="p">))</span>
+<span class="n">scene</span><span class="o">.</span><span class="n">set_camera</span><span class="p">(</span><span class="n">camera</span><span class="p">)</span>
+
+<span class="n">pygame</span><span class="o">.</span><span class="n">display</span><span class="o">.</span><span class="n">init</span><span class="p">()</span>
+<span class="n">screen</span> <span class="o">=</span> <span class="n">pygame</span><span class="o">.</span><span class="n">display</span><span class="o">.</span><span class="n">set_mode</span><span class="p">((</span><span class="mi">800</span><span class="p">,</span><span class="mi">600</span><span class="p">))</span>
+
+<span class="n">render</span> <span class="o">=</span> <span class="n">PygameRenderer</span><span class="p">()</span>
+<span class="n">render</span><span class="o">.</span><span class="n">begin_render</span><span class="p">(</span><span class="n">screen</span><span class="p">,</span><span class="n">scene</span><span class="p">)</span>
+
+<span class="k">while</span> <span class="bp">True</span><span class="p">:</span>
+    <span class="n">e</span> <span class="o">=</span> <span class="n">pygame</span><span class="o">.</span><span class="n">event</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">e</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="n">PygameRenderer</span><span class="o">.</span><span class="n">ON_COMPLETE</span><span class="p">:</span>
+        <span class="n">pygame</span><span class="o">.</span><span class="n">display</span><span class="o">.</span><span class="n">flip</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">e</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="n">pygame</span><span class="o">.</span><span class="n">QUIT</span><span class="p">:</span>
+        <span class="n">render</span><span class="o">.</span><span class="n">abort_render</span><span class="p">()</span>
+        <span class="k">break</span>
+</pre></div>
+</div>
+<p>Here is a breakdown of the code:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">pygame</span>
+<span class="kn">from</span> <span class="nn">ntracer</span> <span class="kn">import</span> <span class="n">NTracer</span><span class="p">,</span> <span class="n">build_composite_scene</span>
+<span class="kn">from</span> <span class="nn">ntracer.pygame_render</span> <span class="kn">import</span> <span class="n">PygameRenderer</span>
+<span class="kn">from</span> <span class="nn">ntracer</span> <span class="kn">import</span> <span class="n">wavefront_obj</span>
+</pre></div>
+</div>
+<p>First we import what we need.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">ntracer</span> <span class="o">=</span> <span class="n">NTracer</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Next we create an <code class="xref py py-class docutils literal notranslate"><span class="pre">NTracer</span></code> object. This is a helper class for
+creating multiple objects with the same dimension. It provides the same
+interface as the <a class="reference internal" href="ntracer.html#module-ntracer.tracern" title="ntracer.tracern"><code class="xref py py-mod docutils literal notranslate"><span class="pre">tracern</span></code></a> module except all methods and functions
+that have a dimension parameter are wrapped so that the number passed to
+NTracer’s constructor is automatically used for that parameter.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">data</span> <span class="o">=</span> <span class="n">wavefront_obj</span><span class="o">.</span><span class="n">load_obj</span><span class="p">(</span><span class="s1">&#39;monkey.obj&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>We then load a mesh called <code class="docutils literal notranslate"><span class="pre">monkey.obj</span></code>. The data returned is a list of
+<a class="reference internal" href="ntracer.html#ntracer.tracern.PrimitivePrototype" title="ntracer.tracern.PrimitivePrototype"><code class="xref py py-class docutils literal notranslate"><span class="pre">PrimitivePrototype</span></code></a> objects. Note that the Wavefront OBJ loader only
+loads 3D meshes. It’s not very useful in the context of hyperspace, but it’s a
+very simple format and is included for testing and as an example for creating
+geometry.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">data</span> <span class="o">=</span> <span class="n">ntracer</span><span class="o">.</span><span class="n">build_composite_scene</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>We create a <a class="reference internal" href="ntracer.html#ntracer.render.Scene" title="ntracer.render.Scene"><code class="xref py py-class docutils literal notranslate"><span class="pre">Scene</span></code></a> object from it.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">camera</span> <span class="o">=</span> <span class="n">ntracer</span><span class="o">.</span><span class="n">Camera</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>We create a new camera which will be the view-port of our scene.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">camera</span><span class="o">.</span><span class="n">translate</span><span class="p">(</span><span class="n">ntracer</span><span class="o">.</span><span class="n">Vector</span><span class="o">.</span><span class="n">axis</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span><span class="o">-</span><span class="mi">5</span><span class="p">))</span>
+</pre></div>
+</div>
+<p>We move the camera back 5 units. The vector by which to move the camera is
+created using the static method <code class="docutils literal notranslate"><span class="pre">axis</span></code>, which takes an axis index (0-based)
+and a magnitude to create a vector parallel to the given axis with the given
+magnitude. We could have used <code class="code docutils literal notranslate"><span class="pre">camera.translate(ntracer.Vector(0,0,-5))</span></code>
+or even <code class="code docutils literal notranslate"><span class="pre">camera.translate((0,0,-5))</span></code> instead, but doing it this way makes
+the code dimension-agnostic.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">scene</span><span class="o">.</span><span class="n">set_camera</span><span class="p">(</span><span class="n">camera</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>We then set the scene’s camera to a copy of <code class="docutils literal notranslate"><span class="pre">camera</span></code>. Note that a scene cannot
+be modified while it is being drawn. Attempting to do so will raise an
+exception.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">pygame</span><span class="o">.</span><span class="n">display</span><span class="o">.</span><span class="n">init</span><span class="p">()</span>
+<span class="n">screen</span> <span class="o">=</span> <span class="n">pygame</span><span class="o">.</span><span class="n">display</span><span class="o">.</span><span class="n">set_mode</span><span class="p">((</span><span class="mi">800</span><span class="p">,</span><span class="mi">600</span><span class="p">))</span>
+</pre></div>
+</div>
+<p>We initialize Pygame and create our window.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">render</span> <span class="o">=</span> <span class="n">PygameRenderer</span><span class="p">()</span>
+<span class="n">render</span><span class="o">.</span><span class="n">begin_render</span><span class="p">(</span><span class="n">screen</span><span class="p">,</span><span class="n">scene</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Then a renderer is created and the drawing is started. By default, the renderer
+will use as many threads as there are processing cores, but you can specify a
+different number of threads in its constructor.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">while</span> <span class="bp">True</span><span class="p">:</span>
+    <span class="n">e</span> <span class="o">=</span> <span class="n">pygame</span><span class="o">.</span><span class="n">event</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">e</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="n">PygameRenderer</span><span class="o">.</span><span class="n">ON_COMPLETE</span><span class="p">:</span>
+        <span class="n">pygame</span><span class="o">.</span><span class="n">display</span><span class="o">.</span><span class="n">flip</span><span class="p">()</span>
+    <span class="k">elif</span> <span class="n">e</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="n">pygame</span><span class="o">.</span><span class="n">QUIT</span><span class="p">:</span>
+        <span class="n">render</span><span class="o">.</span><span class="n">abort_render</span><span class="p">()</span>
+        <span class="k">break</span>
+</pre></div>
+</div>
+<p>Finally, we have a basic event loop.  When the renderer is finished, it sends an
+event of type <code class="xref py py-attr docutils literal notranslate"><span class="pre">PygameRenderer.ON_COMPLETE</span></code> (which is equal to
+pygame.USEREVENT by default).  The event will have a <code class="docutils literal notranslate"><span class="pre">source</span></code> attribute
+containing the associated renderer.  Having only one renderer, we don’t use it
+here.  We flip the display buffer to make our image appear.
+<a class="reference internal" href="ntracer.html#ntracer.render.CallbackRenderer.abort_render" title="ntracer.render.CallbackRenderer.abort_render"><code class="xref py py-meth docutils literal notranslate"><span class="pre">abort_render()</span></code></a> is called to stop drawing early.</p>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="index.html"
+                        title="previous chapter">Welcome to NTracer’s documentation!</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="nonpygame_example.html"
+                        title="next chapter">Using without Pygame</a></p>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" />
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="nonpygame_example.html" title="Using without Pygame"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="index.html" title="Welcome to NTracer’s documentation!"
+             >previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">NTracer  documentation</a> &#187;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2013-2021, Rouslan Korneychuk.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 2.2.2.
+    </div>
+  </body>
+</html>
