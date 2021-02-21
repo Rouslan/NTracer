@@ -2,6 +2,7 @@
 #define geom_allocator_hpp
 
 #include <new>
+#include <cassert>
 
 #include "compatibility.hpp"
 

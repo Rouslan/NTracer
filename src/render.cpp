@@ -1589,7 +1589,9 @@ namespace impl {
                 TypeError,
                 "The TriangleBatch instance was pickled with a different batch size. It cannot be loaded here.");
 
-            if(args.size() != 3+item.ctrs->batch_size) THROW_PYERR_STRING(TypeError,"wrong number of arguments");
+            if(static_cast<size_t>(args.size()) != 3+item.ctrs->batch_size) THROW_PYERR_STRING(
+                TypeError,
+                "wrong number of arguments");
 
             auto str = from_pyobject<py::bytes>(args[2]);
             if(static_cast<size_t>(str.size()) != width * (dim+1) * sizeof(float)) {

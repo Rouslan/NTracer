@@ -15,6 +15,7 @@ from distutils.errors import DistutilsSetupError
 from distutils.dir_util import mkpath
 from distutils import log
 from distutils.util import split_quoted, strtobool, get_platform
+from distutils.dep_util import newer_group
 from distutils.spawn import find_executable
 from distutils.file_util import copy_file
 
@@ -43,6 +44,7 @@ import generate_simd
 import simd_test
 import arg_helper
 
+IS_64_BIT = sys.maxsize > 2**32
 
 GCC_OPTIMIZE_COMPILE_ARGS = [
     '-O3',
@@ -97,15 +99,6 @@ CLANG_EXTRA_COMPILE_ARGS = [
     '-Wno-invalid-offsetof',
     '-Werror=return-type']
 
-# If Python was compiled with GCC and we want to compile the extension with
-# Clang, certain arguments need to be omitted (because they are not supported
-# and cause an error). There may also be arguments that need omitting when
-# Python was compiled with Clang and we're compiling with GCC, but I haven't
-# looked into it.
-GCC_TO_CLANG_FILTER = {
-    # -fstack-clash-protection is not supported before Clang 11.
-    '-fstack-clash-protection'}
-
 MSVC_OPTIMIZE_COMPILE_ARGS = ['/Ox','/fp:fast','/volatile:iso','/std:c++latest']
 
 DEFAULT_OPTIMIZED_DIMENSIONS = frozenset(range(3,9))
@@ -157,6 +150,12 @@ extra_user_options = [
      'which dimensionalities will have optimized versions of the main tracer module'),
     ('cpp-opts=',None,
      'extra command line arguments for the compiler'),
+    ('ld-opts=',None,
+     'extra command line arguments for the linker'),
+    ('cpp-neg-opts=',None,
+     'compiler command line arguments to omit'),
+    ('ld-neg-opts=',None,
+     'liner command line arguments to omit'),
     ('copy-mingw-deps=',None,
      'when the compiler type is "mingw32", copy the dependent MinGW DLLs to the built package (default true)'),
     ('test-cpu-flags',None,
@@ -171,6 +170,9 @@ class CustomBuild(build):
         build.initialize_options(self)
         self.optimize_dimensions = None
         self.cpp_opts = ''
+        self.ld_opts = ''
+        self.cpp_neg_opts = ''
+        self.ld_neg_opts = ''
         self.copy_mingw_deps = None
         self.test_cpu_flags = None
         self.emu_cmd = None
@@ -183,6 +185,9 @@ class CustomBuild(build):
             else DEFAULT_OPTIMIZED_DIMENSIONS)
 
         self.cpp_opts = split_quoted(self.cpp_opts)
+        self.ld_opts = split_quoted(self.ld_opts)
+        self.cpp_neg_opts = frozenset(split_quoted(self.cpp_neg_opts))
+        self.ld_neg_opts = frozenset(split_quoted(self.ld_neg_opts))
         self.copy_mingw_deps = strtobool(self.copy_mingw_deps) if self.copy_mingw_deps is not None else True
         self.test_cpu_flags = strtobool(self.test_cpu_flags) if self.test_cpu_flags is not None else True
         if self.emu_cmd: self.emu_cmd = split_quoted(self.emu_cmd)
@@ -197,6 +202,17 @@ def get_dll_list(f):
             dlls.append(m.group(1).decode())
     return dlls
 
+def make_negatable_compiler(compiler,neg_opts):
+    class Wrapper(type(compiler)):
+        def __init__(self):
+            # don't call super().__init__
+            pass
+
+        def spawn(self,cmd):
+            super().spawn([cmd[0]]+[arg for arg in cmd[1:] if arg not in neg_opts])
+    newc = Wrapper()
+    newc.__dict__ = compiler.__dict__
+    return newc
 
 class CustomBuildExt(build_ext):
     user_options = build_ext.user_options + extra_user_options
@@ -205,6 +221,9 @@ class CustomBuildExt(build_ext):
         build_ext.initialize_options(self)
         self.optimize_dimensions = None
         self.cpp_opts = None
+        self.ld_opts = None
+        self.cpp_neg_opts = None
+        self.ld_neg_opts = None
         self.copy_mingw_deps = None
         self.test_cpu_flags = None
         self.emu_cmd = None
@@ -229,6 +248,9 @@ class CustomBuildExt(build_ext):
         self.set_undefined_options('build',
             ('optimize_dimensions',)*2,
             ('cpp_opts',)*2,
+            ('ld_opts',)*2,
+            ('cpp_neg_opts',)*2,
+            ('ld_neg_opts',)*2,
             ('copy_mingw_deps',)*2,
             ('test_cpu_flags',)*2,
             ('emu_cmd',)*2)
@@ -258,23 +280,16 @@ class CustomBuildExt(build_ext):
     def add_optimization(self):
         c = self.compiler.compiler_type
         if c == 'msvc':
-            args = MSVC_OPTIMIZE_COMPILE_ARGS
+            cpp_args = MSVC_OPTIMIZE_COMPILE_ARGS
+            ld_args = []
             if self.test_cpu_flags and get_platform() in ('win32','win-amd64'):
-                args = args + simd_test.msvc_flags(
+                cpp_args = cpp_args + simd_test.msvc_flags(
                     simd_test.get_cpuid_flags(self,simd_test.basic_compiler(self,'msvc')))
-
-            for e in self.extensions:
-                e.extra_compile_args = args
-            return True
-        if c in {'unix','cygwin','mingw32'}:
+        elif c in {'unix','cygwin','mingw32'}:
             if c == 'unix':
                 cc = os.path.basename(self.compiler.compiler_so[0])
                 if 'clang' in cc:
                     args,oargs = CLANG_EXTRA_COMPILE_ARGS,CLANG_OPTIMIZE_COMPILE_ARGS
-                    default_cc = os.path.basename(sysconfig.get_config_var('CC'))
-                    if 'gcc' in default_cc or 'g++' in default_cc:
-                        self.compiler.compiler_so = [
-                            arg for arg in self.compiler.compiler_so if arg not in GCC_TO_CLANG_FILTER]
                 elif 'gcc' in cc or 'g++' in cc:
                     args,oargs = GCC_EXTRA_COMPILE_ARGS,GCC_OPTIMIZE_COMPILE_ARGS
                 else:
@@ -283,23 +298,27 @@ class CustomBuildExt(build_ext):
                 args,oargs = GCC_EXTRA_COMPILE_ARGS,GCC_OPTIMIZE_COMPILE_ARGS
 
             py_debug = False#sysconfig.get_config_var('Py_DEBUG') == 1
-            for e in self.extensions:
-                e.extra_compile_args = args + oargs
-                if not self.debug:
-                    e.extra_compile_args = args + oargs
-                    e.extra_link_args = ['-s']
+            if not self.debug:
+                # this is normally defined automatically, but not when
+                # using the mingw32 compiler option under windows
+                cpp_args = args + oargs + ['-DNDEBUG=1']
+                ld_args = ['-s']
+            elif py_debug:
+                cpp_args = args
+                ld_args = []
+            else:
+                cpp_args = args + oargs + ['-DNDEBUG=1']
+                ld_args = []
+        else:
+            return False
 
-                    # this is normally defined automatically, but not when
-                    # using Mingw32 under windows
-                    e.define_macros.append(('NDEBUG',1))
-                elif py_debug:
-                    e.extra_compile_args = args
-                else:
-                    e.extra_compile_args = args + oargs
-                    e.define_macros.append(('NDEBUG',1))
-            return True
+        cpp_args = cpp_args + self.cpp_opts
+        ld_args = ld_args + self.ld_opts
+        for e in self.extensions:
+            e.extra_compile_args = cpp_args
+            e.extra_link_args = ld_args
 
-        return False
+        return True
 
     def mingw_dlls(self):
         if self.dry_run: return []
@@ -366,9 +385,26 @@ class CustomBuildExt(build_ext):
         if not self.add_optimization():
             self.warn("don't know how to set optimization flags for this compiler")
 
-        for e in self.extensions:
-            # these need to be added last
-            e.extra_compile_args = e.extra_compile_args + self.cpp_opts
+        # On some 32-bit systems, __STDCPP_DEFAULT_NEW_ALIGNMENT__ is
+        # erroneously defined as 16 but operator new only aligns to 8 bytes,
+        # so on 32-bit systems we replace the global new and delete functions.
+        # If we raise the requirement from C++17 to C++20, this can be removed,
+        # as the new compilers have this fixed.
+        if not IS_64_BIT:
+            for e in self.extensions:
+                e.sources.append('src/compatibility_32bit.cpp')
+
+        # To be able to omit *any* argument, we have to intercept the arguments
+        # right before the compiler object calls spawn. Fortunately, there is a
+        # CCompiler.spawn method we can override. However, the method needs to
+        # remove different arguments depending on whether we're compiling or
+        # linking, and the compiler object cannot be mutated while building
+        # extensions, since they may be built in parallel, so we create two
+        # wrapper classes and override build_extension in this class to use the
+        # different wrappers.
+
+        self.cpp_compiler = make_negatable_compiler(self.compiler,self.cpp_neg_opts)
+        self.ld_compiler = make_negatable_compiler(self.compiler,self.ld_neg_opts)
 
         mkpath(self.build_temp,dry_run=self.dry_run)
         if self.optimize_dimensions:
@@ -407,11 +443,59 @@ class CustomBuildExt(build_ext):
                     except Exception:
                         skip_strip = True
 
+    def build_extension(self,ext):
+        # this code is mostly copied from distutils/command/build_ext.py, with
+        # the stuff we don't need, removed, and support for removing specific
+        # compiler/linker arguments
+
+        sources = list(ext.sources)
+
+        ext_path = self.get_ext_fullpath(ext.name)
+        depends = sources + ext.depends
+        if not (self.force or newer_group(depends, ext_path, 'newer')):
+            log.debug("skipping '%s' extension (up-to-date)", ext.name)
+            return
+        else:
+            log.info("building '%s' extension", ext.name)
+
+        extra_args = ext.extra_compile_args or []
+
+        macros = ext.define_macros[:]
+        for undef in ext.undef_macros:
+            macros.append((undef,))
+
+        objects = self.cpp_compiler.compile(sources,
+            output_dir=self.build_temp,
+            macros=macros,
+            include_dirs=ext.include_dirs,
+            debug=self.debug,
+            extra_postargs=extra_args,
+            depends=ext.depends)
+
+        self._built_objects = objects[:]
+
+        if ext.extra_objects:
+            objects.extend(ext.extra_objects)
+        extra_args = ext.extra_link_args or []
+
+        language = ext.language or self.compiler.detect_language(sources)
+
+        self.ld_compiler.link_shared_object(
+            objects, ext_path,
+            libraries=self.get_libraries(ext),
+            library_dirs=ext.library_dirs,
+            runtime_library_dirs=ext.runtime_library_dirs,
+            extra_postargs=extra_args,
+            export_symbols=self.get_export_symbols(ext),
+            debug=self.debug,
+            build_temp=self.build_temp,
+            target_lang=language)
+
 
 with open('README.rst') as readme:
     long_description = readme.read()
 
-version = version.get_version(base_dir)
+ver = version.get_version(base_dir)
 
 float_format = {
     'unknown' : '0',
@@ -429,15 +513,15 @@ command_options = {}
 if BuildDoc is not None:
     cmdclass['build_sphinx'] = BuildDoc
     command_options['build_sphinx'] = {
-        'version': ('setup.py', '.'.join(version.split('.')[0:2]) if version else ''),
-        'release': ('setup.py', version or ''),
+        'version': ('setup.py', '.'.join(ver.split('.')[0:2]) if ver else ''),
+        'release': ('setup.py', ver or ''),
         'source_dir': ('setup.py', 'doc')}
 
 setup(name='ntracer',
     author='Rouslan Korneychuk',
     author_email='rouslank@msn.com',
     url='https://github.com/Rouslan/NTracer',
-    version=version or 'unversioned',
+    version=ver or 'unversioned',
     packages=['ntracer','ntracer.tests'],
     package_dir={'': 'lib'},
     scripts=['scripts/hypercube.py','scripts/polytope.py'],

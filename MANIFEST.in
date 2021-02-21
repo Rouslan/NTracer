@@ -1,4 +1,4 @@
 include LICENSE.txt README.rst
-recursive-include doc conf.py _static *.rst
-recursive-include src *.hpp *.hpp.in *.json feature_test.c
+recursive-include doc conf.py *.rst
+recursive-include src *.hpp *.hpp.in *.json feature_test.c compatibility_32bit.cpp
 recursive-include support *.py

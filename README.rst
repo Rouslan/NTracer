@@ -76,15 +76,14 @@ directory (where setup.py is located):
 .. code:: bat
 
     set PATH=<base path of MinGW-w64>\bin;%PATH%
-    set LIBRARY_PATH=<base path of MinGW-w64>\lib
     <Python install directory>\python.exe setup.py build --compiler=mingw32 install
 
 By default, the ``build`` command will also copy any MinGW-w64 DLLs that the
 binaries require into the installation directory (technically it only copies the
 DLLs into the temporary build directory and the ``install`` command does the
 installing). To suppress this behaviour (which you may want to do if the
-MinGW-w64 ``bin`` directory is already in the system-wide path), use
-``--copy-mingw-deps=false``.
+MinGW-w64 ``bin`` directory is already in the system-wide path), use the
+``build`` flag ``--copy-mingw-deps=false``.
 
 Customization
 ..........................................
@@ -94,6 +93,52 @@ When compiling under GCC or Clang, the setup script will use the
 current CPU supports. To override this or for any other customization, the
 ``build`` command supports the flag ``--cpp-opts=<options>`` which will add the
 specified options to the end of the argument list when invoking the compiler.
+There is also the flag ``--ld-opts=<options>`` for adding linker options. To
+remove arguments that lack a negative form, you can use
+``--cpp-neg-opts=<options>`` and ``--ld-neg-opts=<options>``, where options is a
+space-separated list of strings that will be removed from the list of compiler
+and linker options respectively.
+
+MSVC lacks an equivalent to ``-march=native`` and also has less fined-grained
+control over SSE/AVX options. Thus, when building with MSVC, a small program is
+first built, that checks the capabilities of the current CPU. This can be
+suppressed by adding ``--test-cpu-flags=false`` to the ``build`` command.
+
+For controlling the SSE/AVX instructions used, the compiler's ``/arch`` flag can
+be used (e.g. ``--cpp-opts=/arch:AVX512``), but for finer grained control, any
+of the following macros may be also defined:
+
+* SUPPORT_SSE
+* SUPPORT_SSE2
+* SUPPORT_SSE3
+* SUPPORT_SSSE3
+* SUPPORT_SSE4_1
+* SUPPORT_SSE4_2
+* SUPPORT_AVX
+* SUPPORT_AVX2
+* SUPPORT_AVX512F
+
+where each one of these implies all of macros above it.
+
+The following can also be defined:
+
+* SUPPORT_AVX512BW
+* SUPPORT_AVX512CD
+* SUPPORT_AVX512DQ
+* SUPPORT_AVX512ER
+* SUPPORT_AVX512PF
+* SUPPORT_AVX512VL
+
+which are independent of each other. Note that not all of these instruction sets
+will necessarily be used, but they are still available for future compatibility.
+
+Even when using these macros, the ``/arch`` flag should still be used for
+maximum benefit. E.g. for 32-bit systems:
+``--cpp-opts="/arch:SSE2 /DSUPPORT_SSE4_1"`` (the ``/arch:SSE2`` option is not
+present for 64-bit systems because x86-64 always supports SSE2).
+
+These macros can also be defined for GCC/Clang, but those compilers have flags
+for each of these instruction sets already.
 
 Building Documentation
 ..........................................

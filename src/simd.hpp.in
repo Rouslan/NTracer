@@ -355,19 +355,28 @@ namespace simd {
 
 #ifdef SUPPORT_SSE
     namespace detail {
+    #ifndef SUPPORT_SSE2
+        template<> struct ones<__m128> {
+            static FORCE_INLINE __m128 go() {
+                auto tmp = _mm_setzero_ps();
+                return _mm_cmpeq_ps(tmp,tmp);
+            }
+        };
+    #endif
+
         template<> struct _single<float> {
             struct type {
                 S_INIT_CODE(__m128)
-        #ifdef SUPPORT_AVX512F
+    #ifdef SUPPORT_AVX512F
                 explicit FORCE_INLINE type(__m512 b) {
                     data = _mm512_castps512_ps128(b);
                 }
-        #endif
-        #ifdef SUPPORT_AVX
+    #endif
+    #ifdef SUPPORT_AVX
                 explicit FORCE_INLINE type(__m256 b) {
                     data = _mm256_castps256_ps128(b);
                 }
-        #endif
+    #endif
 
                 FORCE_INLINE operator float() const {
                     return _mm_cvtss_f32(data);
@@ -383,11 +392,11 @@ namespace simd {
     FORCE_INLINE bool l_xor(bool a,bool b) { return a != b; }
     FORCE_INLINE bool l_xnor(bool a,bool b) { return a == b; }
 
-    template<typename T> FORCE_INLINE T abs(T x) { return static_cast<T>(std::abs(x)); }
+    template<typename T> inline T abs(T x) { return static_cast<T>(std::abs(x)); }
     using std::sqrt;
-    template<typename T> FORCE_INLINE T rsqrt(T a) { return 1 / std::sqrt(a); }
-    template<typename T> FORCE_INLINE T max(T a,T b) { return a > b ? a : b; }
-    template<typename T> FORCE_INLINE T min(T a,T b) { return a < b ? a : b; }
+    template<typename T> inline T rsqrt(T a) { return 1 / std::sqrt(a); }
+    template<typename T> inline T max(T a,T b) { return a > b ? a : b; }
+    template<typename T> inline T min(T a,T b) { return a < b ? a : b; }
 
     template<typename T> FORCE_INLINE bool cmp_ngt(T a,T b) {
         return !(a.data > b.data);

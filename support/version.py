@@ -1,5 +1,5 @@
 
-import os.path as path
+import os.path
 import subprocess
 import warnings
 
@@ -7,7 +7,7 @@ def get_version(base_dir):
     version = None
     try:
         # if this is a source distribution
-        with open(path.join(base_dir,'PKG-INFO')) as pinfo:
+        with open(os.path.join(base_dir,'PKG-INFO')) as pinfo:
             for line in pinfo:
                 property,_,value = line.partition(':')
                 if value and property == 'Version':
@@ -19,7 +19,7 @@ def get_version(base_dir):
         # if this is a git working tree
         try:
             version = subprocess.run(
-                ['git','describe','--long','--dirty'],
+                ['git','describe','--long','--tags','--dirty'],
                 check=True,
                 stdout=subprocess.PIPE,
                 encoding='utf-8').stdout

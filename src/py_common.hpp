@@ -474,8 +474,9 @@ template<typename T,typename Base> struct simple_py_wrapper<T,Base,true,false> :
 
     template<typename... Args> simple_py_wrapper(Args&&... args) {
         PyObject_Init(reinterpret_cast<PyObject*>(this),Base::pytype());
-        new(&alloc_base()) T(std::forward<Args>(args)...);
+        base = alloc_uninitialized<T>();
         mode = CONTAINS;
+        new(base) T(std::forward<Args>(args)...);
     }
 
     simple_py_wrapper(PyObject *owner,T &base) : mode(INDIRECT), base(&base), owner(owner) {
